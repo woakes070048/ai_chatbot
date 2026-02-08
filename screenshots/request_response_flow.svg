@@ -1,0 +1,215 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 2200" width="1600" height="2200">
+  <defs>
+    <style>
+      .request-box { fill: #dbeafe; stroke: #1e40af; stroke-width: 2; }
+      .response-box { fill: #dcfce7; stroke: #059669; stroke-width: 2; }
+      .data-box { fill: #fef3c7; stroke: #d97706; stroke-width: 2; }
+      .code { fill: #1e293b; font-family: 'Courier New', monospace; font-size: 10px; }
+      .title { fill: #1e293b; font-family: Arial, sans-serif; font-size: 26px; font-weight: bold; text-anchor: middle; }
+      .label { fill: #1e293b; font-family: Arial, sans-serif; font-size: 13px; font-weight: bold; }
+      .note { fill: #475569; font-family: Arial, sans-serif; font-size: 11px; }
+    </style>
+  </defs>
+  
+  <text x="800" y="40" class="title">Complete Request/Response Flow with Data Structures</text>
+  
+  <!-- SCENARIO 1: Tool Execution -->
+  <text x="400" y="90" class="label" font-size="16">SCENARIO 1: Complex Query with Tools</text>
+  
+  <!-- Initial Request -->
+  <rect x="50" y="120" width="700" height="320" rx="8" class="request-box"/>
+  <text x="60" y="145" class="label">REQUEST to AI (First Call - Decision)</text>
+  
+  <text x="70" y="175" class="code">{</text>
+  <text x="80" y="190" class="code">  "model": "gpt-4-1106-preview",</text>
+  <text x="80" y="205" class="code">  "messages": [</text>
+  <text x="90" y="220" class="code">    {"role": "user", "content": "Get top 3 customers by revenue"}</text>
+  <text x="80" y="235" class="code">  ],</text>
+  <text x="80" y="250" class="code">  "tools": [</text>
+  <text x="90" y="265" class="code">    {</text>
+  <text x="100" y="280" class="code">      "type": "function",</text>
+  <text x="100" y="295" class="code">      "function": {</text>
+  <text x="110" y="310" class="code">        "name": "get_top_customers",</text>
+  <text x="110" y="325" class="code">        "description": "Get top customers...",</text>
+  <text x="110" y="340" class="code">        "parameters": {</text>
+  <text x="120" y="355" class="code">          "limit": {"type": "integer"},</text>
+  <text x="120" y="370" class="code">          "by": {"type": "string", "enum": ["revenue", "orders"]}</text>
+  <text x="110" y="385" class="code">        }</text>
+  <text x="100" y="400" class="code">      }</text>
+  <text x="90" y="415" class="code">    },</text>
+  <text x="90" y="430" class="code">    // ... ALL 20+ tools included</text>
+  <text x="80" y="445" class="code">  ]</text>
+  <text x="70" y="460" class="code">}</text>
+  
+  <line x1="400" y1="470" x2="400" y2="510" stroke="#64748b" stroke-width="3" marker-end="url(#arrow)"/>
+  
+  <!-- AI Response with Tool Call -->
+  <rect x="50" y="510" width="700" height="280" rx="8" class="response-box"/>
+  <text x="60" y="535" class="label">RESPONSE from AI (Tool Call)</text>
+  
+  <text x="70" y="565" class="code">{</text>
+  <text x="80" y="580" class="code">  "choices": [{</text>
+  <text x="90" y="595" class="code">    "message": {</text>
+  <text x="100" y="610" class="code">      "role": "assistant",</text>
+  <text x="100" y="625" class="code">      "content": null,  // ⭐ NULL when using tools</text>
+  <text x="100" y="640" class="code">      "tool_calls": [{</text>
+  <text x="110" y="655" class="code">        "id": "call_9K8H7G6F5",</text>
+  <text x="110" y="670" class="code">        "type": "function",</text>
+  <text x="110" y="685" class="code">        "function": {</text>
+  <text x="120" y="700" class="code">          "name": "get_top_customers",</text>
+  <text x="120" y="715" class="code">          "arguments": "{\"limit\":3,\"by\":\"revenue\"}"</text>
+  <text x="110" y="730" class="code">        }</text>
+  <text x="100" y="745" class="code">      }]</text>
+  <text x="90" y="760" class="code">    },</text>
+  <text x="90" y="775" class="code">    "finish_reason": "tool_calls"  // ⭐ Stopped for tools</text>
+  <text x="80" y="790" class="code">  }]</text>
+  <text x="70" y="805" class="code">}</text>
+  
+  <line x1="400" y1="820" x2="400" y2="860" stroke="#64748b" stroke-width="3" marker-end="url(#arrow)"/>
+  
+  <!-- Tool Execution -->
+  <rect x="50" y="860" width="700" height="200" rx="8" class="data-box"/>
+  <text x="60" y="885" class="label">BACKEND: Execute Tool</text>
+  
+  <text x="70" y="915" class="code">tool_result = CRMTools.get_top_customers(limit=3, by="revenue")</text>
+  <text x="70" y="940" class="code">// Returns:</text>
+  <text x="70" y="960" class="code">{</text>
+  <text x="80" y="975" class="code">  "success": true,</text>
+  <text x="80" y="990" class="code">  "data": [</text>
+  <text x="90" y="1005" class="code">    {"customer_name": "West View", "total_revenue": 261000},</text>
+  <text x="90" y="1020" class="code">    {"customer_name": "Grant Plastics", "total_revenue": 87000},</text>
+  <text x="90" y="1035" class="code">    {"customer_name": "Palmer", "total_revenue": 15000}</text>
+  <text x="80" y="1050" class="code">  ]</text>
+  <text x="70" y="1065" class="code">}</text>
+  
+  <line x1="400" y1="1090" x2="400" y2="1130" stroke="#64748b" stroke-width="3" marker-end="url(#arrow)"/>
+  
+  <!-- Second Request (Formatting) -->
+  <rect x="50" y="1130" width="700" height="320" rx="8" class="request-box"/>
+  <text x="60" y="1155" class="label">REQUEST to AI (Second Call - Formatting)</text>
+  
+  <text x="70" y="1185" class="code">{</text>
+  <text x="80" y="1200" class="code">  "messages": [</text>
+  <text x="90" y="1215" class="code">    {"role": "user", "content": "Get top 3 customers by revenue"},</text>
+  <text x="90" y="1235" class="code">    {</text>
+  <text x="100" y="1250" class="code">      "role": "assistant",</text>
+  <text x="100" y="1265" class="code">      "content": null,</text>
+  <text x="100" y="1280" class="code">      "tool_calls": [{"function": {"name": "get_top_customers", ...}}]</text>
+  <text x="90" y="1295" class="code">    },</text>
+  <text x="90" y="1315" class="code">    {  // ⭐ Tool result message</text>
+  <text x="100" y="1330" class="code">      "role": "tool",</text>
+  <text x="100" y="1345" class="code">      "tool_call_id": "call_9K8H7G6F5",</text>
+  <text x="100" y="1360" class="code">      "name": "get_top_customers",</text>
+  <text x="100" y="1375" class="code">      "content": "{\"success\":true,\"data\":[...]}"  // Raw JSON</text>
+  <text x="90" y="1390" class="code">    }</text>
+  <text x="80" y="1405" class="code">  ],</text>
+  <text x="80" y="1420" class="code">  "tools": null  // ⭐ NO TOOLS on formatting call</text>
+  <text x="70" y="1435" class="code">}</text>
+  
+  <line x1="400" y1="1470" x2="400" y2="1510" stroke="#64748b" stroke-width="3" marker-end="url(#arrow)"/>
+  
+  <!-- Final Formatted Response -->
+  <rect x="50" y="1510" width="700" height="220" rx="8" class="response-box"/>
+  <text x="60" y="1535" class="label">RESPONSE from AI (Formatted)</text>
+  
+  <text x="70" y="1565" class="code">{</text>
+  <text x="80" y="1580" class="code">  "choices": [{</text>
+  <text x="90" y="1595" class="code">    "message": {</text>
+  <text x="100" y="1610" class="code">      "role": "assistant",</text>
+  <text x="100" y="1625" class="code">      "content": "Here are your top 3 customers by revenue:\n\n</text>
+  <text x="110" y="1640" class="code">1. West View Software - $261,000\n</text>
+  <text x="110" y="1655" class="code">2. Grant Plastics - $87,000\n</text>
+  <text x="110" y="1670" class="code">3. Palmer Productions - $15,000"</text>
+  <text x="90" y="1685" class="code">    },</text>
+  <text x="90" y="1700" class="code">    "finish_reason": "stop"</text>
+  <text x="80" y="1715" class="code">  }]</text>
+  <text x="70" y="1730" class="code">}</text>
+  
+  <!-- SCENARIO 2: Simple Message -->
+  <text x="1200" y="90" class="label" font-size="16">SCENARIO 2: Simple Message (No Tools)</text>
+  
+  <!-- Simple Request -->
+  <rect x="850" y="120" width="700" height="240" rx="8" class="request-box"/>
+  <text x="860" y="145" class="label">REQUEST to AI</text>
+  
+  <text x="870" y="175" class="code">{</text>
+  <text x="880" y="190" class="code">  "model": "gpt-4-1106-preview",</text>
+  <text x="880" y="205" class="code">  "messages": [</text>
+  <text x="890" y="220" class="code">    {"role": "user", "content": "Hello"}</text>
+  <text x="880" y="235" class="code">  ],</text>
+  <text x="880" y="250" class="code">  "tools": [</text>
+  <text x="890" y="265" class="code">    {"function": {"name": "get_top_customers", ...}},</text>
+  <text x="890" y="280" class="code">    {"function": {"name": "search_customers", ...}},</text>
+  <text x="890" y="295" class="code">    // ... ALL 20+ tools STILL included</text>
+  <text x="880" y="310" class="code">  ],</text>
+  <text x="880" y="325" class="code">  "tool_choice": "auto"  // AI decides</text>
+  <text x="870" y="340" class="code">}</text>
+  
+  <line x1="1200" y1="380" x2="1200" y2="420" stroke="#64748b" stroke-width="3" marker-end="url(#arrow)"/>
+  
+  <!-- Simple Response -->
+  <rect x="850" y="420" width="700" height="200" rx="8" class="response-box"/>
+  <text x="860" y="445" class="label">RESPONSE from AI (Direct)</text>
+  
+  <text x="870" y="475" class="code">{</text>
+  <text x="880" y="490" class="code">  "choices": [{</text>
+  <text x="890" y="505" class="code">    "message": {</text>
+  <text x="900" y="520" class="code">      "role": "assistant",</text>
+  <text x="900" y="535" class="code">      "content": "Hello! I'm here to help with ERPNext...",</text>
+  <text x="900" y="550" class="code">      "tool_calls": null  // ⭐ NO TOOLS</text>
+  <text x="890" y="565" class="code">    },</text>
+  <text x="890" y="580" class="code">    "finish_reason": "stop"  // ⭐ Natural stop</text>
+  <text x="880" y="595" class="code">  }]</text>
+  <text x="870" y="610" class="code">}</text>
+  
+  <!-- Comparison Box -->
+  <rect x="850" y="660" width="700" height="280" rx="8" fill="#f1f5f9" stroke="#64748b" stroke-width="3"/>
+  <text x="1200" y="690" class="label" font-size="14" text-anchor="middle">Key Differences</text>
+  
+  <text x="870" y="720" class="label">With Tools:</text>
+  <text x="880" y="740" class="note">✓ 2 API calls (decision + formatting)</text>
+  <text x="880" y="758" class="note">✓ Tool execution between calls</text>
+  <text x="880" y="776" class="note">✓ Database queries executed</text>
+  <text x="880" y="794" class="note">✓ content = null in first response</text>
+  <text x="880" y="812" class="note">✓ finish_reason = "tool_calls"</text>
+  <text x="880" y="830" class="note">✓ Time: 3-5 seconds</text>
+  
+  <text x="870" y="860" class="label">Without Tools:</text>
+  <text x="880" y="880" class="note">✓ 1 API call only</text>
+  <text x="880" y="898" class="note">✓ Direct response</text>
+  <text x="880" y="916" class="note">✓ No database access</text>
+  <text x="880" y="934" class="note">✓ content = response text</text>
+  <text x="880" y="952" class="note">✓ finish_reason = "stop"</text>
+  <text x="880" y="970" class="note">✓ Time: 1-2 seconds</text>
+  
+  <!-- Important Notes -->
+  <rect x="50" y="1780" width="1500" height="380" rx="8" fill="#fef3c7" stroke="#f59e0b" stroke-width="3"/>
+  <text x="800" y="1815" class="label" font-size="16" text-anchor="middle">⭐ Critical Technical Points</text>
+  
+  <text x="70" y="1850" class="label">1. Tool Schema Always Sent:</text>
+  <text x="80" y="1872" class="note">   • ALL 20+ tool schemas included in EVERY request</text>
+  <text x="80" y="1890" class="note">   • Even for simple messages like "Hello"</text>
+  <text x="80" y="1908" class="note">   • AI decides which (if any) to use</text>
+  
+  <text x="70" y="1938" class="label">2. Two-Call Pattern (With Tools):</text>
+  <text x="80" y="1960" class="note">   • Call 1: User message + All tools → AI returns tool_calls</text>
+  <text x="80" y="1978" class="note">   • Execute: Backend runs tool, gets ERPNext data</text>
+  <text x="80" y="1996" class="note">   • Call 2: Full history + tool results + NO TOOLS → AI formats response</text>
+  
+  <text x="70" y="2026" class="label">3. Tool Result Format:</text>
+  <text x="80" y="2048" class="note">   • Sent as "tool" role message</text>
+  <text x="80" y="2066" class="note">   • tool_call_id links to original request</text>
+  <text x="80" y="2084" class="note">   • content is JSON stringified tool data</text>
+  
+  <text x="70" y="2114" class="label">4. Why Second AI Call Needed:</text>
+  <text x="80" y="2136" class="note">   • Raw tool data is ugly JSON → needs formatting</text>
+  <text x="80" y="2154" class="note">   • AI converts data to natural language</text>
+  <text x="80" y="2172" class="note">   • Adds context, explanations, formatting</text>
+  
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#64748b"/>
+    </marker>
+  </defs>
+</svg>

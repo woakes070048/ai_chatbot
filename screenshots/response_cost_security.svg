@@ -1,0 +1,273 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1800 2600" width="1800" height="2600">
+  <defs>
+    <style>
+      .response-box { fill: #dcfce7; stroke: #059669; stroke-width: 2; }
+      .cost-box { fill: #fef3c7; stroke: #f59e0b; stroke-width: 2; }
+      .security-box { fill: #fee2e2; stroke: #ef4444; stroke-width: 2; }
+      .code { fill: #1e293b; font-family: 'Courier New', monospace; font-size: 9px; }
+      .title { fill: #1e293b; font-family: Arial, sans-serif; font-size: 26px; font-weight: bold; text-anchor: middle; }
+      .label { fill: #1e293b; font-family: Arial, sans-serif; font-size: 13px; font-weight: bold; }
+      .note { fill: #475569; font-family: Arial, sans-serif; font-size: 10px; }
+    </style>
+  </defs>
+  
+  <text x="900" y="40" class="title">AI Response Structure, Cost Analysis, Data Retention & Security</text>
+  
+  <!-- Response Structure Section -->
+  <rect x="50" y="80" width="850" height="550" rx="8" class="response-box"/>
+  <text x="70" y="110" class="label" font-size="16">AI Response Structure and Datatypes</text>
+  
+  <text x="70" y="145" class="label">Complete Response Object:</text>
+  
+  <rect x="80" y="160" width="750" height="450" rx="4" fill="#f0fdf4" stroke="#10b981" stroke-width="1"/>
+  <text x="90" y="185" class="code">{</text>
+  <text x="100" y="200" class="code">  "id": "chatcmpl-8qR3L9Zv1X2Y3Z4A5B6C7D8E9F0",</text>
+  <text x="100" y="215" class="code">  "object": "chat.completion",</text>
+  <text x="100" y="230" class="code">  "created": 1706889456,</text>
+  <text x="100" y="245" class="code">  "model": "gpt-4-1106-preview",</text>
+  <text x="100" y="260" class="code">  "system_fingerprint": "fp_abc123",</text>
+  <text x="100" y="275" class="code">  "choices": [{</text>
+  <text x="110" y="290" class="code">    "index": 0,</text>
+  <text x="110" y="305" class="code">    "message": {</text>
+  <text x="120" y="320" class="code">      "role": "assistant",</text>
+  <text x="120" y="335" class="code">      "content": "...",  // string | null</text>
+  <text x="120" y="350" class="code">      "tool_calls": null  // array | null</text>
+  <text x="110" y="365" class="code">    },</text>
+  <text x="110" y="380" class="code">    "finish_reason": "stop"  // or "tool_calls"</text>
+  <text x="100" y="395" class="code">  }],</text>
+  <text x="100" y="410" class="code">  "usage": {</text>
+  <text x="110" y="425" class="code">    "prompt_tokens": 1567,</text>
+  <text x="110" y="440" class="code">    "completion_tokens": 142,</text>
+  <text x="110" y="455" class="code">    "total_tokens": 1709</text>
+  <text x="100" y="470" class="code">  }</text>
+  <text x="90" y="485" class="code">}</text>
+  
+  <text x="90" y="515" class="label">Content Field Datatype:</text>
+  <text x="100" y="535" class="code">Type: string | null</text>
+  <text x="100" y="555" class="note">• If tool_calls present → content = null</text>
+  <text x="100" y="570" class="note">• If direct response → content = string (text)</text>
+  <text x="100" y="585" class="note">• NEVER both content AND tool_calls simultaneously</text>
+  
+  <!-- Token Usage Breakdown -->
+  <rect x="950" y="80" width="800" height="550" rx="8" class="response-box"/>
+  <text x="970" y="110" class="label" font-size="16">Token Usage Detailed Breakdown</text>
+  
+  <text x="970" y="145" class="label">1. prompt_tokens (Input Tokens)</text>
+  
+  <rect x="980" y="160" width="750" height="140" rx="4" fill="#eff6ff" stroke="#3b82f6" stroke-width="1"/>
+  <text x="990" y="185" class="note">Everything sent TO the AI:</text>
+  <text x="1000" y="205" class="code">• System instructions: ~500 tokens</text>
+  <text x="1000" y="220" class="code">• Conversation history: ~1000 tokens</text>
+  <text x="1000" y="235" class="code">• Current user message: ~50 tokens</text>
+  <text x="1000" y="250" class="code">• ALL tool schemas: ~2500 tokens</text>
+  <text x="1000" y="265" class="code">• Tool results (2nd call): ~300 tokens</text>
+  <text x="1000" y="280" class="code">────────────────────────────────</text>
+  <text x="1000" y="295" class="code">Typical total: 1250-3000 tokens</text>
+  
+  <text x="970" y="325" class="label">2. completion_tokens (Output Tokens)</text>
+  
+  <rect x="980" y="340" width="750" height="125" rx="4" fill="#fef3c7" stroke="#f59e0b" stroke-width="1"/>
+  <text x="990" y="365" class="note">Everything AI generates:</text>
+  <text x="1000" y="385" class="code">• Response text: 50-300 tokens</text>
+  <text x="1000" y="400" class="code">• Tool call JSON: 20-50 tokens</text>
+  <text x="1000" y="415" class="code">• Reasoning tokens: varies</text>
+  <text x="1000" y="430" class="code">────────────────────────────────</text>
+  <text x="1000" y="445" class="code">Typical total: 25-200 tokens</text>
+  
+  <text x="970" y="480" class="label">3. total_tokens = prompt + completion</text>
+  
+  <rect x="980" y="495" width="750" height="125" rx="4" fill="#dcfce7" stroke="#10b981" stroke-width="1"/>
+  <text x="990" y="520" class="label">Usage Patterns:</text>
+  <text x="1000" y="540" class="code">Simple greeting:    1,275 tokens (1250 + 25)</text>
+  <text x="1000" y="555" class="code">General question:   1,375 tokens (1300 + 75)</text>
+  <text x="1000" y="570" class="code">Tool execution:     3,130 tokens (2950 + 180)</text>
+  <text x="1000" y="585" class="code">Long conversation:  4,800 tokens (4500 + 300)</text>
+  
+  <!-- Cost Analysis Section -->
+  <rect x="50" y="660" width="1700" height="750" rx="8" class="cost-box"/>
+  <text x="900" y="695" class="label" font-size="18" text-anchor="middle">💰 Complete Cost Analysis per Message</text>
+  
+  <text x="70" y="735" class="label">OpenAI GPT-4 Pricing (February 2026):</text>
+  
+  <rect x="80" y="750" width="800" height="90" rx="4" fill="#fffbeb" stroke="#fbbf24" stroke-width="2"/>
+  <text x="100" y="775" class="code">Input (Prompt):   $0.01 per 1,000 tokens</text>
+  <text x="100" y="795" class="code">Output (Completion): $0.03 per 1,000 tokens</text>
+  <text x="100" y="815" class="note">⚠️ Output costs 3x more than input!</text>
+  
+  <text x="70" y="865" class="label">Cost Calculation Formula:</text>
+  
+  <rect x="80" y="880" width="1600" height="120" rx="4" fill="#fef2f2" stroke="#ef4444" stroke-width="1"/>
+  <text x="100" y="905" class="code">prompt_cost = (prompt_tokens / 1000) × $0.01</text>
+  <text x="100" y="925" class="code">completion_cost = (completion_tokens / 1000) × $0.03</text>
+  <text x="100" y="945" class="code">total_cost = prompt_cost + completion_cost</text>
+  
+  <text x="100" y="975" class="label">Example: Simple Greeting</text>
+  <text x="110" y="995" class="code">(1250 / 1000) × $0.01 + (25 / 1000) × $0.03 = $0.0125 + $0.00075 = $0.01325</text>
+  
+  <text x="70" y="1030" class="label">Detailed Cost Breakdown by Message Type:</text>
+  
+  <!-- Cost Table -->
+  <rect x="80" y="1045" width="1600" height="40" rx="4" fill="#1e293b"/>
+  <text x="100" y="1070" class="code" fill="white">Message Type</text>
+  <text x="350" y="1070" class="code" fill="white">Prompt</text>
+  <text x="520" y="1070" class="code" fill="white">Completion</text>
+  <text x="720" y="1070" class="code" fill="white">Total</text>
+  <text x="920" y="1070" class="code" fill="white">Prompt $</text>
+  <text x="1120" y="1070" class="code" fill="white">Completion $</text>
+  <text x="1380" y="1070" class="code" fill="white">Total Cost</text>
+  
+  <rect x="80" y="1085" width="1600" height="30" rx="4" fill="#f9fafb"/>
+  <text x="100" y="1105" class="code">Simple greeting</text>
+  <text x="350" y="1105" class="code">1,250</text>
+  <text x="520" y="1105" class="code">25</text>
+  <text x="720" y="1105" class="code">1,275</text>
+  <text x="920" y="1105" class="code">$0.0125</text>
+  <text x="1120" y="1105" class="code">$0.00075</text>
+  <text x="1380" y="1105" class="code">$0.013</text>
+  
+  <rect x="80" y="1115" width="1600" height="30" rx="4" fill="#f3f4f6"/>
+  <text x="100" y="1135" class="code">General question</text>
+  <text x="350" y="1135" class="code">1,300</text>
+  <text x="520" y="1135" class="code">75</text>
+  <text x="720" y="1135" class="code">1,375</text>
+  <text x="920" y="1135" class="code">$0.0130</text>
+  <text x="1120" y="1135" class="code">$0.00225</text>
+  <text x="1380" y="1135" class="code">$0.015</text>
+  
+  <rect x="80" y="1145" width="1600" height="30" rx="4" fill="#f9fafb"/>
+  <text x="100" y="1165" class="code">Tool call (both)</text>
+  <text x="350" y="1165" class="code">2,950</text>
+  <text x="520" y="1165" class="code">180</text>
+  <text x="720" y="1165" class="code">3,130</text>
+  <text x="920" y="1165" class="code">$0.0295</text>
+  <text x="1120" y="1165" class="code">$0.00540</text>
+  <text x="1380" y="1165" class="code">$0.035</text>
+  
+  <rect x="80" y="1175" width="1600" height="30" rx="4" fill="#f3f4f6"/>
+  <text x="100" y="1195" class="code">Long conversation</text>
+  <text x="350" y="1195" class="code">4,500</text>
+  <text x="520" y="1195" class="code">300</text>
+  <text x="720" y="1195" class="code">4,800</text>
+  <text x="920" y="1195" class="code">$0.0450</text>
+  <text x="1120" y="1195" class="code">$0.00900</text>
+  <text x="1380" y="1195" class="code">$0.054</text>
+  
+  <text x="70" y="1240" class="label">Monthly Cost Projections:</text>
+  
+  <rect x="80" y="1255" width="1600" height="135" rx="4" fill="#ecfdf5" stroke="#10b981" stroke-width="1"/>
+  <text x="100" y="1280" class="code">Light Usage (100 msg/month):    70% simple + 30% tool = ~$1.80/month</text>
+  <text x="100" y="1300" class="code">Medium Usage (1,000 msg/month):  60% simple + 40% tool = ~$20/month</text>
+  <text x="100" y="1320" class="code">Heavy Usage (10,000 msg/month):  50% simple + 50% tool = ~$220/month</text>
+  <text x="100" y="1340" class="code">Enterprise (100K msg/month):     40% simple + 60% tool = ~$2,400/month</text>
+  <text x="100" y="1360" class="code">Ultra Enterprise (1M msg/month): 40% simple + 60% tool = ~$24,000/month</text>
+  
+  <!-- Data Retention Section -->
+  <rect x="50" y="1440" width="850" height="520" rx="8" class="security-box"/>
+  <text x="70" y="1475" class="label" font-size="16">🔒 AI Data Retention Policies</text>
+  
+  <text x="70" y="1510" class="label">OpenAI Policy:</text>
+  
+  <rect x="80" y="1525" width="750" height="150" rx="4" fill="#fef2f2" stroke="#dc2626" stroke-width="1"/>
+  <text x="90" y="1550" class="code">✓ API Requests: NOT used for training (default)</text>
+  <text x="90" y="1570" class="code">✓ Retention Period: 30 days (abuse monitoring)</text>
+  <text x="90" y="1590" class="code">✓ After 30 Days: Permanently deleted</text>
+  <text x="90" y="1610" class="code">✓ Zero Retention: Available for enterprise</text>
+  <text x="90" y="1630" class="note">⚠️ Different from ChatGPT web interface!</text>
+  <text x="90" y="1650" class="note">API = Private by default, Web = May train</text>
+  
+  <text x="70" y="1690" class="label">Claude/Anthropic Policy:</text>
+  
+  <rect x="80" y="1705" width="750" height="115" rx="4" fill="#fef2f2" stroke="#dc2626" stroke-width="1"/>
+  <text x="90" y="1730" class="code">✓ API Requests: NEVER used for training</text>
+  <text x="90" y="1750" class="code">✓ Retention: Minimal (abuse monitoring only)</text>
+  <text x="90" y="1770" class="code">✓ Privacy-First: Core company commitment</text>
+  <text x="90" y="1790" class="code">✓ No Opt-Out Needed: Default behavior</text>
+  
+  <text x="70" y="1835" class="label">What Data AI Sees:</text>
+  
+  <rect x="80" y="1850" width="750" height="95" rx="4" fill="#fef2f2" stroke="#dc2626" stroke-width="1"/>
+  <text x="90" y="1875" class="code">✓ Conversation history (last N messages)</text>
+  <text x="90" y="1895" class="code">✓ Tool results (actual ERPNext data)</text>
+  <text x="90" y="1915" class="code">✗ Other users' conversations</text>
+  <text x="90" y="1935" class="code">✗ Raw database tables or credentials</text>
+  
+  <!-- Security & Privacy Section -->
+  <rect x="950" y="1440" width="800" height="520" rx="8" class="security-box"/>
+  <text x="970" y="1475" class="label" font-size="16">🛡️ Data Security & Privacy</text>
+  
+  <text x="970" y="1510" class="label">Security Layers:</text>
+  
+  <rect x="980" y="1525" width="750" height="260" rx="4" fill="#fff7ed" stroke="#ea580c" stroke-width="1"/>
+  <text x="990" y="1550" class="label">Layer 1: Authentication & Authorization</text>
+  <text x="1000" y="1570" class="code">✓ User must be logged in</text>
+  <text x="1000" y="1585" class="code">✓ User owns conversation (verified)</text>
+  <text x="1000" y="1600" class="code">✓ Frappe permission system enforced</text>
+  
+  <text x="990" y="1625" class="label">Layer 2: Data Filtering</text>
+  <text x="1000" y="1645" class="code">✓ Tools respect user permissions</text>
+  <text x="1000" y="1660" class="code">✓ Users only see their data</text>
+  <text x="1000" y="1675" class="code">✓ Permission checks on every query</text>
+  
+  <text x="990" y="1700" class="label">Layer 3: API Key Protection</text>
+  <text x="1000" y="1720" class="code">✓ Encrypted in database</text>
+  <text x="1000" y="1735" class="code">✓ Never logged or sent to client</text>
+  <text x="1000" y="1750" class="code">✓ Decrypted only in memory</text>
+  
+  <text x="990" y="1775" class="label">Layer 4: Transport Security</text>
+  <text x="1000" y="1795" class="code">✓ HTTPS/TLS encryption</text>
+  
+  <text x="970" y="1820" class="label">Privacy Considerations:</text>
+  
+  <rect x="980" y="1835" width="750" height="110" rx="4" fill="#fef2f2" stroke="#dc2626" stroke-width="1"/>
+  <text x="990" y="1860" class="note">⚠️ Data leaves your server (sent to AI provider)</text>
+  <text x="990" y="1880" class="note">⚠️ Retained for 30 days (OpenAI) or minimal (Claude)</text>
+  <text x="990" y="1900" class="note">✓ NOT used for AI training (API default)</text>
+  <text x="990" y="1920" class="note">✓ Audit trail maintained in your database</text>
+  
+  <!-- Key Security Recommendations -->
+  <rect x="50" y="1990" width="1700" height="280" rx="8" fill="#ecfdf5" stroke="#10b981" stroke-width="3"/>
+  <text x="900" y="2025" class="label" font-size="16" text-anchor="middle">⭐ Security & Privacy Best Practices</text>
+  
+  <text x="70" y="2065" class="label">For Sensitive Data:</text>
+  
+  <rect x="80" y="2080" width="800" height="170" rx="4" fill="#f0fdf4" stroke="#059669" stroke-width="1"/>
+  <text x="90" y="2105" class="code">Option 1: Filter sensitive fields in tools</text>
+  <text x="100" y="2123" class="note">• Return only non-sensitive data</text>
+  <text x="100" y="2138" class="note">• Exclude: tax_id, bank_account, SSN, etc.</text>
+  
+  <text x="90" y="2163" class="code">Option 2: Use on-premise AI models</text>
+  <text x="100" y="2181" class="note">• Deploy OpenAI-compatible model locally</text>
+  <text x="100" y="2196" class="note">• Data never leaves your network</text>
+  
+  <text x="90" y="2221" class="code">Option 3: Enterprise contracts</text>
+  <text x="100" y="2239" class="note">• Zero-retention agreements available</text>
+  
+  <rect x="920" y="2080" width="800" height="170" rx="4" fill="#f0fdf4" stroke="#059669" stroke-width="1"/>
+  <text x="930" y="2105" class="label">Compliance Considerations:</text>
+  
+  <text x="940" y="2130" class="code">GDPR (Europe):</text>
+  <text x="950" y="2148" class="note">• User consent required</text>
+  <text x="950" y="2163" class="note">• Right to deletion supported</text>
+  
+  <text x="940" y="2188" class="code">HIPAA (Healthcare):</text>
+  <text x="950" y="2206" class="note">• DO NOT use for PHI without BAA</text>
+  <text x="950" y="2221" class="note">• HIPAA-compliant plans available</text>
+  
+  <text x="940" y="2246" class="code">SOC 2: Both providers certified</text>
+  
+  <!-- Summary -->
+  <rect x="50" y="2300" width="1700" height="270" rx="8" fill="#f5f3ff" stroke="#8b5cf6" stroke-width="3"/>
+  <text x="900" y="2335" class="label" font-size="16" text-anchor="middle">📊 Summary: Response, Cost, Retention & Security</text>
+  
+  <text x="70" y="2375" class="note">• AI response content field: string (with text) | null (with tool_calls) - never both</text>
+  <text x="70" y="2395" class="note">• Three token types: prompt (input), completion (output), total (sum)</text>
+  <text x="70" y="2415" class="note">• Cost: $0.01/1K input, $0.03/1K output - output costs 3x more!</text>
+  <text x="70" y="2435" class="note">• Average message cost: $0.013 (simple) to $0.035 (with tools)</text>
+  <text x="70" y="2455" class="note">• Data retention: 30 days (OpenAI) or minimal (Claude) - NOT used for training</text>
+  <text x="70" y="2475" class="note">• Security: 4 layers (auth, permissions, encryption, HTTPS)</text>
+  <text x="70" y="2495" class="note">• Privacy: Data leaves server, audit trail maintained, enterprise options available</text>
+  <text x="70" y="2515" class="note">• Compliance: GDPR/HIPAA support available, SOC 2 certified providers</text>
+  <text x="70" y="2535" class="note">• Best practice: Filter sensitive fields OR use enterprise zero-retention contracts</text>
+  
+</svg>

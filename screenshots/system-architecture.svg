@@ -1,0 +1,228 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1200" height="800" viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="headerGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#1a365d;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#2c5282;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="frontendGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#48bb78;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#38a169;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="backendGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#4299e1;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#3182ce;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="aiGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#9f7aea;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#805ad5;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="dbGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#ed8936;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#dd6b20;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="erpGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#e53e3e;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#c53030;stop-opacity:1" />
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#000" flood-opacity="0.15"/>
+    </filter>
+    <filter id="softShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000" flood-opacity="0.1"/>
+    </filter>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="1200" height="800" fill="#f7fafc"/>
+  <rect x="0" y="0" width="1200" height="80" fill="url(#headerGrad)"/>
+  
+  <!-- Title -->
+  <text x="600" y="50" font-family="Segoe UI, Arial, sans-serif" font-size="28" font-weight="600" fill="white" text-anchor="middle">AI Chatbot System Architecture</text>
+  
+  <!-- Grid pattern -->
+  <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+    <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#e2e8f0" stroke-width="0.5"/>
+  </pattern>
+  <rect x="0" y="80" width="1200" height="720" fill="url(#grid)"/>
+  
+  <!-- User/Client Layer -->
+  <g filter="url(#shadow)">
+    <rect x="80" y="120" width="200" height="120" rx="12" fill="white" stroke="#e2e8f0" stroke-width="2"/>
+    <rect x="80" y="120" width="200" height="40" rx="12" fill="url(#frontendGrad)"/>
+    <rect x="80" y="148" width="200" height="12" fill="url(#frontendGrad)"/>
+    <text x="180" y="147" font-family="Segoe UI, Arial, sans-serif" font-size="14" font-weight="600" fill="white" text-anchor="middle">👤 User Interface</text>
+    <text x="180" y="180" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#4a5568" text-anchor="middle">Web Browser</text>
+    <text x="180" y="198" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#718096" text-anchor="middle">Vue.js + Tailwind CSS</text>
+    <text x="180" y="216" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#718096" text-anchor="middle">Real-time Streaming</text>
+  </g>
+  
+  <!-- Frontend Application -->
+  <g filter="url(#shadow)">
+    <rect x="340" y="120" width="240" height="140" rx="12" fill="white" stroke="#e2e8f0" stroke-width="2"/>
+    <rect x="340" y="120" width="240" height="40" rx="12" fill="url(#frontendGrad)"/>
+    <rect x="340" y="148" width="240" height="12" fill="url(#frontendGrad)"/>
+    <text x="460" y="147" font-family="Segoe UI, Arial, sans-serif" font-size="14" font-weight="600" fill="white" text-anchor="middle">🖥️ Frontend Application</text>
+    <text x="460" y="180" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#4a5568" text-anchor="middle">Chat Interface Components</text>
+    <text x="460" y="198" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#718096" text-anchor="middle">• Message Display</text>
+    <text x="460" y="214" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#718096" text-anchor="middle">• Markdown Rendering</text>
+    <text x="460" y="230" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#718096" text-anchor="middle">• Tool Results Display</text>
+    <text x="460" y="246" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#718096" text-anchor="middle">• Session Management</text>
+  </g>
+  
+  <!-- API Gateway -->
+  <g filter="url(#shadow)">
+    <rect x="480" y="320" width="240" height="140" rx="12" fill="white" stroke="#e2e8f0" stroke-width="2"/>
+    <rect x="480" y="320" width="240" height="40" rx="12" fill="url(#backendGrad)"/>
+    <rect x="480" y="348" width="240" height="12" fill="url(#backendGrad)"/>
+    <text x="600" y="347" font-family="Segoe UI, Arial, sans-serif" font-size="14" font-weight="600" fill="white" text-anchor="middle">🔌 FastAPI Backend</text>
+    <text x="600" y="382" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#4a5568" text-anchor="middle">REST API + WebSocket</text>
+    <text x="600" y="400" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#718096" text-anchor="middle">• /api/chat (Streaming)</text>
+    <text x="600" y="416" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#718096" text-anchor="middle">• /api/sessions</text>
+    <text x="600" y="432" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#718096" text-anchor="middle">• Authentication</text>
+    <text x="600" y="448" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#718096" text-anchor="middle">• Rate Limiting</text>
+  </g>
+  
+  <!-- AI Engine -->
+  <g filter="url(#shadow)">
+    <rect x="800" y="320" width="280" height="160" rx="12" fill="white" stroke="#e2e8f0" stroke-width="2"/>
+    <rect x="800" y="320" width="280" height="40" rx="12" fill="url(#aiGrad)"/>
+    <rect x="800" y="348" width="280" height="12" fill="url(#aiGrad)"/>
+    <text x="940" y="347" font-family="Segoe UI, Arial, sans-serif" font-size="14" font-weight="600" fill="white" text-anchor="middle">🤖 AI Processing Engine</text>
+    <text x="940" y="382" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#4a5568" text-anchor="middle">OpenAI GPT-4 Integration</text>
+    <text x="940" y="402" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#718096" text-anchor="middle">• Function Calling</text>
+    <text x="940" y="420" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#718096" text-anchor="middle">• Context Management</text>
+    <text x="940" y="438" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#718096" text-anchor="middle">• Tool Schema Definitions</text>
+    <text x="940" y="456" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#718096" text-anchor="middle">• Response Streaming</text>
+    <text x="940" y="474" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#718096" text-anchor="middle">• Error Recovery</text>
+  </g>
+  
+  <!-- Tool Execution Layer -->
+  <g filter="url(#shadow)">
+    <rect x="120" y="320" width="280" height="180" rx="12" fill="white" stroke="#e2e8f0" stroke-width="2"/>
+    <rect x="120" y="320" width="280" height="40" rx="12" fill="url(#backendGrad)"/>
+    <rect x="120" y="348" width="280" height="12" fill="url(#backendGrad)"/>
+    <text x="260" y="347" font-family="Segoe UI, Arial, sans-serif" font-size="14" font-weight="600" fill="white" text-anchor="middle">🔧 Tool Execution Layer</text>
+    <text x="260" y="382" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#4a5568" text-anchor="middle">Business Logic Tools</text>
+    <text x="260" y="402" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#718096" text-anchor="middle">• get_customer_info</text>
+    <text x="260" y="418" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#718096" text-anchor="middle">• get_sales_orders</text>
+    <text x="260" y="434" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#718096" text-anchor="middle">• get_inventory_status</text>
+    <text x="260" y="450" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#718096" text-anchor="middle">• create_document</text>
+    <text x="260" y="466" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#718096" text-anchor="middle">• execute_report</text>
+    <text x="260" y="482" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#718096" text-anchor="middle">• search_documents</text>
+  </g>
+  
+  <!-- ERPNext Integration -->
+  <g filter="url(#shadow)">
+    <rect x="120" y="560" width="280" height="140" rx="12" fill="white" stroke="#e2e8f0" stroke-width="2"/>
+    <rect x="120" y="560" width="280" height="40" rx="12" fill="url(#erpGrad)"/>
+    <rect x="120" y="588" width="280" height="12" fill="url(#erpGrad)"/>
+    <text x="260" y="587" font-family="Segoe UI, Arial, sans-serif" font-size="14" font-weight="600" fill="white" text-anchor="middle">⚙️ ERPNext System</text>
+    <text x="260" y="620" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#4a5568" text-anchor="middle">Frappe REST API</text>
+    <text x="260" y="640" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#718096" text-anchor="middle">• DocType Operations</text>
+    <text x="260" y="656" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#718096" text-anchor="middle">• Whitelisted Methods</text>
+    <text x="260" y="672" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#718096" text-anchor="middle">• Report Generation</text>
+    <text x="260" y="688" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#718096" text-anchor="middle">• Business Workflows</text>
+  </g>
+  
+  <!-- Database Layer -->
+  <g filter="url(#shadow)">
+    <rect x="480" y="560" width="240" height="140" rx="12" fill="white" stroke="#e2e8f0" stroke-width="2"/>
+    <rect x="480" y="560" width="240" height="40" rx="12" fill="url(#dbGrad)"/>
+    <rect x="480" y="588" width="240" height="12" fill="url(#dbGrad)"/>
+    <text x="600" y="587" font-family="Segoe UI, Arial, sans-serif" font-size="14" font-weight="600" fill="white" text-anchor="middle">🗄️ Database Layer</text>
+    <text x="600" y="620" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#4a5568" text-anchor="middle">MariaDB / MySQL</text>
+    <text x="600" y="640" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#718096" text-anchor="middle">• Chat Sessions</text>
+    <text x="600" y="656" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#718096" text-anchor="middle">• Message History</text>
+    <text x="600" y="672" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#718096" text-anchor="middle">• Tool Logs</text>
+    <text x="600" y="688" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#718096" text-anchor="middle">• User Preferences</text>
+  </g>
+  
+  <!-- Cache Layer -->
+  <g filter="url(#shadow)">
+    <rect x="800" y="560" width="280" height="140" rx="12" fill="white" stroke="#e2e8f0" stroke-width="2"/>
+    <rect x="800" y="560" width="280" height="40" rx="12" fill="url(#dbGrad)"/>
+    <rect x="800" y="588" width="280" height="12" fill="url(#dbGrad)"/>
+    <text x="940" y="587" font-family="Segoe UI, Arial, sans-serif" font-size="14" font-weight="600" fill="white" text-anchor="middle">⚡ Cache &amp; Queue</text>
+    <text x="940" y="620" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#4a5568" text-anchor="middle">Redis</text>
+    <text x="940" y="640" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#718096" text-anchor="middle">• Session Cache</text>
+    <text x="940" y="656" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#718096" text-anchor="middle">• Rate Limit Counters</text>
+    <text x="940" y="672" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#718096" text-anchor="middle">• Background Jobs</text>
+    <text x="940" y="688" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#718096" text-anchor="middle">• Real-time Pub/Sub</text>
+  </g>
+  
+  <!-- Connection Lines -->
+  <!-- User to Frontend -->
+  <path d="M 280 180 L 340 180" stroke="#48bb78" stroke-width="3" fill="none" marker-end="url(#arrowGreen)"/>
+  
+  <!-- Frontend to API -->
+  <path d="M 460 260 L 460 290 L 600 290 L 600 320" stroke="#4299e1" stroke-width="3" fill="none" marker-end="url(#arrowBlue)"/>
+  
+  <!-- API to AI Engine -->
+  <path d="M 720 390 L 800 390" stroke="#9f7aea" stroke-width="3" fill="none" marker-end="url(#arrowPurple)"/>
+  
+  <!-- API to Tools -->
+  <path d="M 480 390 L 400 390" stroke="#4299e1" stroke-width="3" fill="none" marker-end="url(#arrowBlue)"/>
+  
+  <!-- Tools to ERPNext -->
+  <path d="M 260 500 L 260 560" stroke="#e53e3e" stroke-width="3" fill="none" marker-end="url(#arrowRed)"/>
+  
+  <!-- API to Database -->
+  <path d="M 600 460 L 600 560" stroke="#ed8936" stroke-width="3" fill="none" marker-end="url(#arrowOrange)"/>
+  
+  <!-- AI to Cache -->
+  <path d="M 940 480 L 940 560" stroke="#ed8936" stroke-width="3" fill="none" marker-end="url(#arrowOrange)"/>
+  
+  <!-- Arrow markers -->
+  <defs>
+    <marker id="arrowGreen" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#48bb78"/>
+    </marker>
+    <marker id="arrowBlue" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#4299e1"/>
+    </marker>
+    <marker id="arrowPurple" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#9f7aea"/>
+    </marker>
+    <marker id="arrowRed" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#e53e3e"/>
+    </marker>
+    <marker id="arrowOrange" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#ed8936"/>
+    </marker>
+  </defs>
+  
+  <!-- Layer Labels -->
+  <g>
+    <rect x="20" y="110" width="40" height="160" rx="4" fill="#48bb78" opacity="0.2"/>
+    <text x="40" y="200" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#38a169" text-anchor="middle" transform="rotate(-90, 40, 200)">PRESENTATION</text>
+  </g>
+  <g>
+    <rect x="20" y="300" width="40" height="220" rx="4" fill="#4299e1" opacity="0.2"/>
+    <text x="40" y="420" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#3182ce" text-anchor="middle" transform="rotate(-90, 40, 420)">APPLICATION</text>
+  </g>
+  <g>
+    <rect x="20" y="540" width="40" height="180" rx="4" fill="#ed8936" opacity="0.2"/>
+    <text x="40" y="640" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#dd6b20" text-anchor="middle" transform="rotate(-90, 40, 640)">DATA</text>
+  </g>
+  
+  <!-- Legend -->
+  <g transform="translate(900, 120)">
+    <rect x="0" y="0" width="180" height="140" rx="8" fill="white" stroke="#e2e8f0" stroke-width="1" filter="url(#softShadow)"/>
+    <text x="90" y="25" font-family="Segoe UI, Arial, sans-serif" font-size="12" font-weight="600" fill="#2d3748" text-anchor="middle">Legend</text>
+    <line x1="10" y1="35" x2="170" y2="35" stroke="#e2e8f0" stroke-width="1"/>
+    <rect x="15" y="48" width="16" height="12" rx="2" fill="url(#frontendGrad)"/>
+    <text x="40" y="58" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#4a5568">Frontend</text>
+    <rect x="15" y="68" width="16" height="12" rx="2" fill="url(#backendGrad)"/>
+    <text x="40" y="78" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#4a5568">Backend</text>
+    <rect x="15" y="88" width="16" height="12" rx="2" fill="url(#aiGrad)"/>
+    <text x="40" y="98" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#4a5568">AI Engine</text>
+    <rect x="15" y="108" width="16" height="12" rx="2" fill="url(#dbGrad)"/>
+    <text x="40" y="118" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#4a5568">Data Layer</text>
+    <rect x="100" y="48" width="16" height="12" rx="2" fill="url(#erpGrad)"/>
+    <text x="125" y="58" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#4a5568">ERPNext</text>
+  </g>
+  
+  <!-- Version Info -->
+  <text x="1180" y="780" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#a0aec0" text-anchor="end">v1.0 | AI Chatbot Documentation</text>
+</svg>

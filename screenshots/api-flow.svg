@@ -1,0 +1,232 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1200" height="850" viewBox="0 0 1200 850" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="headerGrad3" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#1e3a5f;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#2d5a87;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="getGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#48bb78;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#38a169;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="postGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#4299e1;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#3182ce;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="deleteGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#fc8181;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#e53e3e;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="streamGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#9f7aea;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#805ad5;stop-opacity:1" />
+    </linearGradient>
+    <filter id="shadow3" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#000" flood-opacity="0.12"/>
+    </filter>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="1200" height="850" fill="#f7fafc"/>
+  <rect x="0" y="0" width="1200" height="80" fill="url(#headerGrad3)"/>
+  
+  <!-- Title -->
+  <text x="600" y="50" font-family="Segoe UI, Arial, sans-serif" font-size="28" font-weight="600" fill="white" text-anchor="middle">REST API Endpoints &amp; Data Flow</text>
+  
+  <!-- Base URL Box -->
+  <g transform="translate(40, 100)">
+    <rect x="0" y="0" width="1120" height="50" rx="8" fill="#edf2f7" stroke="#cbd5e0" stroke-width="1"/>
+    <text x="20" y="32" font-family="Consolas, monospace" font-size="14" fill="#4a5568">Base URL:</text>
+    <text x="120" y="32" font-family="Consolas, monospace" font-size="14" fill="#2d3748" font-weight="600">https://your-domain.com/api/v1</text>
+    <rect x="800" y="10" width="300" height="30" rx="4" fill="#e6fffa" stroke="#38b2ac" stroke-width="1"/>
+    <text x="810" y="30" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#234e52">🔒 All endpoints require Bearer token auth</text>
+  </g>
+  
+  <!-- Chat Endpoints Section -->
+  <g transform="translate(40, 170)">
+    <rect x="0" y="0" width="540" height="320" rx="12" fill="white" stroke="#e2e8f0" stroke-width="2" filter="url(#shadow3)"/>
+    <rect x="0" y="0" width="540" height="45" rx="12" fill="#2d3748"/>
+    <rect x="0" y="33" width="540" height="12" fill="#2d3748"/>
+    <text x="270" y="30" font-family="Segoe UI, Arial, sans-serif" font-size="16" font-weight="600" fill="white" text-anchor="middle">💬 Chat Endpoints</text>
+    
+    <!-- POST /chat -->
+    <g transform="translate(20, 60)">
+      <rect x="0" y="0" width="500" height="75" rx="8" fill="#ebf8ff" stroke="#4299e1" stroke-width="1"/>
+      <rect x="10" y="10" width="55" height="22" rx="4" fill="url(#postGrad)"/>
+      <text x="37" y="26" font-family="Consolas, monospace" font-size="11" fill="white" text-anchor="middle" font-weight="600">POST</text>
+      <text x="75" y="26" font-family="Consolas, monospace" font-size="13" fill="#2d3748" font-weight="600">/chat</text>
+      <text x="20" y="48" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#4a5568">Send message and receive streaming AI response</text>
+      <text x="20" y="64" font-family="Consolas, monospace" font-size="10" fill="#718096">Body: { session_id, message, stream: true }</text>
+      <rect x="380" y="8" width="110" height="20" rx="4" fill="url(#streamGrad)"/>
+      <text x="435" y="22" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="white" text-anchor="middle">SSE Streaming</text>
+    </g>
+    
+    <!-- GET /chat/history -->
+    <g transform="translate(20, 145)">
+      <rect x="0" y="0" width="500" height="75" rx="8" fill="#f0fff4" stroke="#48bb78" stroke-width="1"/>
+      <rect x="10" y="10" width="45" height="22" rx="4" fill="url(#getGrad)"/>
+      <text x="32" y="26" font-family="Consolas, monospace" font-size="11" fill="white" text-anchor="middle" font-weight="600">GET</text>
+      <text x="65" y="26" font-family="Consolas, monospace" font-size="13" fill="#2d3748" font-weight="600">/chat/history/{session_id}</text>
+      <text x="20" y="48" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#4a5568">Retrieve message history for a session</text>
+      <text x="20" y="64" font-family="Consolas, monospace" font-size="10" fill="#718096">Query: ?limit=50&amp;offset=0</text>
+    </g>
+    
+    <!-- DELETE /chat -->
+    <g transform="translate(20, 230)">
+      <rect x="0" y="0" width="500" height="75" rx="8" fill="#fff5f5" stroke="#e53e3e" stroke-width="1"/>
+      <rect x="10" y="10" width="60" height="22" rx="4" fill="url(#deleteGrad)"/>
+      <text x="40" y="26" font-family="Consolas, monospace" font-size="11" fill="white" text-anchor="middle" font-weight="600">DELETE</text>
+      <text x="80" y="26" font-family="Consolas, monospace" font-size="13" fill="#2d3748" font-weight="600">/chat/{session_id}</text>
+      <text x="20" y="48" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#4a5568">Delete a chat session and all messages</text>
+      <text x="20" y="64" font-family="Consolas, monospace" font-size="10" fill="#718096">Returns: { deleted: true }</text>
+    </g>
+  </g>
+  
+  <!-- Session Endpoints Section -->
+  <g transform="translate(620, 170)">
+    <rect x="0" y="0" width="540" height="320" rx="12" fill="white" stroke="#e2e8f0" stroke-width="2" filter="url(#shadow3)"/>
+    <rect x="0" y="0" width="540" height="45" rx="12" fill="#2d3748"/>
+    <rect x="0" y="33" width="540" height="12" fill="#2d3748"/>
+    <text x="270" y="30" font-family="Segoe UI, Arial, sans-serif" font-size="16" font-weight="600" fill="white" text-anchor="middle">📁 Session Endpoints</text>
+    
+    <!-- POST /sessions -->
+    <g transform="translate(20, 60)">
+      <rect x="0" y="0" width="500" height="75" rx="8" fill="#ebf8ff" stroke="#4299e1" stroke-width="1"/>
+      <rect x="10" y="10" width="55" height="22" rx="4" fill="url(#postGrad)"/>
+      <text x="37" y="26" font-family="Consolas, monospace" font-size="11" fill="white" text-anchor="middle" font-weight="600">POST</text>
+      <text x="75" y="26" font-family="Consolas, monospace" font-size="13" fill="#2d3748" font-weight="600">/sessions</text>
+      <text x="20" y="48" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#4a5568">Create a new chat session</text>
+      <text x="20" y="64" font-family="Consolas, monospace" font-size="10" fill="#718096">Body: { title?, context? } → Returns: session_id</text>
+    </g>
+    
+    <!-- GET /sessions -->
+    <g transform="translate(20, 145)">
+      <rect x="0" y="0" width="500" height="75" rx="8" fill="#f0fff4" stroke="#48bb78" stroke-width="1"/>
+      <rect x="10" y="10" width="45" height="22" rx="4" fill="url(#getGrad)"/>
+      <text x="32" y="26" font-family="Consolas, monospace" font-size="11" fill="white" text-anchor="middle" font-weight="600">GET</text>
+      <text x="65" y="26" font-family="Consolas, monospace" font-size="13" fill="#2d3748" font-weight="600">/sessions</text>
+      <text x="20" y="48" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#4a5568">List all sessions for current user</text>
+      <text x="20" y="64" font-family="Consolas, monospace" font-size="10" fill="#718096">Query: ?active=true&amp;sort=created_at</text>
+    </g>
+    
+    <!-- PATCH /sessions -->
+    <g transform="translate(20, 230)">
+      <rect x="0" y="0" width="500" height="75" rx="8" fill="#fefcbf" stroke="#d69e2e" stroke-width="1"/>
+      <rect x="10" y="10" width="55" height="22" rx="4" fill="#d69e2e"/>
+      <text x="37" y="26" font-family="Consolas, monospace" font-size="11" fill="white" text-anchor="middle" font-weight="600">PATCH</text>
+      <text x="75" y="26" font-family="Consolas, monospace" font-size="13" fill="#2d3748" font-weight="600">/sessions/{session_id}</text>
+      <text x="20" y="48" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#4a5568">Update session metadata</text>
+      <text x="20" y="64" font-family="Consolas, monospace" font-size="10" fill="#718096">Body: { title?, is_active? }</text>
+    </g>
+  </g>
+  
+  <!-- Tool Endpoints Section -->
+  <g transform="translate(40, 510)">
+    <rect x="0" y="0" width="540" height="230" rx="12" fill="white" stroke="#e2e8f0" stroke-width="2" filter="url(#shadow3)"/>
+    <rect x="0" y="0" width="540" height="45" rx="12" fill="#2d3748"/>
+    <rect x="0" y="33" width="540" height="12" fill="#2d3748"/>
+    <text x="270" y="30" font-family="Segoe UI, Arial, sans-serif" font-size="16" font-weight="600" fill="white" text-anchor="middle">🔧 Tool Endpoints</text>
+    
+    <!-- GET /tools -->
+    <g transform="translate(20, 60)">
+      <rect x="0" y="0" width="500" height="75" rx="8" fill="#f0fff4" stroke="#48bb78" stroke-width="1"/>
+      <rect x="10" y="10" width="45" height="22" rx="4" fill="url(#getGrad)"/>
+      <text x="32" y="26" font-family="Consolas, monospace" font-size="11" fill="white" text-anchor="middle" font-weight="600">GET</text>
+      <text x="65" y="26" font-family="Consolas, monospace" font-size="13" fill="#2d3748" font-weight="600">/tools</text>
+      <text x="20" y="48" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#4a5568">List available tools and their schemas</text>
+      <text x="20" y="64" font-family="Consolas, monospace" font-size="10" fill="#718096">Returns: [ { name, description, parameters } ]</text>
+    </g>
+    
+    <!-- POST /tools/execute -->
+    <g transform="translate(20, 145)">
+      <rect x="0" y="0" width="500" height="75" rx="8" fill="#ebf8ff" stroke="#4299e1" stroke-width="1"/>
+      <rect x="10" y="10" width="55" height="22" rx="4" fill="url(#postGrad)"/>
+      <text x="37" y="26" font-family="Consolas, monospace" font-size="11" fill="white" text-anchor="middle" font-weight="600">POST</text>
+      <text x="75" y="26" font-family="Consolas, monospace" font-size="13" fill="#2d3748" font-weight="600">/tools/execute</text>
+      <text x="20" y="48" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#4a5568">Manually execute a tool (admin only)</text>
+      <text x="20" y="64" font-family="Consolas, monospace" font-size="10" fill="#718096">Body: { tool_name, parameters }</text>
+      <rect x="400" y="8" width="90" height="20" rx="4" fill="#e53e3e"/>
+      <text x="445" y="22" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="white" text-anchor="middle">Admin Only</text>
+    </g>
+  </g>
+  
+  <!-- Response Format Section -->
+  <g transform="translate(620, 510)">
+    <rect x="0" y="0" width="540" height="230" rx="12" fill="white" stroke="#e2e8f0" stroke-width="2" filter="url(#shadow3)"/>
+    <rect x="0" y="0" width="540" height="45" rx="12" fill="#2d3748"/>
+    <rect x="0" y="33" width="540" height="12" fill="#2d3748"/>
+    <text x="270" y="30" font-family="Segoe UI, Arial, sans-serif" font-size="16" font-weight="600" fill="white" text-anchor="middle">📤 Response Format</text>
+    
+    <!-- Success Response -->
+    <g transform="translate(20, 55)">
+      <rect x="0" y="0" width="240" height="160" rx="8" fill="#f0fff4" stroke="#48bb78" stroke-width="1"/>
+      <text x="120" y="20" font-family="Segoe UI, Arial, sans-serif" font-size="12" font-weight="600" fill="#276749" text-anchor="middle">✅ Success Response</text>
+      <text x="15" y="45" font-family="Consolas, monospace" font-size="10" fill="#2d3748">{</text>
+      <text x="25" y="60" font-family="Consolas, monospace" font-size="10" fill="#2d3748">"success": true,</text>
+      <text x="25" y="75" font-family="Consolas, monospace" font-size="10" fill="#2d3748">"data": { ... },</text>
+      <text x="25" y="90" font-family="Consolas, monospace" font-size="10" fill="#2d3748">"message": "OK",</text>
+      <text x="25" y="105" font-family="Consolas, monospace" font-size="10" fill="#2d3748">"timestamp": "...",</text>
+      <text x="25" y="120" font-family="Consolas, monospace" font-size="10" fill="#2d3748">"request_id": "..."</text>
+      <text x="15" y="135" font-family="Consolas, monospace" font-size="10" fill="#2d3748">}</text>
+    </g>
+    
+    <!-- Error Response -->
+    <g transform="translate(280, 55)">
+      <rect x="0" y="0" width="240" height="160" rx="8" fill="#fff5f5" stroke="#e53e3e" stroke-width="1"/>
+      <text x="120" y="20" font-family="Segoe UI, Arial, sans-serif" font-size="12" font-weight="600" fill="#c53030" text-anchor="middle">❌ Error Response</text>
+      <text x="15" y="45" font-family="Consolas, monospace" font-size="10" fill="#2d3748">{</text>
+      <text x="25" y="60" font-family="Consolas, monospace" font-size="10" fill="#2d3748">"success": false,</text>
+      <text x="25" y="75" font-family="Consolas, monospace" font-size="10" fill="#2d3748">"error": {</text>
+      <text x="35" y="90" font-family="Consolas, monospace" font-size="10" fill="#2d3748">"code": "ERR_001",</text>
+      <text x="35" y="105" font-family="Consolas, monospace" font-size="10" fill="#2d3748">"message": "..."</text>
+      <text x="25" y="120" font-family="Consolas, monospace" font-size="10" fill="#2d3748">},</text>
+      <text x="25" y="135" font-family="Consolas, monospace" font-size="10" fill="#2d3748">"request_id": "..."</text>
+      <text x="15" y="150" font-family="Consolas, monospace" font-size="10" fill="#2d3748">}</text>
+    </g>
+  </g>
+  
+  <!-- HTTP Status Codes Legend -->
+  <g transform="translate(40, 760)">
+    <rect x="0" y="0" width="1120" height="70" rx="8" fill="white" stroke="#e2e8f0" stroke-width="1" filter="url(#shadow3)"/>
+    <text x="20" y="25" font-family="Segoe UI, Arial, sans-serif" font-size="13" font-weight="600" fill="#2d3748">HTTP Status Codes:</text>
+    
+    <g transform="translate(180, 10)">
+      <rect x="0" y="0" width="70" height="24" rx="4" fill="#48bb78"/>
+      <text x="35" y="17" font-family="Consolas, monospace" font-size="11" fill="white" text-anchor="middle">200 OK</text>
+      <text x="80" y="17" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#718096">Success</text>
+    </g>
+    
+    <g transform="translate(300, 10)">
+      <rect x="0" y="0" width="100" height="24" rx="4" fill="#4299e1"/>
+      <text x="50" y="17" font-family="Consolas, monospace" font-size="11" fill="white" text-anchor="middle">201 Created</text>
+      <text x="110" y="17" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#718096">Resource created</text>
+    </g>
+    
+    <g transform="translate(480, 10)">
+      <rect x="0" y="0" width="115" height="24" rx="4" fill="#d69e2e"/>
+      <text x="57" y="17" font-family="Consolas, monospace" font-size="11" fill="white" text-anchor="middle">400 Bad Req</text>
+      <text x="125" y="17" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#718096">Invalid input</text>
+    </g>
+    
+    <g transform="translate(660, 10)">
+      <rect x="0" y="0" width="115" height="24" rx="4" fill="#ed8936"/>
+      <text x="57" y="17" font-family="Consolas, monospace" font-size="11" fill="white" text-anchor="middle">401 Unauth</text>
+      <text x="125" y="17" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#718096">Auth required</text>
+    </g>
+    
+    <g transform="translate(840, 10)">
+      <rect x="0" y="0" width="115" height="24" rx="4" fill="#e53e3e"/>
+      <text x="57" y="17" font-family="Consolas, monospace" font-size="11" fill="white" text-anchor="middle">500 Server</text>
+      <text x="125" y="17" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#718096">Internal error</text>
+    </g>
+    
+    <g transform="translate(180, 40)">
+      <rect x="0" y="0" width="65" height="20" rx="3" fill="#805ad5"/>
+      <text x="32" y="14" font-family="Segoe UI, Arial, sans-serif" font-size="9" fill="white" text-anchor="middle">SSE</text>
+      <text x="75" y="14" font-family="Segoe UI, Arial, sans-serif" font-size="9" fill="#718096">Server-Sent Events for streaming responses</text>
+    </g>
+  </g>
+  
+  <!-- Version Info -->
+  <text x="1180" y="830" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#a0aec0" text-anchor="end">v1.0 | API Reference Diagram</text>
+</svg>

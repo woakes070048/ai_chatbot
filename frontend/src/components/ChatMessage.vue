@@ -1,0 +1,260 @@
+<template>
+  <div
+    class="flex chat-message"
+    :class="message.role === 'user' ? 'justify-end' : 'justify-start'"
+  >
+    <div
+      class="max-w-3xl rounded-2xl px-6 py-4 shadow-sm"
+      :class="messageClasses"
+    >
+      <!-- User Message -->
+      <div v-if="message.role === 'user'" class="text-white">
+        <div class="flex items-start gap-3">
+          <div class="w-8 h-8 rounded-full bg-white bg-opacity-20 flex items-center justify-center text-sm font-semibold flex-shrink-0">
+            U
+          </div>
+          <div class="flex-1">
+            <p class="whitespace-pre-wrap">{{ message.content }}</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Assistant Message -->
+      <div v-else class="text-gray-800">
+        <div class="flex items-start gap-3">
+          <div class="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-sm font-semibold text-blue-600 flex-shrink-0">
+            AI
+          </div>
+          <div class="flex-1">
+            <!-- Markdown Content -->
+            <div
+              v-html="renderedContent"
+              class="markdown-body prose prose-sm max-w-none"
+            ></div>
+
+            <!-- Tool Calls Display -->
+            <div v-if="hasValidToolCalls" class="mt-4">
+              <div class="flex items-start gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <Wrench :size="16" class="text-blue-600 flex-shrink-0 mt-0.5" />
+                <div class="flex-1">
+                  <div class="text-sm font-medium text-blue-900 mb-1">
+                    Used ERPNext Tools
+                  </div>
+                  <div class="flex flex-wrap gap-2">
+                    <span
+                      v-for="(tool, index) in validToolCalls"
+                      :key="index"
+                      class="inline-flex items-center px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-medium"
+                    >
+                      {{ getToolName(tool) }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Token Usage -->
+            <div v-if="message.tokens_used" class="mt-3">
+              <span class="px-2 py-1 bg-gray-100 text-gray-600 rounded text-xs">
+                {{ message.tokens_used }} tokens
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { computed } from 'vue'
+import { marked } from 'marked'
+import hljs from 'highlight.js'
+import { Wrench } from 'lucide-vue-next'
+
+const props = defineProps({
+  message: {
+    type: Object,
+    required: true,
+  },
+})
+
+// Configure marked for syntax highlighting
+marked.setOptions({
+  highlight: function(code, lang) {
+    if (lang && hljs.getLanguage(lang)) {
+      return hljs.highlight(code, { language: lang }).value
+    }
+    return hljs.highlightAuto(code).value
+  },
+  breaks: true,
+  gfm: true,
+})
+
+const messageClasses = computed(() => {
+  if (props.message.role === 'user') {
+    return 'bg-blue-600 border border-blue-700'
+  }
+  return 'bg-white border border-gray-200'
+})
+
+const renderedContent = computed(() => {
+  if (props.message.role === 'assistant') {
+    try {
+      // Get content and ensure it's a string
+      let content = props.message.content || ''
+      if (typeof content !== 'string') {
+        content = String(content)
+      }
+      
+      // Remove any tool_calls JSON that might have leaked into content
+      // This regex removes JSON-like structures that shouldn't be in the content
+      content = content.replace(/\[?\s*\{\s*["']type["']:\s*["']function["']/g, '')
+      
+      return marked(content)
+    } catch (error) {
+      console.error('Markdown rendering error:', error)
+      return props.message.content
+    }
+  }
+  return props.message.content
+})
+
+// Check if tool_calls is valid and has items
+const hasValidToolCalls = computed(() => {
+  const toolCalls = props.message.tool_calls
+  if (!toolCalls) return false
+  
+  // Handle string that needs parsing
+  if (typeof toolCalls === 'string') {
+    try {
+      const parsed = JSON.parse(toolCalls)
+      return Array.isArray(parsed) && parsed.length > 0
+    } catch {
+      return false
+    }
+  }
+  
+  return Array.isArray(toolCalls) && toolCalls.length > 0
+})
+
+// Get valid tool calls (filter out any invalid entries and deduplicate)
+const validToolCalls = computed(() => {
+  if (!hasValidToolCalls.value) return []
+  
+  let toolCalls = props.message.tool_calls
+  
+  // Parse if string
+  if (typeof toolCalls === 'string') {
+    try {
+      toolCalls = JSON.parse(toolCalls)
+    } catch {
+      return []
+    }
+  }
+  
+  if (!Array.isArray(toolCalls)) return []
+  
+  // Filter valid tools and deduplicate by name
+  const validTools = toolCalls.filter(tool => 
+    tool && typeof tool === 'object' && (tool.function?.name || tool.name)
+  )
+  
+  // Deduplicate by tool name
+  const seen = new Set()
+  return validTools.filter(tool => {
+    const name = tool.function?.name || tool.name
+    if (seen.has(name)) return false
+    seen.add(name)
+    return true
+  })
+})
+
+// Extract tool name from tool call object
+const getToolName = (tool) => {
+  if (!tool) return 'Unknown'
+  
+  // OpenAI format: tool.function.name
+  if (tool.function?.name) {
+    return formatToolName(tool.function.name)
+  }
+  
+  // Claude format: tool.name
+  if (tool.name) {
+    return formatToolName(tool.name)
+  }
+  
+  return 'Unknown Tool'
+}
+
+// Format tool name for display (e.g., "search_customers" -> "Search Customers")
+const formatToolName = (name) => {
+  if (!name || typeof name !== 'string') return 'Unknown'
+  
+  // Remove common prefixes
+  name = name.replace(/^(get_|search_|list_|create_|update_|delete_)/, '')
+  
+  return name
+    .split('_')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ')
+}
+</script>
+
+<style scoped>
+:deep(.markdown-body) {
+  @apply text-gray-800;
+}
+
+:deep(.markdown-body p) {
+  @apply mb-3;
+}
+
+:deep(.markdown-body code) {
+  @apply bg-gray-100 px-1.5 py-0.5 rounded text-sm font-mono;
+}
+
+:deep(.markdown-body pre) {
+  @apply bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto my-4;
+}
+
+:deep(.markdown-body pre code) {
+  @apply bg-transparent p-0 text-sm;
+}
+
+:deep(.markdown-body a) {
+  @apply text-blue-600 hover:text-blue-800 underline;
+}
+
+:deep(.markdown-body blockquote) {
+  @apply border-l-4 border-gray-300 pl-4 italic text-gray-600 my-3;
+}
+
+:deep(.markdown-body ul),
+:deep(.markdown-body ol) {
+  @apply ml-6 my-3;
+}
+
+:deep(.markdown-body li) {
+  @apply mb-1;
+}
+
+:deep(.markdown-body h1),
+:deep(.markdown-body h2),
+:deep(.markdown-body h3),
+:deep(.markdown-body h4) {
+  @apply font-bold mt-6 mb-3;
+}
+
+:deep(.markdown-body h1) {
+  @apply text-2xl;
+}
+
+:deep(.markdown-body h2) {
+  @apply text-xl;
+}
+
+:deep(.markdown-body h3) {
+  @apply text-lg;
+}
+</style>

@@ -1,0 +1,178 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2024-01-29 12:00:00",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "openai_section",
+  "openai_enabled",
+  "openai_api_key",
+  "openai_model",
+  "column_break_1",
+  "openai_temperature",
+  "openai_max_tokens",
+  "claude_section",
+  "claude_enabled",
+  "claude_api_key",
+  "claude_model",
+  "column_break_3",
+  "claude_temperature",
+  "claude_max_tokens",
+  "erpnext_tools_section",
+  "enable_crm_tools",
+  "enable_sales_tools",
+  "enable_purchase_tools",
+  "enable_finance_tools",
+  "enable_inventory_tools"
+ ],
+ "fields": [
+  {
+   "fieldname": "openai_section",
+   "fieldtype": "Section Break",
+   "label": "OpenAI Configuration"
+  },
+  {
+   "default": "0",
+   "fieldname": "openai_enabled",
+   "fieldtype": "Check",
+   "label": "Enable OpenAI"
+  },
+  {
+   "depends_on": "openai_enabled",
+   "fieldname": "openai_api_key",
+   "fieldtype": "Data",
+   "label": "OpenAI API Key"
+  },
+  {
+   "default": "gpt-4o",
+   "depends_on": "openai_enabled",
+   "fieldname": "openai_model",
+   "fieldtype": "Select",
+   "label": "OpenAI Model",
+   "options": "gpt-4o\ngpt-4o-mini\ngpt-4-turbo\ngpt-3.5-turbo"
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0.7",
+   "depends_on": "openai_enabled",
+   "fieldname": "openai_temperature",
+   "fieldtype": "Float",
+   "label": "Temperature"
+  },
+  {
+   "default": "4000",
+   "depends_on": "openai_enabled",
+   "fieldname": "openai_max_tokens",
+   "fieldtype": "Int",
+   "label": "Max Tokens"
+  },
+  {
+   "fieldname": "claude_section",
+   "fieldtype": "Section Break",
+   "label": "Claude Configuration"
+  },
+  {
+   "default": "0",
+   "fieldname": "claude_enabled",
+   "fieldtype": "Check",
+   "label": "Enable Claude"
+  },
+  {
+   "depends_on": "claude_enabled",
+   "fieldname": "claude_api_key",
+   "fieldtype": "Data",
+   "label": "Claude API Key"
+  },
+  {
+   "default": "claude-sonnet-4-5-20250929",
+   "depends_on": "claude_enabled",
+   "fieldname": "claude_model",
+   "fieldtype": "Select",
+   "label": "Claude Model",
+   "options": "claude-opus-4-5-20251101\nclaude-sonnet-4-5-20250929\nclaude-haiku-4-5-20251001"
+  },
+  {
+   "fieldname": "column_break_3",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0.7",
+   "depends_on": "claude_enabled",
+   "fieldname": "claude_temperature",
+   "fieldtype": "Float",
+   "label": "Temperature"
+  },
+  {
+   "default": "4000",
+   "depends_on": "claude_enabled",
+   "fieldname": "claude_max_tokens",
+   "fieldtype": "Int",
+   "label": "Max Tokens"
+  },
+  {
+   "fieldname": "erpnext_tools_section",
+   "fieldtype": "Section Break",
+   "label": "ERPNext Tools Configuration"
+  },
+  {
+   "default": "1",
+   "fieldname": "enable_crm_tools",
+   "fieldtype": "Check",
+   "label": "Enable CRM Tools"
+  },
+  {
+   "default": "1",
+   "fieldname": "enable_sales_tools",
+   "fieldtype": "Check",
+   "label": "Enable Sales Tools"
+  },
+  {
+   "default": "1",
+   "fieldname": "enable_purchase_tools",
+   "fieldtype": "Check",
+   "label": "Enable Purchase Tools"
+  },
+  {
+   "default": "1",
+   "fieldname": "enable_finance_tools",
+   "fieldtype": "Check",
+   "label": "Enable Finance Tools"
+  },
+  {
+   "default": "1",
+   "fieldname": "enable_inventory_tools",
+   "fieldtype": "Check",
+   "label": "Enable Inventory Tools"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-02-02 15:05:40.841010",
+ "modified_by": "Administrator",
+ "module": "Chatbot",
+ "name": "Chatbot Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

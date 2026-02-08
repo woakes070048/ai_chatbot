@@ -1,0 +1,15 @@
+{
+  "private": true,
+  "type": "module",
+  "name": "ai_chatbot",
+  "version": "1.0.0",
+  "description": "ERPNext AI Chatbot",
+  "scripts": {
+    "postinstall": "cd frontend && yarn install --check-files",
+    "dev": "cd frontend && yarn dev",
+    "build": "cd frontend && yarn build"
+    
+  },
+  "author": "Sanjay Kumar",
+  "license": "MIT"
+}

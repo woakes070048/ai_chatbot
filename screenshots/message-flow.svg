@@ -1,0 +1,203 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1200" height="900" viewBox="0 0 1200 900" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="headerGrad2" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#553c9a;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#805ad5;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="stepGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#667eea;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#5a67d8;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="userGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#48bb78;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#38a169;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="aiGrad2" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#9f7aea;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#805ad5;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="toolGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#f6ad55;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#ed8936;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="responseGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#4fd1c5;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#38b2ac;stop-opacity:1" />
+    </linearGradient>
+    <filter id="shadow2" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#000" flood-opacity="0.15"/>
+    </filter>
+    <marker id="flowArrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L0,12 L12,6 z" fill="#5a67d8"/>
+    </marker>
+    <marker id="flowArrowGreen" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L0,12 L12,6 z" fill="#38a169"/>
+    </marker>
+    <marker id="flowArrowOrange" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L0,12 L12,6 z" fill="#ed8936"/>
+    </marker>
+    <marker id="flowArrowTeal" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L0,12 L12,6 z" fill="#38b2ac"/>
+    </marker>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="1200" height="900" fill="#f8fafc"/>
+  <rect x="0" y="0" width="1200" height="80" fill="url(#headerGrad2)"/>
+  
+  <!-- Title -->
+  <text x="600" y="50" font-family="Segoe UI, Arial, sans-serif" font-size="28" font-weight="600" fill="white" text-anchor="middle">Message Flow &amp; Processing Pipeline</text>
+  
+  <!-- Swimlane Headers -->
+  <g transform="translate(0, 100)">
+    <!-- User Lane -->
+    <rect x="40" y="0" width="180" height="50" rx="8" fill="url(#userGrad)" filter="url(#shadow2)"/>
+    <text x="130" y="32" font-family="Segoe UI, Arial, sans-serif" font-size="14" font-weight="600" fill="white" text-anchor="middle">👤 User Interface</text>
+    <rect x="40" y="50" width="180" height="680" fill="#f0fff4" opacity="0.5"/>
+    
+    <!-- Backend Lane -->
+    <rect x="260" y="0" width="200" height="50" rx="8" fill="url(#stepGrad)" filter="url(#shadow2)"/>
+    <text x="360" y="32" font-family="Segoe UI, Arial, sans-serif" font-size="14" font-weight="600" fill="white" text-anchor="middle">🔌 Backend API</text>
+    <rect x="260" y="50" width="200" height="680" fill="#ebf4ff" opacity="0.5"/>
+    
+    <!-- AI Engine Lane -->
+    <rect x="500" y="0" width="220" height="50" rx="8" fill="url(#aiGrad2)" filter="url(#shadow2)"/>
+    <text x="610" y="32" font-family="Segoe UI, Arial, sans-serif" font-size="14" font-weight="600" fill="white" text-anchor="middle">🤖 AI Engine</text>
+    <rect x="500" y="50" width="220" height="680" fill="#faf5ff" opacity="0.5"/>
+    
+    <!-- Tool Execution Lane -->
+    <rect x="760" y="0" width="200" height="50" rx="8" fill="url(#toolGrad)" filter="url(#shadow2)"/>
+    <text x="860" y="32" font-family="Segoe UI, Arial, sans-serif" font-size="14" font-weight="600" fill="white" text-anchor="middle">🔧 Tool Execution</text>
+    <rect x="760" y="50" width="200" height="680" fill="#fffaf0" opacity="0.5"/>
+    
+    <!-- ERPNext Lane -->
+    <rect x="1000" y="0" width="160" height="50" rx="8" fill="#e53e3e" filter="url(#shadow2)"/>
+    <text x="1080" y="32" font-family="Segoe UI, Arial, sans-serif" font-size="14" font-weight="600" fill="white" text-anchor="middle">⚙️ ERPNext</text>
+    <rect x="1000" y="50" width="160" height="680" fill="#fff5f5" opacity="0.5"/>
+  </g>
+  
+  <!-- Flow Steps -->
+  <!-- Step 1: User Input -->
+  <g transform="translate(0, 170)">
+    <rect x="60" y="0" width="140" height="70" rx="10" fill="white" stroke="#38a169" stroke-width="2" filter="url(#shadow2)"/>
+    <circle cx="75" cy="15" r="12" fill="#38a169"/>
+    <text x="75" y="20" font-family="Segoe UI, Arial, sans-serif" font-size="11" font-weight="bold" fill="white" text-anchor="middle">1</text>
+    <text x="130" y="30" font-family="Segoe UI, Arial, sans-serif" font-size="12" font-weight="600" fill="#2d3748" text-anchor="middle">User Input</text>
+    <text x="130" y="48" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#718096" text-anchor="middle">Types message</text>
+    <text x="130" y="62" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#718096" text-anchor="middle">Clicks Send</text>
+  </g>
+  
+  <!-- Step 2: API Request -->
+  <g transform="translate(0, 170)">
+    <path d="M 200 35 L 280 35" stroke="#38a169" stroke-width="2" stroke-dasharray="5,5" marker-end="url(#flowArrowGreen)"/>
+    <rect x="280" y="0" width="160" height="70" rx="10" fill="white" stroke="#5a67d8" stroke-width="2" filter="url(#shadow2)"/>
+    <circle cx="295" cy="15" r="12" fill="#5a67d8"/>
+    <text x="295" y="20" font-family="Segoe UI, Arial, sans-serif" font-size="11" font-weight="bold" fill="white" text-anchor="middle">2</text>
+    <text x="360" y="30" font-family="Segoe UI, Arial, sans-serif" font-size="12" font-weight="600" fill="#2d3748" text-anchor="middle">Validate Request</text>
+    <text x="360" y="48" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#718096" text-anchor="middle">Auth check</text>
+    <text x="360" y="62" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#718096" text-anchor="middle">Session lookup</text>
+  </g>
+  
+  <!-- Step 3: AI Processing -->
+  <g transform="translate(0, 260)">
+    <path d="M 360 -20 L 360 10 L 520 10" stroke="#5a67d8" stroke-width="2" stroke-dasharray="5,5" marker-end="url(#flowArrow)"/>
+    <rect x="520" y="0" width="180" height="80" rx="10" fill="white" stroke="#805ad5" stroke-width="2" filter="url(#shadow2)"/>
+    <circle cx="535" cy="15" r="12" fill="#805ad5"/>
+    <text x="535" y="20" font-family="Segoe UI, Arial, sans-serif" font-size="11" font-weight="bold" fill="white" text-anchor="middle">3</text>
+    <text x="610" y="30" font-family="Segoe UI, Arial, sans-serif" font-size="12" font-weight="600" fill="#2d3748" text-anchor="middle">AI Decision</text>
+    <text x="610" y="48" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#718096" text-anchor="middle">Analyze intent</text>
+    <text x="610" y="62" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#718096" text-anchor="middle">Select tools or</text>
+    <text x="610" y="74" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#718096" text-anchor="middle">direct response</text>
+  </g>
+  
+  <!-- Decision Diamond -->
+  <g transform="translate(570, 370)">
+    <polygon points="60,0 120,40 60,80 0,40" fill="white" stroke="#805ad5" stroke-width="2" filter="url(#shadow2)"/>
+    <text x="60" y="38" font-family="Segoe UI, Arial, sans-serif" font-size="11" font-weight="600" fill="#2d3748" text-anchor="middle">Tool</text>
+    <text x="60" y="52" font-family="Segoe UI, Arial, sans-serif" font-size="11" font-weight="600" fill="#2d3748" text-anchor="middle">Needed?</text>
+  </g>
+  
+  <!-- Yes Path - Tool Execution -->
+  <g transform="translate(0, 450)">
+    <path d="M 690 -40 L 780 -40" stroke="#ed8936" stroke-width="2" marker-end="url(#flowArrowOrange)"/>
+    <text x="730" y="-48" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#ed8936" font-weight="600">Yes</text>
+    
+    <rect x="780" y="-60" width="160" height="70" rx="10" fill="white" stroke="#ed8936" stroke-width="2" filter="url(#shadow2)"/>
+    <circle cx="795" cy="-45" r="12" fill="#ed8936"/>
+    <text x="795" y="-40" font-family="Segoe UI, Arial, sans-serif" font-size="11" font-weight="bold" fill="white" text-anchor="middle">4a</text>
+    <text x="860" y="-30" font-family="Segoe UI, Arial, sans-serif" font-size="12" font-weight="600" fill="#2d3748" text-anchor="middle">Execute Tool</text>
+    <text x="860" y="-12" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#718096" text-anchor="middle">Parse parameters</text>
+    <text x="860" y="2" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#718096" text-anchor="middle">Call function</text>
+  </g>
+  
+  <!-- Step 5: ERPNext Call -->
+  <g transform="translate(0, 520)">
+    <path d="M 940 -100 L 1020 -100" stroke="#ed8936" stroke-width="2" stroke-dasharray="5,5" marker-end="url(#flowArrowOrange)"/>
+    <rect x="1020" y="-120" width="120" height="70" rx="10" fill="white" stroke="#e53e3e" stroke-width="2" filter="url(#shadow2)"/>
+    <circle cx="1035" cy="-105" r="12" fill="#e53e3e"/>
+    <text x="1035" y="-100" font-family="Segoe UI, Arial, sans-serif" font-size="11" font-weight="bold" fill="white" text-anchor="middle">5</text>
+    <text x="1080" y="-90" font-family="Segoe UI, Arial, sans-serif" font-size="12" font-weight="600" fill="#2d3748" text-anchor="middle">API Call</text>
+    <text x="1080" y="-72" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#718096" text-anchor="middle">Frappe API</text>
+    <text x="1080" y="-58" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#718096" text-anchor="middle">DocType ops</text>
+  </g>
+  
+  <!-- Step 6: Tool Result -->
+  <g transform="translate(0, 520)">
+    <path d="M 1020 -20 L 940 -20 L 940 30 L 700 30" stroke="#38b2ac" stroke-width="2" stroke-dasharray="5,5" marker-end="url(#flowArrowTeal)"/>
+    <rect x="520" y="10" width="180" height="70" rx="10" fill="white" stroke="#38b2ac" stroke-width="2" filter="url(#shadow2)"/>
+    <circle cx="535" cy="25" r="12" fill="#38b2ac"/>
+    <text x="535" y="30" font-family="Segoe UI, Arial, sans-serif" font-size="11" font-weight="bold" fill="white" text-anchor="middle">6</text>
+    <text x="610" y="40" font-family="Segoe UI, Arial, sans-serif" font-size="12" font-weight="600" fill="#2d3748" text-anchor="middle">Process Results</text>
+    <text x="610" y="58" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#718096" text-anchor="middle">Format tool output</text>
+    <text x="610" y="72" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#718096" text-anchor="middle">Continue AI loop</text>
+  </g>
+  
+  <!-- No Path - Direct Response -->
+  <g transform="translate(0, 450)">
+    <path d="M 630 40 L 630 100" stroke="#38b2ac" stroke-width="2" marker-end="url(#flowArrowTeal)"/>
+    <text x="640" y="70" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#38b2ac" font-weight="600">No</text>
+  </g>
+  
+  <!-- Step 7: Generate Response -->
+  <g transform="translate(0, 620)">
+    <rect x="520" y="0" width="180" height="70" rx="10" fill="white" stroke="#38b2ac" stroke-width="2" filter="url(#shadow2)"/>
+    <circle cx="535" cy="15" r="12" fill="#38b2ac"/>
+    <text x="535" y="20" font-family="Segoe UI, Arial, sans-serif" font-size="11" font-weight="bold" fill="white" text-anchor="middle">7</text>
+    <text x="610" y="30" font-family="Segoe UI, Arial, sans-serif" font-size="12" font-weight="600" fill="#2d3748" text-anchor="middle">Generate Response</text>
+    <text x="610" y="48" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#718096" text-anchor="middle">Create final message</text>
+    <text x="610" y="62" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#718096" text-anchor="middle">Include tool results</text>
+  </g>
+  
+  <!-- Step 8: Stream to Backend -->
+  <g transform="translate(0, 620)">
+    <path d="M 520 35 L 440 35" stroke="#5a67d8" stroke-width="2" stroke-dasharray="5,5" marker-end="url(#flowArrow)"/>
+    <rect x="280" y="0" width="160" height="70" rx="10" fill="white" stroke="#5a67d8" stroke-width="2" filter="url(#shadow2)"/>
+    <circle cx="295" cy="15" r="12" fill="#5a67d8"/>
+    <text x="295" y="20" font-family="Segoe UI, Arial, sans-serif" font-size="11" font-weight="bold" fill="white" text-anchor="middle">8</text>
+    <text x="360" y="30" font-family="Segoe UI, Arial, sans-serif" font-size="12" font-weight="600" fill="#2d3748" text-anchor="middle">Stream Response</text>
+    <text x="360" y="48" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#718096" text-anchor="middle">SSE chunks</text>
+    <text x="360" y="62" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#718096" text-anchor="middle">Save to DB</text>
+  </g>
+  
+  <!-- Step 9: Display to User -->
+  <g transform="translate(0, 710)">
+    <path d="M 360 -20 L 360 10 L 200 10" stroke="#38a169" stroke-width="2" stroke-dasharray="5,5" marker-end="url(#flowArrowGreen)"/>
+    <rect x="60" y="0" width="140" height="70" rx="10" fill="white" stroke="#38a169" stroke-width="2" filter="url(#shadow2)"/>
+    <circle cx="75" cy="15" r="12" fill="#38a169"/>
+    <text x="75" y="20" font-family="Segoe UI, Arial, sans-serif" font-size="11" font-weight="bold" fill="white" text-anchor="middle">9</text>
+    <text x="130" y="30" font-family="Segoe UI, Arial, sans-serif" font-size="12" font-weight="600" fill="#2d3748" text-anchor="middle">Display Response</text>
+    <text x="130" y="48" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#718096" text-anchor="middle">Render markdown</text>
+    <text x="130" y="62" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#718096" text-anchor="middle">Show tool results</text>
+  </g>
+  
+  <!-- Loop indicator -->
+  <g transform="translate(700, 520)">
+    <rect x="0" y="0" width="60" height="24" rx="4" fill="#805ad5" opacity="0.1" stroke="#805ad5" stroke-width="1"/>
+    <text x="30" y="16" font-family="Segoe UI, Arial, sans-serif" font-size="9" fill="#805ad5" text-anchor="middle">Loop</text>
+    <path d="M 60 12 C 80 12 80 -40 50 -40" stroke="#805ad5" stroke-width="1.5" fill="none" stroke-dasharray="3,3" marker-end="url(#flowArrow)"/>
+  </g>
+  
+  <!-- Version Info -->
+  <text x="1180" y="880" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#a0aec0" text-anchor="end">v1.0 | Message Flow Diagram</text>
+</svg>

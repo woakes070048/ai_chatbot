@@ -1,0 +1,212 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1400" width="1200" height="1400">
+  <defs>
+    <style>
+      .layer { fill: none; stroke: #475569; stroke-width: 3; stroke-dasharray: 10,5; }
+      .component { fill: #3b82f6; stroke: #1e40af; stroke-width: 2; }
+      .database { fill: #ef4444; stroke: #dc2626; stroke-width: 2; }
+      .external { fill: #8b5cf6; stroke: #6d28d9; stroke-width: 2; }
+      .process { fill: #10b981; stroke: #059669; stroke-width: 2; }
+      .text { fill: white; font-family: Arial, sans-serif; font-size: 12px; text-anchor: middle; font-weight: bold; }
+      .title { fill: #1e293b; font-family: Arial, sans-serif; font-size: 24px; font-weight: bold; text-anchor: middle; }
+      .layer-title { fill: #1e293b; font-family: Arial, sans-serif; font-size: 16px; font-weight: bold; }
+      .label { fill: #1e293b; font-family: Arial, sans-serif; font-size: 11px; }
+      .code { fill: #1e293b; font-family: 'Courier New', monospace; font-size: 9px; }
+    </style>
+  </defs>
+  
+  <!-- Title -->
+  <text x="600" y="35" class="title">AI Chatbot - Technical Architecture</text>
+  <text x="600" y="60" class="label" text-anchor="middle">Complete System Components and Data Flow</text>
+  
+  <!-- Layer 1: Frontend -->
+  <rect x="50" y="90" width="1100" height="200" rx="10" class="layer"/>
+  <text x="70" y="110" class="layer-title">FRONTEND LAYER (Vue.js 3 + Vite + Tailwind CSS)</text>
+  
+  <rect x="80" y="130" width="180" height="140" rx="8" class="component"/>
+  <text x="170" y="150" class="text">ChatInterface.vue</text>
+  <text x="90" y="175" class="label">• Message input field</text>
+  <text x="90" y="193" class="label">• Send button handler</text>
+  <text x="90" y="211" class="label">• Loading state</text>
+  <text x="90" y="229" class="label">• Event listeners</text>
+  <text x="90" y="247" class="code">@click="sendMessage()"</text>
+  
+  <rect x="290" y="130" width="180" height="140" rx="8" class="component"/>
+  <text x="380" y="150" class="text">ChatMessage.vue</text>
+  <text x="300" y="175" class="label">• Message rendering</text>
+  <text x="300" y="193" class="label">• Markdown parser</text>
+  <text x="300" y="211" class="label">• Tool badge display</text>
+  <text x="300" y="229" class="label">• Syntax highlighting</text>
+  <text x="300" y="247" class="code">v-html="renderedContent"</text>
+  
+  <rect x="500" y="130" width="180" height="140" rx="8" class="component"/>
+  <text x="590" y="150" class="text">API Client</text>
+  <text x="510" y="175" class="label">• HTTP request builder</text>
+  <text x="510" y="193" class="label">• CSRF token handling</text>
+  <text x="510" y="211" class="label">• Error handling</text>
+  <text x="510" y="229" class="label">• Response parsing</text>
+  <text x="510" y="247" class="code">POST /api/method/...</text>
+  
+  <rect x="710" y="130" width="180" height="140" rx="8" class="component"/>
+  <text x="800" y="150" class="text">State Management</text>
+  <text x="720" y="175" class="label">• Conversation list</text>
+  <text x="720" y="193" class="label">• Current messages</text>
+  <text x="720" y="211" class="label">• User session</text>
+  <text x="720" y="229" class="label">• Vue reactive refs</text>
+  <text x="720" y="247" class="code">ref(), computed()</text>
+  
+  <rect x="920" y="130" width="180" height="140" rx="8" class="component"/>
+  <text x="1010" y="150" class="text">Router</text>
+  <text x="930" y="175" class="label">• Route management</text>
+  <text x="930" y="193" class="label">• Navigation guards</text>
+  <text x="930" y="211" class="label">• Base path config</text>
+  <text x="930" y="229" class="label">• Vue Router 4</text>
+  <text x="930" y="247" class="code">createRouter()</text>
+  
+  <!-- Arrow -->
+  <line x1="600" y1="290" x2="600" y2="320" stroke="#475569" stroke-width="3" marker-end="url(#arrow)"/>
+  <text x="650" y="308" class="label">HTTP POST Request</text>
+  
+  <!-- Layer 2: API/Backend -->
+  <rect x="50" y="320" width="1100" height="280" rx="10" class="layer"/>
+  <text x="70" y="340" class="layer-title">API LAYER (Python + Frappe Framework)</text>
+  
+  <rect x="80" y="360" width="200" height="120" rx="8" class="process"/>
+  <text x="180" y="380" class="text">chat.py</text>
+  <text x="90" y="400" class="label">send_message()</text>
+  <text x="90" y="418" class="code">@frappe.whitelist()</text>
+  <text x="90" y="433" class="label">• Validate user</text>
+  <text x="90" y="448" class="label">• Save message</text>
+  <text x="90" y="463" class="label">• Orchestrate flow</text>
+  
+  <rect x="310" y="360" width="200" height="120" rx="8" class="process"/>
+  <text x="410" y="380" class="text">Tool Registry</text>
+  <text x="320" y="400" class="label">get_all_tools_schema()</text>
+  <text x="320" y="418" class="label">• Load enabled tools</text>
+  <text x="320" y="433" class="label">• CRM, Sales, Purchase</text>
+  <text x="320" y="448" class="label">• Stock, Finance, HR</text>
+  <text x="320" y="463" class="label">• 20+ functions</text>
+  
+  <rect x="540" y="360" width="200" height="120" rx="8" class="process"/>
+  <text x="640" y="380" class="text">AI Provider</text>
+  <text x="550" y="400" class="label">OpenAIProvider.py</text>
+  <text x="550" y="418" class="code">chat_completion()</text>
+  <text x="550" y="433" class="label">• API key management</text>
+  <text x="550" y="448" class="label">• Request formatting</text>
+  <text x="550" y="463" class="label">• Error handling</text>
+  
+  <rect x="770" y="360" width="200" height="120" rx="8" class="process"/>
+  <text x="870" y="380" class="text">Tool Executor</text>
+  <text x="780" y="400" class="label">BaseTool.execute_tool()</text>
+  <text x="780" y="418" class="label">• Parse tool_calls</text>
+  <text x="780" y="433" class="label">• Route to class</text>
+  <text x="780" y="448" class="label">• Execute function</text>
+  <text x="780" y="463" class="label">• Return results</text>
+  
+  <rect x="80" y="500" width="890" height="80" rx="8" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="2"/>
+  <text x="90" y="520" class="label" font-weight="bold">Tool Classes:</text>
+  <text x="100" y="540" class="code">CRMTools: get_top_customers(), search_customers(), get_leads()</text>
+  <text x="100" y="555" class="code">SellingTools: get_sales_orders(), search_sales_orders(), get_quotations()</text>
+  <text x="100" y="570" class="code">BuyingTools: list_suppliers(), get_supplier_details(), get_purchase_orders()</text>
+  
+  <!-- Arrow -->
+  <line x1="600" y1="600" x2="600" y2="630" stroke="#475569" stroke-width="3" marker-end="url(#arrow)"/>
+  <line x1="400" y1="600" x2="400" y2="630" stroke="#475569" stroke-width="3" marker-end="url(#arrow)"/>
+  <line x1="800" y1="600" x2="800" y2="630" stroke="#475569" stroke-width="3" marker-end="url(#arrow)"/>
+  
+  <!-- Layer 3: Data/External -->
+  <rect x="50" y="630" width="1100" height="200" rx="10" class="layer"/>
+  <text x="70" y="650" class="layer-title">DATA &amp; EXTERNAL SERVICES LAYER</text>
+  
+  <rect x="80" y="670" width="250" height="140" rx="8" class="database"/>
+  <text x="205" y="690" class="text">MariaDB Database</text>
+  <text x="90" y="715" class="label" fill="white">DocTypes:</text>
+  <text x="100" y="733" class="code" fill="white">• Chatbot Conversation</text>
+  <text x="100" y="748" class="code" fill="white">• Chatbot Message</text>
+  <text x="100" y="763" class="code" fill="white">• Chatbot Settings</text>
+  <text x="90" y="783" class="label" fill="white">Stores: Messages, history,</text>
+  <text x="90" y="798" class="label" fill="white">tokens, tool_calls metadata</text>
+  
+  <rect x="360" y="670" width="250" height="140" rx="8" class="external"/>
+  <text x="485" y="690" class="text">OpenAI API</text>
+  <text x="370" y="715" class="label" fill="white">Endpoint:</text>
+  <text x="380" y="733" class="code" fill="white">api.openai.com/v1/messages</text>
+  <text x="370" y="753" class="label" fill="white">Model: gpt-4</text>
+  <text x="370" y="771" class="label" fill="white">Features:</text>
+  <text x="380" y="789" class="code" fill="white">• Function calling</text>
+  <text x="380" y="804" class="code" fill="white">• Tool use</text>
+  
+  <rect x="640" y="670" width="250" height="140" rx="8" class="database"/>
+  <text x="765" y="690" class="text">ERPNext Database</text>
+  <text x="650" y="715" class="label" fill="white">Business Data:</text>
+  <text x="660" y="733" class="code" fill="white">• Customer records</text>
+  <text x="660" y="748" class="code" fill="white">• Sales Orders</text>
+  <text x="660" y="763" class="code" fill="white">• Purchase Orders</text>
+  <text x="660" y="778" class="code" fill="white">• Stock Items</text>
+  <text x="660" y="793" class="code" fill="white">• Financial records</text>
+  
+  <rect x="920" y="670" width="210" height="140" rx="8" class="external"/>
+  <text x="1025" y="690" class="text">Frappe Framework</text>
+  <text x="930" y="715" class="label" fill="white">Services:</text>
+  <text x="940" y="733" class="code" fill="white">• ORM (get_all, get_doc)</text>
+  <text x="940" y="748" class="code" fill="white">• Authentication</text>
+  <text x="940" y="763" class="code" fill="white">• Session management</text>
+  <text x="940" y="778" class="code" fill="white">• Database queries</text>
+  <text x="940" y="793" class="code" fill="white">• Error logging</text>
+  
+  <!-- Data Flow Arrows -->
+  <rect x="50" y="850" width="1100" height="520" rx="10" fill="#f8fafc" stroke="#cbd5e1" stroke-width="2"/>
+  <text x="70" y="875" class="layer-title">DETAILED DATA FLOW</text>
+  
+  <!-- Flow diagram -->
+  <ellipse cx="600" cy="910" rx="80" ry="30" fill="#ef4444" stroke="#dc2626" stroke-width="2"/>
+  <text x="600" y="917" class="text">User Action</text>
+  
+  <line x1="600" y1="940" x2="600" y2="970" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
+  
+  <rect x="500" y="970" width="200" height="50" rx="8" class="component"/>
+  <text x="600" y="1000" class="text">1. Frontend: sendMessage()</text>
+  
+  <line x1="600" y1="1020" x2="600" y2="1050" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
+  
+  <rect x="500" y="1050" width="200" height="50" rx="8" class="process"/>
+  <text x="600" y="1080" class="text">2. API: Validate + Save</text>
+  
+  <line x1="600" y1="1100" x2="600" y2="1130" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
+  
+  <rect x="500" y="1130" width="200" height="50" rx="8" class="external"/>
+  <text x="600" y="1160" class="text">3. AI: Analyze + Decide</text>
+  
+  <!-- Branch -->
+  <line x1="500" y1="1160" x2="300" y2="1210" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="700" y1="1160" x2="900" y2="1210" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
+  
+  <text x="400" y="1195" class="label">No Tools</text>
+  <text x="800" y="1195" class="label">Use Tools</text>
+  
+  <rect x="200" y="1210" width="200" height="50" rx="8" class="process"/>
+  <text x="300" y="1240" class="text">4a. Direct Response</text>
+  
+  <rect x="800" y="1210" width="200" height="50" rx="8" class="database"/>
+  <text x="900" y="1240" class="text">4b. Query ERPNext</text>
+  
+  <line x1="900" y1="1260" x2="900" y2="1290" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
+  
+  <rect x="800" y="1290" width="200" height="50" rx="8" class="external"/>
+  <text x="900" y="1320" class="text">5. AI: Format Data</text>
+  
+  <!-- Merge -->
+  <line x1="300" y1="1260" x2="300" y2="1350" stroke="#475569" stroke-width="2"/>
+  <line x1="900" y1="1340" x2="900" y2="1350" stroke="#475569" stroke-width="2"/>
+  <line x1="300" y1="1350" x2="900" y2="1350" stroke="#475569" stroke-width="2"/>
+  <line x1="600" y1="1350" x2="600" y2="1370" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
+  
+  <ellipse cx="600" cy="1400" rx="80" ry="30" fill="#10b981" stroke="#059669" stroke-width="2"/>
+  <text x="600" y="1407" class="text">Display Result</text>
+  
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#475569"/>
+    </marker>
+  </defs>
+</svg>

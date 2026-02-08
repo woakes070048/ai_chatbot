@@ -1,0 +1,179 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1400" width="1200" height="1400">
+  <defs>
+    <style>
+      .process { fill: #3b82f6; stroke: #1e40af; stroke-width: 2; }
+      .decision { fill: #f59e0b; stroke: #d97706; stroke-width: 2; }
+      .data { fill: #10b981; stroke: #059669; stroke-width: 2; }
+      .code { fill: #8b5cf6; stroke: #6d28d9; stroke-width: 2; }
+      .text { fill: white; font-family: Arial, sans-serif; font-size: 13px; text-anchor: middle; font-weight: 600; }
+      .small-text { fill: white; font-family: Arial, sans-serif; font-size: 10px; text-anchor: middle; }
+      .title { fill: #1e293b; font-family: Arial, sans-serif; font-size: 26px; font-weight: bold; text-anchor: middle; }
+      .label { fill: #1e293b; font-family: 'Courier New', monospace; font-size: 11px; }
+      .note { fill: #475569; font-family: Arial, sans-serif; font-size: 10px; }
+      .code-text { fill: #1e293b; font-family: 'Courier New', monospace; font-size: 10px; }
+    </style>
+  </defs>
+  
+  <text x="600" y="35" class="title">AI Tool Decision Logic - Technical Details</text>
+  <text x="600" y="60" class="note" text-anchor="middle">How AI Analyzes Messages and Selects Functions</text>
+  
+  <!-- Input -->
+  <rect x="450" y="90" width="300" height="60" rx="8" fill="#fef3c7" stroke="#f59e0b" stroke-width="2"/>
+  <text x="600" y="115" class="label" text-anchor="middle" font-weight="bold">AI Receives Request</text>
+  <text x="600" y="135" class="code-text" text-anchor="middle">messages: [{role, content}, ...]</text>
+  
+  <line x1="600" y1="150" x2="600" y2="180" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
+  
+  <!-- Tools Schema -->
+  <rect x="400" y="180" width="400" height="80" rx="8" class="data"/>
+  <text x="600" y="205" class="text">1. Tools Schema Provided</text>
+  <text x="600" y="225" class="small-text">tools: [</text>
+  <text x="600" y="240" class="small-text">  {type: "function", function: {name, description, parameters}},</text>
+  <text x="600" y="255" class="small-text">  ... (20+ functions)</text>
+  
+  <line x1="600" y1="260" x2="600" y2="290" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
+  
+  <!-- Analysis Step 1 -->
+  <rect x="400" y="290" width="400" height="70" rx="8" class="process"/>
+  <text x="600" y="315" class="text">2. Natural Language Analysis</text>
+  <text x="600" y="335" class="small-text">Tokenize message → Extract keywords</text>
+  <text x="600" y="350" class="small-text">Identify: verbs, nouns, modifiers, context</text>
+  
+  <line x1="600" y1="360" x2="600" y2="390" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
+  
+  <!-- Analysis Step 2 -->
+  <path d="M 600 400 L 720 450 L 600 500 L 480 450 Z" class="decision"/>
+  <text x="600" y="443" class="text" font-size="12">3. Check Patterns</text>
+  <text x="600" y="463" class="text" font-size="12">Message Analysis</text>
+  
+  <!-- Pattern Matching Details -->
+  <rect x="50" y="520" width="520" height="300" rx="8" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="2"/>
+  <text x="310" y="545" class="label" font-weight="bold">Pattern Matching Rules (AI Internal Logic):</text>
+  
+  <!-- Rule 1: Keywords -->
+  <text x="70" y="575" class="label" font-weight="bold">Rule 1: Action Verb Detection</text>
+  <rect x="70" y="585" width="480" height="60" rx="5" fill="#dbeafe" stroke="#3b82f6" stroke-width="1"/>
+  <text x="80" y="605" class="code-text">if contains(["get", "show", "list", "find", "search", "display"]):</text>
+  <text x="90" y="622" class="note">→ Likely needs database query</text>
+  <text x="90" y="637" class="note">→ Increment confidence_score += 0.3</text>
+  
+  <!-- Rule 2: Entities -->
+  <text x="70" y="665" class="label" font-weight="bold">Rule 2: Entity Recognition (NER)</text>
+  <rect x="70" y="675" width="480" height="75" rx="5" fill="#dcfce7" stroke="#10b981" stroke-width="1"/>
+  <text x="80" y="695" class="code-text">entities = extract_entities(message)</text>
+  <text x="80" y="710" class="code-text">if entities in ["Customer", "Sales Order", "Item", "Supplier"]:</text>
+  <text x="90" y="727" class="note">→ ERPNext-specific entity detected</text>
+  <text x="90" y="742" class="note">→ Increment confidence_score += 0.4</text>
+  
+  <!-- Rule 3: Intent -->
+  <text x="70" y="770" class="label" font-weight="bold">Rule 3: Intent Classification</text>
+  <rect x="70" y="780" width="480" height="60" rx="5" fill="#fef3c7" stroke="#f59e0b" stroke-width="1"/>
+  <text x="80" y="800" class="code-text">intent = classify_intent(message)</text>
+  <text x="90" y="817" class="note">→ If intent == "data_retrieval": confidence_score += 0.3</text>
+  <text x="90" y="832" class="note">→ If intent == "greeting": confidence_score -= 0.5</text>
+  
+  <!-- Decision threshold -->
+  <line x1="720" y1="450" x2="850" y2="450" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="785" y="445" class="label">confidence_score &gt; 0.6</text>
+  
+  <!-- USE TOOLS branch -->
+  <rect x="850" y="420" width="300" height="70" rx="8" class="code"/>
+  <text x="1000" y="445" class="text">4. Tool Selection</text>
+  <text x="1000" y="465" class="small-text">Match intent to function</text>
+  <text x="1000" y="480" class="small-text">Select best_match from tools[]</text>
+  
+  <line x1="1000" y1="490" x2="1000" y2="520" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
+  
+  <rect x="850" y="520" width="300" height="90" rx="8" class="data"/>
+  <text x="1000" y="545" class="text">5. Parameter Extraction</text>
+  <text x="1000" y="565" class="small-text">Extract from message:</text>
+  <text x="1000" y="580" class="small-text">"top 3" → {limit: 3}</text>
+  <text x="1000" y="595" class="small-text">"by revenue" → {by: "revenue"}</text>
+  
+  <line x1="1000" y1="610" x2="1000" y2="640" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
+  
+  <rect x="850" y="640" width="300" height="100" rx="8" fill="#fef3c7" stroke="#f59e0b" stroke-width="2"/>
+  <text x="1000" y="665" class="label" font-weight="bold" text-anchor="middle">Tool Call Generated:</text>
+  <text x="1000" y="685" class="code-text" text-anchor="middle">{</text>
+  <text x="1000" y="700" class="code-text" text-anchor="middle">  function: "get_top_customers",</text>
+  <text x="1000" y="715" class="code-text" text-anchor="middle">  arguments: {limit: 3, by: "revenue"}</text>
+  <text x="1000" y="730" class="code-text" text-anchor="middle">}</text>
+  
+  <!-- NO TOOLS branch -->
+  <line x1="480" y1="450" x2="350" y2="450" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="415" y="445" class="label">confidence_score &lt;= 0.6</text>
+  
+  <rect x="50" y="420" width="300" height="70" rx="8" class="process"/>
+  <text x="200" y="445" class="text">6. Direct Response</text>
+  <text x="200" y="465" class="small-text">Generate from training data</text>
+  <text x="200" y="480" class="small-text">No tool_calls field</text>
+  
+  <line x1="200" y1="490" x2="200" y2="520" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
+  
+  <rect x="50" y="520" width="300" height="100" rx="8" fill="#fef3c7" stroke="#f59e0b" stroke-width="2"/>
+  <text x="200" y="545" class="label" font-weight="bold" text-anchor="middle">Direct Response Generated:</text>
+  <text x="200" y="565" class="code-text" text-anchor="middle">{</text>
+  <text x="200" y="580" class="code-text" text-anchor="middle">  content: "Hello! How can I</text>
+  <text x="200" y="595" class="code-text" text-anchor="middle">  assist you with ERPNext?",</text>
+  <text x="200" y="610" class="code-text" text-anchor="middle">  tool_calls: null</text>
+  <text x="200" y="625" class="code-text" text-anchor="middle">}</text>
+  
+  <!-- Examples section -->
+  <rect x="50" y="850" width="1100" height="520" rx="8" fill="#f8fafc" stroke="#cbd5e1" stroke-width="3"/>
+  <text x="600" y="880" class="label" font-size="16" text-anchor="middle" font-weight="bold">Example Analysis Results</text>
+  
+  <!-- Example 1 -->
+  <rect x="80" y="900" width="520" height="200" rx="8" fill="#dcfce7" stroke="#10b981" stroke-width="2"/>
+  <text x="340" y="925" class="label" font-weight="bold" text-anchor="middle">Example 1: Complex Query</text>
+  <text x="90" y="950" class="code-text">Input: "Get top 3 customers by revenue"</text>
+  <text x="90" y="975" class="label">Analysis:</text>
+  <text x="100" y="995" class="note">• Action verb: "Get" → +0.3</text>
+  <text x="100" y="1012" class="note">• Entity: "customers" → +0.4</text>
+  <text x="100" y="1029" class="note">• Intent: data_retrieval → +0.3</text>
+  <text x="100" y="1046" class="note">• Modifiers: "top 3", "by revenue" → parameters</text>
+  <text x="90" y="1071" class="label">Result:</text>
+  <text x="100" y="1088" class="code-text">confidence_score = 1.0 → USE TOOLS ✓</text>
+  
+  <!-- Example 2 -->
+  <rect x="630" y="900" width="520" height="200" rx="8" fill="#fef3c7" stroke="#f59e0b" stroke-width="2"/>
+  <text x="890" y="925" class="label" font-weight="bold" text-anchor="middle">Example 2: Simple Message</text>
+  <text x="640" y="950" class="code-text">Input: "Hello"</text>
+  <text x="640" y="975" class="label">Analysis:</text>
+  <text x="650" y="995" class="note">• No action verbs → +0.0</text>
+  <text x="650" y="1012" class="note">• No ERPNext entities → +0.0</text>
+  <text x="650" y="1029" class="note">• Intent: greeting → -0.5</text>
+  <text x="650" y="1046" class="note">• Pattern: casual_conversation</text>
+  <text x="640" y="1071" class="label">Result:</text>
+  <text x="650" y="1088" class="code-text">confidence_score = -0.5 → NO TOOLS ✗</text>
+  
+  <!-- Example 3 -->
+  <rect x="80" y="1130" width="520" height="210" rx="8" fill="#dcfce7" stroke="#10b981" stroke-width="2"/>
+  <text x="340" y="1155" class="label" font-weight="bold" text-anchor="middle">Example 3: Mixed Query</text>
+  <text x="90" y="1180" class="code-text">Input: "Can you show me today's sales orders?"</text>
+  <text x="90" y="1205" class="label">Analysis:</text>
+  <text x="100" y="1225" class="note">• Action verb: "show" → +0.3</text>
+  <text x="100" y="1242" class="note">• Entity: "sales orders" → +0.4</text>
+  <text x="100" y="1259" class="note">• Intent: data_retrieval → +0.3</text>
+  <text x="100" y="1276" class="note">• Time modifier: "today" → parameter</text>
+  <text x="90" y="1301" class="label">Result:</text>
+  <text x="100" y="1318" class="code-text">confidence_score = 1.0 → USE TOOLS ✓</text>
+  
+  <!-- Example 4 -->
+  <rect x="630" y="1130" width="520" height="210" rx="8" fill="#fef3c7" stroke="#f59e0b" stroke-width="2"/>
+  <text x="890" y="1155" class="label" font-weight="bold" text-anchor="middle">Example 4: General Question</text>
+  <text x="640" y="1180" class="code-text">Input: "What is ERPNext?"</text>
+  <text x="640" y="1205" class="label">Analysis:</text>
+  <text x="650" y="1225" class="note">• Question word: "What" → informational</text>
+  <text x="650" y="1242" class="note">• Entity: "ERPNext" (general concept) → +0.1</text>
+  <text x="650" y="1259" class="note">• Intent: information_seeking → +0.1</text>
+  <text x="650" y="1276" class="note">• No specific data request</text>
+  <text x="640" y="1301" class="label">Result:</text>
+  <text x="650" y="1318" class="code-text">confidence_score = 0.2 → NO TOOLS ✗</text>
+  
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#475569"/>
+    </marker>
+  </defs>
+</svg>

@@ -1,0 +1,185 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1800" width="1600" height="1800">
+  <defs>
+    <style>
+      .step { fill: #3b82f6; stroke: #1e40af; stroke-width: 2; }
+      .decision { fill: #f59e0b; stroke: #d97706; stroke-width: 2; }
+      .tool-yes { fill: #10b981; stroke: #059669; stroke-width: 2; }
+      .tool-no { fill: #ef4444; stroke: #dc2626; stroke-width: 2; }
+      .text { fill: white; font-family: Arial, sans-serif; font-size: 13px; text-anchor: middle; font-weight: 600; }
+      .small-text { fill: white; font-family: Arial, sans-serif; font-size: 10px; text-anchor: middle; }
+      .title { fill: #1e293b; font-family: Arial, sans-serif; font-size: 26px; font-weight: bold; text-anchor: middle; }
+      .label { fill: #1e293b; font-family: Arial, sans-serif; font-size: 12px; font-weight: bold; }
+      .note { fill: #475569; font-family: Arial, sans-serif; font-size: 10px; }
+    </style>
+  </defs>
+  
+  <text x="800" y="40" class="title">Complete AI Decision and Execution Flow</text>
+  
+  <!-- Start -->
+  <ellipse cx="800" cy="100" rx="90" ry="35" fill="#ef4444" stroke="#dc2626" stroke-width="3"/>
+  <text x="800" y="105" class="text" font-size="16">User Clicks SEND</text>
+  
+  <line x1="800" y1="135" x2="800" y2="170" stroke="#475569" stroke-width="3" marker-end="url(#arrow)"/>
+  
+  <!-- Step 1 -->
+  <rect x="650" y="170" width="300" height="60" rx="8" class="step"/>
+  <text x="800" y="195" class="text">1. Backend Receives Message</text>
+  <text x="800" y="215" class="small-text">Save to DB, Get history</text>
+  
+  <line x1="800" y1="230" x2="800" y2="260" stroke="#475569" stroke-width="3" marker-end="url(#arrow)"/>
+  
+  <!-- Step 2 -->
+  <rect x="650" y="260" width="300" height="60" rx="8" class="step"/>
+  <text x="800" y="285" class="text">2. Load ALL Tool Schemas</text>
+  <text x="800" y="305" class="small-text">20+ tools from enabled categories</text>
+  
+  <line x1="800" y1="320" x2="800" y2="350" stroke="#475569" stroke-width="3" marker-end="url(#arrow)"/>
+  
+  <!-- Step 3 -->
+  <rect x="650" y="350" width="300" height="70" rx="8" class="step"/>
+  <text x="800" y="375" class="text">3. First AI API Call</text>
+  <text x="800" y="395" class="small-text">Send: messages + ALL tools</text>
+  <text x="800" y="410" class="small-text">temp=0.7, model=gpt-4</text>
+  
+  <line x1="800" y1="420" x2="800" y2="460" stroke="#475569" stroke-width="3" marker-end="url(#arrow)"/>
+  
+  <!-- AI Decision -->
+  <path d="M 800 470 L 920 540 L 800 610 L 680 540 Z" class="decision"/>
+  <text x="800" y="533" class="text" font-size="14">AI Analyzes</text>
+  <text x="800" y="553" class="text" font-size="14">Need Tools?</text>
+  
+  <!-- NO TOOLS Path -->
+  <line x1="680" y1="540" x2="400" y2="540" stroke="#475569" stroke-width="3" marker-end="url(#arrow)"/>
+  <text x="540" y="530" class="label">NO</text>
+  <text x="540" y="555" class="note">"Hello"</text>
+  
+  <rect x="250" y="560" width="300" height="70" rx="8" class="tool-no"/>
+  <text x="400" y="585" class="text">Direct Response</text>
+  <text x="400" y="605" class="small-text">content: "Hello! How can I help?"</text>
+  <text x="400" y="620" class="small-text">tool_calls: null</text>
+  
+  <line x1="400" y1="630" x2="400" y2="1600" stroke="#475569" stroke-width="3"/>
+  
+  <!-- YES TOOLS Path -->
+  <line x1="920" y1="540" x2="1200" y2="540" stroke="#475569" stroke-width="3" marker-end="url(#arrow)"/>
+  <text x="1060" y="530" class="label">YES</text>
+  <text x="1060" y="555" class="note">"Get customers"</text>
+  
+  <rect x="1050" y="560" width="300" height="70" rx="8" class="tool-yes"/>
+  <text x="1200" y="585" class="text">Tool Call Response</text>
+  <text x="1200" y="605" class="small-text">content: null</text>
+  <text x="1200" y="620" class="small-text">tool_calls: [{function: {...}}]</text>
+  
+  <line x1="1200" y1="630" x2="1200" y2="670" stroke="#475569" stroke-width="3" marker-end="url(#arrow)"/>
+  
+  <!-- Step 4 -->
+  <rect x="1050" y="670" width="300" height="60" rx="8" class="step"/>
+  <text x="1200" y="695" class="text">4. Parse Tool Call</text>
+  <text x="1200" y="715" class="small-text">Extract function name + arguments</text>
+  
+  <line x1="1200" y1="730" x2="1200" y2="760" stroke="#475569" stroke-width="3" marker-end="url(#arrow)"/>
+  
+  <!-- Step 5 -->
+  <rect x="1050" y="760" width="300" height="60" rx="8" class="step"/>
+  <text x="1200" y="785" class="text">5. Route to Tool Class</text>
+  <text x="1200" y="805" class="small-text">BaseTool.execute_tool()</text>
+  
+  <line x1="1200" y1="820" x2="1200" y2="850" stroke="#475569" stroke-width="3" marker-end="url(#arrow)"/>
+  
+  <!-- Step 6 -->
+  <rect x="1050" y="850" width="300" height="70" rx="8" fill="#8b5cf6" stroke="#6d28d9" stroke-width="2"/>
+  <text x="1200" y="875" class="text">6. Query ERPNext Database</text>
+  <text x="1200" y="895" class="small-text">frappe.db.sql() or frappe.get_all()</text>
+  <text x="1200" y="910" class="small-text">Returns: Raw data</text>
+  
+  <line x1="1200" y1="920" x2="1200" y2="950" stroke="#475569" stroke-width="3" marker-end="url(#arrow)"/>
+  
+  <!-- Step 7 -->
+  <rect x="1050" y="950" width="300" height="140" rx="8" fill="#fef3c7" stroke="#f59e0b" stroke-width="2"/>
+  <text x="1200" y="975" class="label" text-anchor="middle">7. Tool Returns Data</text>
+  <text x="1060" y="1000" class="note">{</text>
+  <text x="1070" y="1017" class="note">  "success": true,</text>
+  <text x="1070" y="1034" class="note">  "data": [</text>
+  <text x="1080" y="1051" class="note">    {"customer": "ABC", "revenue": 100000},</text>
+  <text x="1080" y="1068" class="note">    {"customer": "XYZ", "revenue": 50000}</text>
+  <text x="1070" y="1085" class="note">  ]</text>
+  <text x="1060" y="1102" class="note">}</text>
+  
+  <line x1="1200" y1="1090" x2="1200" y2="1130" stroke="#475569" stroke-width="3" marker-end="url(#arrow)"/>
+  
+  <!-- Step 8 -->
+  <rect x="1050" y="1130" width="300" height="80" rx="8" class="step"/>
+  <text x="1200" y="1155" class="text">8. Build Messages Array</text>
+  <text x="1200" y="1175" class="small-text">Add: assistant tool_call message</text>
+  <text x="1200" y="1190" class="small-text">Add: tool result message (role: "tool")</text>
+  
+  <line x1="1200" y1="1210" x2="1200" y2="1240" stroke="#475569" stroke-width="3" marker-end="url(#arrow)"/>
+  
+  <!-- Step 9 -->
+  <rect x="1050" y="1240" width="300" height="70" rx="8" class="step"/>
+  <text x="1200" y="1265" class="text">9. Second AI API Call</text>
+  <text x="1200" y="1285" class="small-text">Send: history + tool results</text>
+  <text x="1200" y="1300" class="small-text">tools: null (no tools this time)</text>
+  
+  <line x1="1200" y1="1310" x2="1200" y2="1340" stroke="#475569" stroke-width="3" marker-end="url(#arrow)"/>
+  
+  <!-- Step 10 -->
+  <rect x="1050" y="1340" width="300" height="80" rx="8" class="tool-yes"/>
+  <text x="1200" y="1365" class="text">10. AI Formats Data</text>
+  <text x="1200" y="1385" class="small-text">Converts raw JSON to</text>
+  <text x="1200" y="1400" class="small-text">natural language response</text>
+  
+  <line x1="1200" y1="1420" x2="1200" y2="1450" stroke="#475569" stroke-width="3" marker-end="url(#arrow)"/>
+  
+  <!-- Step 11 -->
+  <rect x="1050" y="1450" width="300" height="140" rx="8" fill="#dcfce7" stroke="#059669" stroke-width="2"/>
+  <text x="1200" y="1475" class="label" text-anchor="middle">11. Formatted Response</text>
+  <text x="1060" y="1500" class="note">"Here are your customers:</text>
+  <text x="1060" y="1517" class="note">1. ABC Corp - $100,000</text>
+  <text x="1060" y="1534" class="note">2. XYZ Ltd - $50,000"</text>
+  <text x="1060" y="1565" class="note">✅ Natural language</text>
+  <text x="1060" y="1582" class="note">✅ Formatted nicely</text>
+  
+  <line x1="1200" y1="1590" x2="1200" y2="1600" stroke="#475569" stroke-width="3"/>
+  
+  <!-- Merge paths -->
+  <line x1="400" y1="1600" x2="1200" y2="1600" stroke="#475569" stroke-width="3"/>
+  <line x1="800" y1="1600" x2="800" y2="1630" stroke="#475569" stroke-width="3" marker-end="url(#arrow)"/>
+  
+  <!-- Final step -->
+  <rect x="650" y="1630" width="300" height="60" rx="8" fill="#6366f1" stroke="#4f46e5" stroke-width="2"/>
+  <text x="800" y="1655" class="text">12. Save and Display</text>
+  <text x="800" y="1675" class="small-text">Database → Frontend → User sees result</text>
+  
+  <line x1="800" y1="1690" x2="800" y2="1720" stroke="#475569" stroke-width="3" marker-end="url(#arrow)"/>
+  
+  <!-- End -->
+  <ellipse cx="800" cy="1760" rx="90" ry="35" fill="#10b981" stroke="#059669" stroke-width="3"/>
+  <text x="800" y="1767" class="text" font-size="16">DONE!</text>
+  
+  <!-- Timing boxes -->
+  <rect x="50" y="680" width="200" height="150" rx="8" fill="#f1f5f9" stroke="#64748b" stroke-width="2"/>
+  <text x="150" y="710" class="label" text-anchor="middle">⚡ Simple Path</text>
+  <text x="60" y="740" class="note">Steps: 1-3 → Direct</text>
+  <text x="60" y="760" class="note">AI Calls: 1</text>
+  <text x="60" y="780" class="note">DB Queries: 0</text>
+  <text x="60" y="800" class="note">Time: 1-2 seconds</text>
+  <text x="60" y="820" class="note">Tokens: 50-200</text>
+  
+  <rect x="50" y="1090" width="200" height="210" rx="8" fill="#f1f5f9" stroke="#64748b" stroke-width="2"/>
+  <text x="150" y="1120" class="label" text-anchor="middle">🔍 Tool Path</text>
+  <text x="60" y="1150" class="note">Steps: 1-12 (all)</text>
+  <text x="60" y="1170" class="note">AI Calls: 2</text>
+  <text x="60" y="1190" class="note">DB Queries: 1-5</text>
+  <text x="60" y="1210" class="note">Time: 3-5 seconds</text>
+  <text x="60" y="1230" class="note">Tokens: 500-2000</text>
+  <text x="60" y="1250" class="note">Badge: Yes ✓</text>
+  <text x="60" y="1270" class="note">Data: Formatted</text>
+  
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#475569"/>
+    </marker>
+  </defs>
+</svg>
