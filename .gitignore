@@ -57,3 +57,7 @@ jspm_packages/
 ai_chatbot/public/frontend
 build
 yarn.lock
+
+.ruff_cache/
+.claude/
+
