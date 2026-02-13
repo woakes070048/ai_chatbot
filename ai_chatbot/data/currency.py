@@ -38,7 +38,7 @@ def get_exchange_rate(from_currency, to_currency, date=None):
 		rate = erp_get_exchange_rate(from_currency, to_currency, date)
 		if rate:
 			return flt(rate)
-	except ImportError, Exception:
+	except (ImportError, Exception):
 		pass
 
 	# Fallback: check Currency Exchange doctype directly

@@ -170,67 +170,139 @@ Benefits:
 
 ---
 
-## Phase 2: Streaming (SSE) & Enhanced Chat Experience
+## Phase 2: Streaming (Frappe Realtime) & Enhanced Chat Experience
 
-**Goal:** Implement real-time token streaming for AI responses. Improve chat UX.
+**Goal:** Implement real-time token streaming for AI responses using Frappe's built-in `frappe.publish_realtime` (Socket.IO/WebSocket via Redis Pub/Sub). Improve chat UX.
 
-### 2.1 Backend Streaming (`ai_chatbot/api/streaming.py`)
+### 2.1 Why Frappe Realtime (Not SSE)
+
+Frappe ships with a realtime event system based on Socket.IO:
+- **Server:** `frappe.publish_realtime(event, message, user=...)` — publishes via Redis Pub/Sub to Node.js Socket.IO server
+- **Client:** `frappe.realtime.on(event, callback)` — listens on WebSocket
+- **Advantages over custom SSE:** Already integrated with Frappe auth, user targeting, Redis infrastructure, and session management. No custom endpoint needed.
+
+**`frappe.publish_realtime` full signature:**
+```python
+frappe.publish_realtime(
+    event: str | None = None,        # Event name
+    message: dict | None = None,     # JSON payload
+    room: str | None = None,         # Target room (auto-resolved)
+    user: str | None = None,         # Target specific user → room "user:{username}"
+    doctype: str | None = None,      # Target document subscribers
+    docname: str | None = None,      # Target document subscribers
+    task_id: str | None = None,      # Background task tracking
+    after_commit: bool = False,      # Defer until DB commit
+)
+```
+
+**Room targeting for chatbot:**
+- Use `user=frappe.session.user` to send tokens only to the requesting user
+- Each `publish_realtime` call sends one chunk through Redis → Socket.IO → browser
+
+### 2.2 Backend Streaming (`ai_chatbot/api/streaming.py`)
 
 ```
 ai_chatbot/api/
-├── chat.py            # Existing (updated for streaming flag)
-└── streaming.py       # NEW: SSE endpoint
+├── chat.py            # Existing (updated: delegates to streaming when enabled)
+└── streaming.py       # NEW: Frappe realtime streaming logic
 ```
 
-**SSE endpoint:**
-- `stream_response(conversation_id, message)` — returns `text/event-stream` response
-- Uses Frappe's response object to send SSE events
-- Event types: `token` (partial text), `tool_call` (tool invocation), `tool_result` (tool output), `done` (completion), `error`
-- Handles tool calling mid-stream: pauses streaming → executes tool → resumes with tool result
+**streaming.py:**
+- `stream_chat_response(conversation_id, message)` — `@frappe.whitelist()` endpoint
+- Calls AI provider with streaming enabled
+- Emits tokens via `frappe.publish_realtime` to the requesting user
+- Event types published:
+  - `ai_chat_stream_start` — stream begins (includes conversation_id)
+  - `ai_chat_token` — partial text chunk (batched: ~3-5 tokens per emit to reduce Redis overhead)
+  - `ai_chat_tool_call` — tool invocation (tool name, arguments)
+  - `ai_chat_tool_result` — tool execution result
+  - `ai_chat_stream_end` — stream complete (includes full message for persistence)
+  - `ai_chat_error` — error during streaming
+- Handles tool calling mid-stream: pauses streaming → executes tool → publishes tool result → resumes
 
 **Provider updates (`ai_chatbot/utils/ai_providers.py`):**
 - `OpenAIProvider.chat_completion_stream()` — yield tokens from OpenAI streaming API
 - `ClaudeProvider.chat_completion_stream()` — yield tokens from Claude streaming API
 - Both yield structured events: `{"type": "token", "content": "..."}`
 
-### 2.2 Frontend Streaming (`frontend/src/utils/streaming.js`)
+**Token batching strategy:**
+```python
+# Batch small tokens to reduce Redis Pub/Sub overhead
+buffer = ""
+for chunk in provider.chat_completion_stream(messages, tools):
+    if chunk["type"] == "token":
+        buffer += chunk["content"]
+        if len(buffer) >= 20 or chunk.get("finish"):  # ~20 chars per emit
+            frappe.publish_realtime(
+                "ai_chat_token",
+                {"conversation_id": conv_id, "content": buffer},
+                user=frappe.session.user,
+            )
+            buffer = ""
+```
+
+### 2.3 Frontend Streaming (`frontend/src/composables/useStreaming.js`)
 
 ```
 frontend/src/
-├── utils/
-│   ├── api.js          # Existing
-│   └── streaming.js    # NEW: EventSource client
+├── composables/
+│   └── useStreaming.js    # NEW: Frappe realtime listener composable
 ├── components/
-│   ├── ChatMessage.vue # Updated for streaming state
+│   ├── ChatMessage.vue    # Updated for streaming state
 │   └── StreamingMessage.vue  # NEW: renders partial content
 ```
 
-**streaming.js:**
-- `StreamingClient` class wrapping `EventSource` API
-- Handles reconnection, error recovery
-- Emits events to Vue components via callback
+**useStreaming.js (Vue 3 Composable):**
+```javascript
+// Uses Frappe's built-in Socket.IO client
+export function useStreaming(conversationId) {
+    const streamingContent = ref("")
+    const isStreaming = ref(false)
+
+    function startListening() {
+        isStreaming.value = true
+        frappe.realtime.on("ai_chat_token", (data) => {
+            if (data.conversation_id === conversationId.value) {
+                streamingContent.value += data.content
+            }
+        })
+        frappe.realtime.on("ai_chat_stream_end", (data) => {
+            if (data.conversation_id === conversationId.value) {
+                isStreaming.value = false
+            }
+        })
+    }
+
+    function stopListening() {
+        frappe.realtime.off("ai_chat_token")
+        frappe.realtime.off("ai_chat_stream_end")
+    }
+
+    return { streamingContent, isStreaming, startListening, stopListening }
+}
+```
 
 **StreamingMessage.vue:**
-- Renders tokens as they arrive
+- Renders tokens as they arrive with a cursor animation
 - Shows tool call execution inline (tool name, arguments, result)
 - Transitions to final `ChatMessage.vue` when stream completes
 
-### 2.3 Enhanced Chat Features
+### 2.4 Enhanced Chat Features
 
 - **Auto-scroll with smart behavior:** Don't force-scroll if user has scrolled up to read history
 - **Message retry:** Re-send failed messages
-- **Stop generation:** Abort in-progress streaming response
+- **Stop generation:** Abort in-progress streaming response (publishes cancel event)
 - **Copy message:** Copy assistant response to clipboard
 
-### 2.4 Deliverables
+### 2.5 Deliverables
 
 | Item | Files |
 |------|-------|
-| SSE backend | `api/streaming.py`, updated `utils/ai_providers.py` |
-| Frontend streaming | `utils/streaming.js`, `components/StreamingMessage.vue` |
+| Realtime streaming backend | `api/streaming.py`, updated `utils/ai_providers.py` |
+| Frontend streaming | `composables/useStreaming.js`, `components/StreamingMessage.vue` |
 | Chat UX | Updated `ChatMessage.vue`, `ChatView.vue`, `ChatInput.vue` |
 
-**New dependencies:** None (SSE uses native browser EventSource, backend uses Frappe response).
+**New dependencies:** None (uses Frappe's built-in Socket.IO/Redis infrastructure and provider streaming APIs).
 
 ---
 
@@ -479,11 +551,11 @@ Expand the existing 2 tools:
 
 ---
 
-## Phase 6: Basic RAG — Document Knowledge Base
+## Phase 6: Agentic RAG — Vector Search + Multi-Agent Orchestration
 
-**Goal:** Let the chatbot answer questions from uploaded documents and ERPNext records using vector search.
+**Goal:** Implement a full Agentic RAG system from the start — combining vector-based document retrieval with multi-agent orchestration, planning, and iterative refinement. This skips a "basic RAG" intermediate step in favor of building the agentic architecture directly, since the retrieval layer is a component of the agent system anyway.
 
-### 6.1 RAG Backend (`ai_chatbot/ai/rag/`)
+### 6.1 RAG Foundation (`ai_chatbot/ai/rag/`)
 
 ```
 ai_chatbot/ai/rag/
@@ -491,7 +563,7 @@ ai_chatbot/ai/rag/
 ├── embeddings.py      # Embedding generation (OpenAI/local)
 ├── vector_store.py    # ChromaDB interface
 ├── chunker.py         # Document chunking strategies
-└── retriever.py       # Query → retrieve → inject into prompt
+└── retriever.py       # Query → retrieve → rank → return
 ```
 
 **embeddings.py:**
@@ -511,65 +583,11 @@ ai_chatbot/ai/rag/
 - Metadata preservation (source document, page number, section)
 
 **retriever.py:**
-- `retrieve_context(query, company=None, n_results=5)` — end-to-end: embed query → search → return chunks
-- `augment_prompt(system_prompt, query, context_chunks)` — inject retrieved context into LLM prompt
+- `retrieve_context(query, company=None, n_results=5)` — embed query → search → return ranked chunks
+- `evaluate_relevance(query, chunks)` — scores retrieved chunks for relevance (used by agents)
+- `requery(original_query, feedback)` — refine search terms based on agent feedback
 
-### 6.2 Knowledge Base DocType
-
-**Chatbot Knowledge Base** (new DocType):
-- Fields: `title`, `source_type` (File/ERPNext Record/URL), `source_reference`, `company`, `status` (Indexed/Pending/Failed), `chunk_count`, `last_indexed`
-- Tracks what has been indexed into the vector store
-
-### 6.3 Indexing Pipeline
-
-- **Manual:** Upload PDF/DOCX via a "Knowledge Base" page in the frontend
-- **Automatic:** Index key ERPNext records (Items, Customers, Suppliers, policies) via scheduled task
-- **Incremental:** Only re-index documents that have changed since last indexing
-
-### 6.4 Integration with Chat
-
-The chat flow becomes:
-
-1. User sends message
-2. System checks if RAG context would help (based on query type)
-3. If yes: retrieve relevant chunks from vector store
-4. Inject chunks into system prompt as context
-5. Send to LLM with both tools and RAG context available
-6. LLM can use both tool results AND document context in its response
-
-### 6.5 Frontend
-
-```
-frontend/src/
-├── pages/
-│   └── KnowledgeBaseView.vue   # Document upload and management
-├── components/
-│   └── documents/
-│       ├── DocumentUploader.vue # File upload with drag-and-drop
-│       └── DocumentList.vue     # List of indexed documents
-```
-
-### 6.6 Deliverables
-
-| Item | Files |
-|------|-------|
-| RAG engine | `ai/rag/embeddings.py`, `vector_store.py`, `chunker.py`, `retriever.py` |
-| Knowledge Base DocType | `chatbot/doctype/chatbot_knowledge_base/` |
-| Indexing pipeline | Scheduled task in `hooks.py` |
-| Frontend | `KnowledgeBaseView.vue`, `DocumentUploader.vue`, `DocumentList.vue` |
-| Chat integration | Updated `api/chat.py` to call retriever |
-
-**New dependencies:**
-- **Backend:** `chromadb`, `openai` (for embeddings), `pypdf` (PDF extraction), `python-docx` (DOCX extraction)
-- **Frontend:** None
-
----
-
-## Phase 7: Agentic RAG — Multi-Agent Orchestration
-
-**Goal:** Upgrade from single-pass RAG to an agentic system that plans, retrieves, evaluates, and iterates.
-
-### 7.1 Agent Framework (`ai_chatbot/ai/agents/`)
+### 6.2 Agent Framework (`ai_chatbot/ai/agents/`)
 
 ```
 ai_chatbot/ai/agents/
@@ -585,6 +603,7 @@ ai_chatbot/ai/agents/
 - Classifies incoming query: simple (generative) vs. data (tool-based) vs. knowledge (RAG) vs. complex (multi-step)
 - Routes to appropriate agent or combination
 - Manages agent execution loop with max iterations
+- Combines tool results with RAG context when both are needed
 
 **planner_agent.py:**
 - Breaks complex queries into sub-tasks
@@ -600,11 +619,12 @@ ai_chatbot/ai/agents/
 - Evaluates whether results are sufficient or needs more data
 
 **document_agent.py:**
-- Retrieves from vector store
+- Retrieves from vector store via `retriever.py`
 - Evaluates relevance of retrieved chunks
 - Can re-query with refined search terms if initial results are poor
+- Synthesizes answers from multiple document sources
 
-### 7.2 Memory System (`ai_chatbot/ai/memory/`)
+### 6.3 Memory System (`ai_chatbot/ai/memory/`)
 
 ```
 ai_chatbot/ai/memory/
@@ -619,24 +639,66 @@ ai_chatbot/ai/memory/
 - Prunes oldest messages when context limit approached
 - Prioritizes recent and relevant context
 
-### 7.3 Deliverables
+### 6.4 Knowledge Base DocType & Indexing
+
+**Chatbot Knowledge Base** (new DocType):
+- Fields: `title`, `source_type` (File/ERPNext Record/URL), `source_reference`, `company`, `status` (Indexed/Pending/Failed), `chunk_count`, `last_indexed`
+- Tracks what has been indexed into the vector store
+
+**Indexing pipeline:**
+- **Manual:** Upload PDF/DOCX via a "Knowledge Base" page in the frontend
+- **Automatic:** Index key ERPNext records (Items, Customers, Suppliers, policies) via scheduled task
+- **Incremental:** Only re-index documents that have changed since last indexing
+
+### 6.5 Integration with Chat
+
+The agentic chat flow:
+
+1. User sends message
+2. Orchestrator classifies the query
+3. For knowledge queries → Document Agent retrieves from vector store, evaluates relevance, re-queries if needed
+4. For data queries → Analyst Agent calls tools, chains results
+5. For complex queries → Planner Agent decomposes, delegates to other agents
+6. Agents can combine tool results AND document context in their responses
+7. Memory Manager tracks context budget throughout
+
+### 6.6 Frontend
+
+```
+frontend/src/
+├── pages/
+│   └── KnowledgeBaseView.vue   # Document upload and management
+├── components/
+│   ├── chat/
+│   │   └── AgentThinking.vue   # Shows agent reasoning steps
+│   └── documents/
+│       ├── DocumentUploader.vue # File upload with drag-and-drop
+│       └── DocumentList.vue     # List of indexed documents
+```
+
+### 6.7 Deliverables
 
 | Item | Files |
 |------|-------|
+| RAG engine | `ai/rag/embeddings.py`, `vector_store.py`, `chunker.py`, `retriever.py` |
 | Agent framework | `ai/agents/base_agent.py`, `orchestrator.py`, `planner_agent.py`, `analyst_agent.py`, `document_agent.py` |
 | Memory system | `ai/memory/conversation_memory.py`, `knowledge_memory.py`, `memory_manager.py` |
+| Knowledge Base DocType | `chatbot/doctype/chatbot_knowledge_base/` |
+| Indexing pipeline | Scheduled task in `hooks.py` |
+| Frontend | `KnowledgeBaseView.vue`, `DocumentUploader.vue`, `DocumentList.vue`, `AgentThinking.vue` |
 | Chat integration | Updated `api/chat.py` to use orchestrator |
-| Frontend | `components/chat/AgentThinking.vue` — shows agent reasoning steps |
 
-**New dependencies:** None beyond Phase 6 (uses same LLM providers and vector store).
+**New dependencies:**
+- **Backend:** `chromadb`, `openai` (for embeddings), `pypdf` (PDF extraction), `python-docx` (DOCX extraction)
+- **Frontend:** None
 
 ---
 
-## Phase 8: Intelligent Document Processing (IDP)
+## Phase 7: Intelligent Document Processing (IDP)
 
 **Goal:** Extract data from uploaded documents (invoices, receipts, POs) and create ERPNext records.
 
-### 8.1 Document Extraction (`ai_chatbot/idp/`)
+### 7.1 Document Extraction (`ai_chatbot/idp/`)
 
 ```
 ai_chatbot/idp/
@@ -672,7 +734,7 @@ ai_chatbot/idp/
 **Multi-company:** Extracted documents are created in the user's default company.
 **Multi-currency:** Extracted currency is preserved; ERPNext handles conversion via exchange rate on the document.
 
-### 8.2 Frontend
+### 7.2 Frontend
 
 ```
 frontend/src/
@@ -685,7 +747,7 @@ frontend/src/
 │       └── MappingPreview.vue      # Preview ERPNext document before creation
 ```
 
-### 8.3 Deliverables
+### 7.3 Deliverables
 
 | Item | Files |
 |------|-------|
@@ -702,11 +764,11 @@ frontend/src/
 
 ---
 
-## Phase 9: Predictive Analytics & ML
+## Phase 8: Predictive Analytics & ML
 
 **Goal:** Add forecasting and prediction capabilities using statistical and ML models.
 
-### 9.1 Predictive Tools (`ai_chatbot/tools/predictive/`)
+### 8.1 Predictive Tools (`ai_chatbot/tools/predictive/`)
 
 ```
 ai_chatbot/tools/predictive/
@@ -735,7 +797,7 @@ ai_chatbot/tools/predictive/
 - `detect_anomalies(company, from_date, to_date)` — flags unusual transactions (large amounts, unusual frequency, new suppliers with large orders)
 - Uses: statistical thresholds (z-score, IQR) — no ML needed for initial version
 
-### 9.2 Deliverables
+### 8.2 Deliverables
 
 | Item | Files |
 |------|-------|
@@ -751,11 +813,11 @@ ai_chatbot/tools/predictive/
 
 ---
 
-## Phase 10: Automation & Notifications
+## Phase 9: Automation & Notifications
 
 **Goal:** Scheduled reports, alerts, and automated workflows triggered by chat or conditions.
 
-### 10.1 Notification System (`ai_chatbot/automation/notifications/`)
+### 9.1 Notification System (`ai_chatbot/automation/notifications/`)
 
 ```
 ai_chatbot/automation/notifications/
@@ -775,13 +837,13 @@ ai_chatbot/automation/notifications/
   - "Alert when stock of Item X falls below reorder level"
 - Uses Frappe's scheduled tasks (`hooks.py`) for periodic checks
 
-### 10.2 Scheduled Reports
+### 9.2 Scheduled Reports
 
 - `generate_scheduled_report(report_type, company, recipients)` — generates report and sends via email/WhatsApp
 - Report types: daily sales summary, weekly financial summary, monthly P&L
 - Uses existing tool functions to gather data, formats as HTML email or PDF
 
-### 10.3 Deliverables
+### 9.3 Deliverables
 
 | Item | Files |
 |------|-------|
@@ -799,15 +861,14 @@ ai_chatbot/automation/notifications/
 | Phase | Focus | Key Deliverable | Dependencies Added |
 |-------|-------|------------------|--------------------|
 | **1** | Foundation | Data layer, multi-company/currency, security fixes | None |
-| **2** | Streaming | SSE token streaming, enhanced chat UX | None |
+| **2** | Streaming | Frappe Realtime (Socket.IO) token streaming, enhanced chat UX | None |
 | **3** | CRUD | Create/update/delete ERPNext records via chat | None |
 | **4** | Finance | 20+ finance tools, ECharts integration | echarts (npm) |
 | **5** | HRMS & CRM | Complete HRMS tools, expanded CRM | None |
-| **6** | Basic RAG | ChromaDB vector search, knowledge base | chromadb, pypdf |
-| **7** | Agentic RAG | Multi-agent orchestration, memory system | None |
-| **8** | IDP | Document extraction → ERPNext records | Pillow, pytesseract (optional) |
-| **9** | Predictive | Forecasting, anomaly detection | pandas, numpy, prophet (optional) |
-| **10** | Automation | Alerts, scheduled reports, notifications | slack_sdk (optional) |
+| **6** | Agentic RAG | Vector search + multi-agent orchestration + memory system | chromadb, pypdf, python-docx |
+| **7** | IDP | Document extraction → ERPNext records | Pillow, pytesseract (optional) |
+| **8** | Predictive | Forecasting, anomaly detection | pandas, numpy, prophet (optional) |
+| **9** | Automation | Alerts, scheduled reports, notifications | slack_sdk (optional) |
 
 ---
 
@@ -860,7 +921,7 @@ When a user asks for data in a specific currency (e.g., "Show sales in EUR"):
 2. Convert to requested currency using `currency.get_exchange_rate()`
 3. Return both the amount and currency code
 
-### Company Isolation for RAG (Phase 6+)
+### Company Isolation for RAG (Phase 6)
 
 Vector store collections are namespaced by company:
 - Collection name: `knowledge_{company_name_slug}`
@@ -886,15 +947,15 @@ ai_chatbot/
 │   ├── operations.py              # Phase 3
 │   └── validators.py              # Phase 3
 │
-├── api/                           # Phase 1, 2, 3, 8
+├── api/                           # Phase 1, 2, 3, 7
 │   ├── chat.py
 │   ├── streaming.py               # Phase 2
-│   └── documents.py               # Phase 8
+│   └── documents.py               # Phase 7
 │
 ├── utils/
 │   └── ai_providers.py
 │
-├── tools/                         # Phase 1, 3, 4, 5, 9
+├── tools/                         # Phase 1, 3, 4, 5, 8
 │   ├── registry.py                # Phase 1
 │   ├── base.py
 │   ├── operations/                # Phase 3
@@ -916,35 +977,35 @@ ai_chatbot/
 │   │   ├── receivables.py
 │   │   ├── payables.py
 │   │   └── cash_flow.py
-│   └── predictive/                # Phase 9
+│   └── predictive/                # Phase 8
 │       ├── demand_forecast.py
 │       ├── sales_forecast.py
 │       ├── cash_flow_forecast.py
 │       └── anomaly_detection.py
 │
-├── ai/                            # Phase 6, 7
-│   ├── rag/                       # Phase 6
+├── ai/                            # Phase 6 (Agentic RAG)
+│   ├── rag/                       # Phase 6 — vector retrieval
 │   │   ├── embeddings.py
 │   │   ├── vector_store.py
 │   │   ├── chunker.py
 │   │   └── retriever.py
-│   ├── agents/                    # Phase 7
+│   ├── agents/                    # Phase 6 — multi-agent orchestration
 │   │   ├── base_agent.py
 │   │   ├── orchestrator.py
 │   │   ├── planner_agent.py
 │   │   ├── analyst_agent.py
 │   │   └── document_agent.py
-│   └── memory/                    # Phase 7
+│   └── memory/                    # Phase 6 — memory system
 │       ├── conversation_memory.py
 │       ├── knowledge_memory.py
 │       └── memory_manager.py
 │
-├── idp/                           # Phase 8
+├── idp/                           # Phase 7
 │   ├── extractors/
 │   ├── validators/
 │   └── mappers/
 │
-├── automation/                    # Phase 10
+├── automation/                    # Phase 9
 │   └── notifications/
 │       ├── channels/
 │       └── alerts.py
@@ -955,8 +1016,8 @@ ai_chatbot/
 │       ├── chatbot_conversation/
 │       ├── chatbot_message/
 │       ├── chatbot_knowledge_base/    # Phase 6
-│       ├── chatbot_document_queue/    # Phase 8
-│       └── chatbot_alert/             # Phase 10
+│       ├── chatbot_document_queue/    # Phase 7
+│       └── chatbot_alert/             # Phase 9
 │
 └── tests/                         # All phases
     ├── unit/
@@ -970,24 +1031,24 @@ frontend/src/
 │   │   ├── ChatMessage.vue
 │   │   ├── ChatInput.vue
 │   │   ├── StreamingMessage.vue   # Phase 2
-│   │   └── AgentThinking.vue      # Phase 7
+│   │   └── AgentThinking.vue      # Phase 6
 │   ├── charts/                    # Phase 4
 │   │   ├── EChartRenderer.vue
 │   │   └── ChartMessage.vue
 │   ├── documents/                 # Phase 6
 │   │   ├── DocumentUploader.vue
 │   │   └── DocumentList.vue
-│   └── idp/                       # Phase 8
+│   └── idp/                       # Phase 7
 │       ├── ExtractionResult.vue
 │       └── MappingPreview.vue
 ├── pages/
 │   ├── ChatView.vue
 │   ├── KnowledgeBaseView.vue      # Phase 6
-│   └── DocumentProcessingView.vue # Phase 8
+│   └── DocumentProcessingView.vue # Phase 7
 ├── composables/                   # Phase 2+
 │   ├── useChat.js
-│   └── useStreaming.js
+│   └── useStreaming.js            # Phase 2 (Frappe realtime listener)
 └── utils/
     ├── api.js
-    └── streaming.js               # Phase 2
+    └── charts.js                  # Phase 4 (ECharts helpers)
 ```

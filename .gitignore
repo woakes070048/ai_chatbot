@@ -57,7 +57,9 @@ jspm_packages/
 ai_chatbot/public/frontend
 build
 yarn.lock
+package-lock.json
 
 .ruff_cache/
 .claude/
-
+docs/TEST.md
+docs/ENHANCEMENT_ROADMAP.md
