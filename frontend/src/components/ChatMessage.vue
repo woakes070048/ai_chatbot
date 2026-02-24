@@ -12,18 +12,6 @@
       <!-- User Message -->
       <div v-if="message.role === 'user'" class="text-white">
         <div class="flex items-start gap-3">
-          <img
-            v-if="userInfo?.avatar"
-            :src="userInfo.avatar"
-            :alt="userInfo.fullname || 'User'"
-            class="w-8 h-8 rounded-full object-cover flex-shrink-0"
-          />
-          <div
-            v-else
-            class="w-8 h-8 rounded-full bg-white bg-opacity-20 flex items-center justify-center text-sm font-semibold flex-shrink-0"
-          >
-            {{ userInitials }}
-          </div>
           <div class="flex-1">
             <p class="whitespace-pre-wrap">{{ message.content }}</p>
 
@@ -44,6 +32,18 @@
                 <span class="truncate max-w-[120px]">{{ att.file_name }}</span>
               </div>
             </div>
+          </div>
+          <img
+            v-if="userInfo?.avatar"
+            :src="userInfo.avatar"
+            :alt="userInfo.fullname || 'User'"
+            class="w-8 h-8 rounded-full object-cover flex-shrink-0"
+          />
+          <div
+            v-else
+            class="w-8 h-8 rounded-full bg-white bg-opacity-20 flex items-center justify-center text-sm font-semibold flex-shrink-0"
+          >
+            {{ userInitials }}
           </div>
         </div>
       </div>

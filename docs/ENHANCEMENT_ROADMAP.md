@@ -862,14 +862,17 @@ frappe.publish_realtime("ai_chat_process_step", {"step": "querying_database", "t
 
 ### 6A.9 Logo, Favicon & User Avatar ✅ (Partial — Pre-Phase 6A)
 
-**Files:** `www/ai-chatbot.html`, `api/chat.py`, `ChatMessage.vue`, `ChatView.vue`, `frontend/src/assets/logo.svg`
+**Files:** `www/ai-chatbot.html`, `api/chat.py`, `ChatMessage.vue`, `ChatView.vue`, `frontend/src/assets/logo.svg`, `frontend/public/favicon.svg`
 
 **Implemented:**
-- Favicon: `<link rel="icon" type="image/svg+xml" href="/assets/ai_chatbot/frontend/favicon.svg">` in HTML template
-- AI messages: App logo SVG (`logo.svg`) replaces hardcoded "AI" text avatar
-- User messages: User's profile image (`user_image` from Frappe) displayed as avatar; initials fallback (e.g. "SK" for "Sanjay Kumar") when no avatar is set
+- Favicon: Custom orbital SVG design (violet/purple gradient with RGB dots) as browser tab icon
+- Logo: Matching orbital SVG design used as AI assistant avatar on all AI messages
+- AI messages: Logo SVG replaces hardcoded "AI" text avatar
+- User messages: User's profile image (`user_image` from Frappe) displayed as avatar on **right side** of message bubble; initials fallback (e.g. "SK" for "Sanjay Kumar") when no avatar is set
 - Backend: `get_settings` API returns `user.fullname` and `user.avatar` via `get_fullname_and_avatar()`
 - Streaming messages: Logo SVG used for AI avatar during streaming
+- **Centered input on New Chat:** When conversation has no messages, the input component is centered both horizontally and vertically with a personalized greeting ("Hello, {name}!"); once a message is sent, the input moves to the bottom of the screen
+- **Personalized greeting:** Logo + "Hello, {UserFullName}! How can I help you today?" displayed on empty conversations
 
 **Remaining for full 6A.9:**
 - Display logo in sidebar header

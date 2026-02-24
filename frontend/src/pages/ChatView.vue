@@ -33,86 +33,114 @@
         @toggle-sidebar="toggleSidebar"
       />
 
-      <!-- Messages Area -->
+      <!-- Empty state: centered greeting + input -->
       <div
-        ref="messagesContainer"
-        class="flex-1 overflow-y-auto px-4 py-6 space-y-4"
+        v-if="hasNoMessages"
+        class="flex-1 flex flex-col items-center justify-center px-4"
       >
-        <ChatMessage
-          v-for="message in messages"
-          :key="message.name || message._tempId"
-          :message="message"
-          :user-info="userInfo"
-        />
+        <div class="text-center mb-8">
+          <img :src="logoSvg" alt="AI Chatbot" class="w-16 h-16 mx-auto mb-4" />
+          <h1 class="text-2xl font-semibold text-gray-800 mb-2">
+            Hello, {{ userInfo.fullname || 'there' }}!
+          </h1>
+          <p class="text-gray-500">How can I help you today?</p>
+        </div>
 
-        <!-- Streaming Message (live tokens) -->
-        <div v-if="isStreaming && streamingContent" class="flex justify-start">
-          <div class="max-w-3xl rounded-2xl px-6 py-4 shadow-sm bg-white border border-gray-200">
-            <div class="text-gray-800">
-              <div class="flex items-start gap-3">
-                <img
-                  :src="logoSvg"
-                  alt="AI"
-                  class="w-8 h-8 rounded-full flex-shrink-0"
-                />
-                <div class="flex-1">
-                  <!-- Tool calls in progress -->
-                  <div v-if="streamToolCalls.length > 0" class="mb-3">
-                    <div
-                      v-for="(tc, idx) in streamToolCalls"
-                      :key="idx"
-                      class="flex items-center gap-2 p-2 bg-blue-50 border border-blue-200 rounded-lg mb-2"
-                    >
+        <div class="w-full max-w-2xl">
+          <ChatInput
+            :disabled="isLoading || !currentConversation"
+            :is-streaming="isStreaming"
+            :show-suggestions="showSuggestions"
+            @send="handleSendMessage"
+            @stop="handleStopGeneration"
+            @voice-start="warmupTTS"
+          />
+        </div>
+      </div>
+
+      <!-- Conversation state: messages + bottom-pinned input -->
+      <template v-else>
+        <!-- Messages Area -->
+        <div
+          ref="messagesContainer"
+          class="flex-1 overflow-y-auto px-4 py-6 space-y-4"
+        >
+          <ChatMessage
+            v-for="message in messages"
+            :key="message.name || message._tempId"
+            :message="message"
+            :user-info="userInfo"
+          />
+
+          <!-- Streaming Message (live tokens) -->
+          <div v-if="isStreaming && streamingContent" class="flex justify-start">
+            <div class="max-w-3xl rounded-2xl px-6 py-4 shadow-sm bg-white border border-gray-200">
+              <div class="text-gray-800">
+                <div class="flex items-start gap-3">
+                  <img
+                    :src="logoSvg"
+                    alt="AI"
+                    class="w-8 h-8 rounded-full flex-shrink-0"
+                  />
+                  <div class="flex-1">
+                    <!-- Tool calls in progress -->
+                    <div v-if="streamToolCalls.length > 0" class="mb-3">
                       <div
-                        v-if="tc.status === 'executing'"
-                        class="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin flex-shrink-0"
-                      ></div>
-                      <svg
-                        v-else
-                        class="w-4 h-4 text-green-600 flex-shrink-0"
-                        fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                        v-for="(tc, idx) in streamToolCalls"
+                        :key="idx"
+                        class="flex items-center gap-2 p-2 bg-blue-50 border border-blue-200 rounded-lg mb-2"
                       >
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                      </svg>
-                      <span class="text-sm text-blue-800">
-                        {{ formatToolName(tc.name) }}
-                        <span v-if="tc.status === 'executing'" class="text-blue-500">...</span>
-                      </span>
+                        <div
+                          v-if="tc.status === 'executing'"
+                          class="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin flex-shrink-0"
+                        ></div>
+                        <svg
+                          v-else
+                          class="w-4 h-4 text-green-600 flex-shrink-0"
+                          fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                        >
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                        </svg>
+                        <span class="text-sm text-blue-800">
+                          {{ formatToolName(tc.name) }}
+                          <span v-if="tc.status === 'executing'" class="text-blue-500">...</span>
+                        </span>
+                      </div>
                     </div>
+
+                    <!-- Streaming content -->
+                    <div
+                      v-if="streamingContent"
+                      v-html="renderedStreamingContent"
+                      class="markdown-body prose prose-sm max-w-none"
+                    ></div>
+
+                    <!-- Blinking cursor -->
+                    <span class="inline-block w-2 h-5 bg-blue-600 animate-pulse ml-0.5 align-text-bottom"></span>
                   </div>
-
-                  <!-- Streaming content -->
-                  <div
-                    v-if="streamingContent"
-                    v-html="renderedStreamingContent"
-                    class="markdown-body prose prose-sm max-w-none"
-                  ></div>
-
-                  <!-- Blinking cursor -->
-                  <span class="inline-block w-2 h-5 bg-blue-600 animate-pulse ml-0.5 align-text-bottom"></span>
                 </div>
               </div>
             </div>
           </div>
-        </div>
 
-        <!-- Typing indicator: shown while waiting for response (before streaming tokens arrive) -->
-        <div v-if="isLoading && !streamingContent" class="flex justify-start">
-          <div class="bg-white rounded-2xl px-6 py-4 shadow-sm border border-gray-200 max-w-3xl">
-            <TypingIndicator />
+          <!-- Typing indicator: shown while waiting for response (before streaming tokens arrive) -->
+          <div v-if="isLoading && !streamingContent" class="flex justify-start">
+            <div class="bg-white rounded-2xl px-6 py-4 shadow-sm border border-gray-200 max-w-3xl">
+              <TypingIndicator />
+            </div>
           </div>
         </div>
-      </div>
 
-      <!-- Input Area -->
-      <ChatInput
-        :disabled="isLoading || !currentConversation"
-        :is-streaming="isStreaming"
-        :show-suggestions="showSuggestions"
-        @send="handleSendMessage"
-        @stop="handleStopGeneration"
-        @voice-start="warmupTTS"
-      />
+        <!-- Input Area (bottom-pinned) -->
+        <ChatInput
+          :disabled="isLoading || !currentConversation"
+          :is-streaming="isStreaming"
+          :show-suggestions="false"
+          @send="handleSendMessage"
+          @stop="handleStopGeneration"
+          @voice-start="warmupTTS"
+        />
+      </template>
     </div>
   </div>
 </template>
@@ -156,6 +184,11 @@ const lastMessageWasVoice = ref(false)
 
 // Show prompt suggestions when conversation has no messages
 const showSuggestions = computed(() => messages.value.length === 0)
+
+// Empty state: no messages and not currently loading/streaming
+const hasNoMessages = computed(() =>
+  messages.value.length === 0 && !isLoading.value && !isStreaming.value
+)
 
 // Streaming composable
 const {
