@@ -1,3 +1,5 @@
+<!-- Copyright (c) 2026, Sanjay Kumar and contributors -->
+<!-- For license information, please see license.txt -->
 <template>
   <div class="mt-4 border border-gray-200 rounded-lg overflow-hidden">
     <EChartRenderer :option="echartOption" :height="320" />

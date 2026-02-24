@@ -1,3 +1,5 @@
+<!-- Copyright (c) 2026, Sanjay Kumar and contributors -->
+<!-- For license information, please see license.txt -->
 <template>
   <div
     class="flex chat-message"
@@ -10,8 +12,17 @@
       <!-- User Message -->
       <div v-if="message.role === 'user'" class="text-white">
         <div class="flex items-start gap-3">
-          <div class="w-8 h-8 rounded-full bg-white bg-opacity-20 flex items-center justify-center text-sm font-semibold flex-shrink-0">
-            U
+          <img
+            v-if="userInfo?.avatar"
+            :src="userInfo.avatar"
+            :alt="userInfo.fullname || 'User'"
+            class="w-8 h-8 rounded-full object-cover flex-shrink-0"
+          />
+          <div
+            v-else
+            class="w-8 h-8 rounded-full bg-white bg-opacity-20 flex items-center justify-center text-sm font-semibold flex-shrink-0"
+          >
+            {{ userInitials }}
           </div>
           <div class="flex-1">
             <p class="whitespace-pre-wrap">{{ message.content }}</p>
@@ -40,9 +51,11 @@
       <!-- Assistant Message -->
       <div v-else class="text-gray-800">
         <div class="flex items-start gap-3">
-          <div class="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-sm font-semibold text-blue-600 flex-shrink-0">
-            AI
-          </div>
+          <img
+            :src="logoSvg"
+            alt="AI"
+            class="w-8 h-8 rounded-full flex-shrink-0"
+          />
           <div class="flex-1">
             <!-- Markdown Content -->
             <div
@@ -129,6 +142,7 @@ import { Wrench, PenSquare, Volume2, VolumeX, FileText } from 'lucide-vue-next'
 import { renderMarkdown } from '../utils/markdown'
 import { useVoiceOutput } from '../composables/useVoiceOutput'
 import ChartMessage from './charts/ChartMessage.vue'
+import logoSvg from '../assets/logo.svg'
 
 const voiceOutput = useVoiceOutput()
 
@@ -137,6 +151,21 @@ const props = defineProps({
     type: Object,
     required: true,
   },
+  userInfo: {
+    type: Object,
+    default: () => ({ fullname: '', avatar: '' }),
+  },
+})
+
+// Compute user initials from fullname (e.g. "Sanjay Kumar" → "SK")
+const userInitials = computed(() => {
+  const name = props.userInfo?.fullname || ''
+  if (!name) return 'U'
+  const parts = name.trim().split(/\s+/)
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+  }
+  return parts[0][0].toUpperCase()
 })
 
 // Parse attachments from message (JSON string or array)

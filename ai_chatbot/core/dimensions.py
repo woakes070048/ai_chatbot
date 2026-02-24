@@ -1,3 +1,5 @@
+# Copyright (c) 2026, Sanjay Kumar and contributors
+# For license information, please see license.txt
 """
 Accounting Dimensions Helpers
 Discover active accounting dimensions and apply dimension filters to queries.

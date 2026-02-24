@@ -1,3 +1,5 @@
+<!-- Copyright (c) 2026, Sanjay Kumar and contributors -->
+<!-- For license information, please see license.txt -->
 <template>
   <div class="w-80 bg-gray-50 border-r border-gray-200 flex flex-col h-full">
     <!-- Header -->

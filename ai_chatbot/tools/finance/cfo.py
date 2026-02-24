@@ -1,3 +1,5 @@
+# Copyright (c) 2026, Sanjay Kumar and contributors
+# For license information, please see license.txt
 """
 CFO Reporting Tools
 Composite analysis tools that aggregate data from existing finance tools for AI Chatbot

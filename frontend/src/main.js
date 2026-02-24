@@ -1,3 +1,5 @@
+// Copyright (c) 2026, Sanjay Kumar and contributors
+// For license information, please see license.txt
 import { createApp } from 'vue'
 import { createRouter, createWebHistory } from 'vue-router'
 import App from './App.vue'

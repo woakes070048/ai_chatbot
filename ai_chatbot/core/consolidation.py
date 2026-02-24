@@ -1,3 +1,5 @@
+# Copyright (c) 2026, Sanjay Kumar and contributors
+# For license information, please see license.txt
 """
 Multi-Company Consolidation Helpers
 Parent company detection, child company discovery, and consolidated data execution.

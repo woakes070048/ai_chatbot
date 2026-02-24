@@ -1,3 +1,5 @@
+# Copyright (c) 2026, Sanjay Kumar and contributors
+# For license information, please see license.txt
 """
 Search Tools Module
 Search and lookup tools for AI Chatbot (read-only operations)

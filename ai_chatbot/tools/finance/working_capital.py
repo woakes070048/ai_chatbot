@@ -1,3 +1,5 @@
+# Copyright (c) 2026, Sanjay Kumar and contributors
+# For license information, please see license.txt
 """
 Working Capital Analysis Tools
 Working capital summary and cash conversion cycle for AI Chatbot

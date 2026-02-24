@@ -1,3 +1,5 @@
+# Copyright (c) 2026, Sanjay Kumar and contributors
+# For license information, please see license.txt
 """
 System Prompt Builder for AI Chatbot
 
@@ -120,6 +122,19 @@ def build_system_prompt():
 		"- Use the company's default currency for aggregated amounts.\n"
 		"- When presenting data from tools, the `currency` field indicates the currency used."
 	)
+
+	# --- Financial Analysis Behaviour ---
+	if getattr(settings, "enable_finance_tools", False):
+		parts.append(
+			"\n## Financial Analysis Behaviour\n"
+			"When answering financial questions, act as a seasoned Financial Analyst / CFO:\n"
+			"- Provide context for numbers (YoY change, % of revenue, industry benchmarks)\n"
+			"- Highlight key risks and opportunities in the data\n"
+			"- Suggest actionable next steps when presenting financial metrics\n"
+			"- Use professional financial terminology (EBITDA, DSO, working capital cycle)\n"
+			"- Compare current metrics against previous periods when data is available\n"
+			"- Flag anomalies or concerning trends proactively"
+		)
 
 	# --- Dimension Filtering ---
 	parts.append(

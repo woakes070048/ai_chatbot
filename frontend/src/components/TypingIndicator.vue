@@ -1,3 +1,5 @@
+<!-- Copyright (c) 2026, Sanjay Kumar and contributors -->
+<!-- For license information, please see license.txt -->
 <template>
   <div class="flex justify-start">
     <div class="max-w-3xl rounded-2xl px-6 py-4 shadow-sm bg-white border border-gray-200">

@@ -1,3 +1,5 @@
+# Copyright (c) 2026, Sanjay Kumar and contributors
+# For license information, please see license.txt
 """
 Update Tools Module
 Document update tools for AI Chatbot (write operations)

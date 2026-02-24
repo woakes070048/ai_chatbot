@@ -1,3 +1,5 @@
+# Copyright (c) 2026, Sanjay Kumar and contributors
+# For license information, please see license.txt
 """
 Structured Logging for AI Chatbot
 Wraps frappe.log_error with consistent formatting.

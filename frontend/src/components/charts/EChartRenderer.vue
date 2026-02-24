@@ -1,3 +1,5 @@
+<!-- Copyright (c) 2026, Sanjay Kumar and contributors -->
+<!-- For license information, please see license.txt -->
 <template>
   <div ref="chartContainer" :style="{ width: '100%', height: height + 'px' }"></div>
 </template>

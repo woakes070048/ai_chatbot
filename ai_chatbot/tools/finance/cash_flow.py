@@ -1,3 +1,5 @@
+# Copyright (c) 2026, Sanjay Kumar and contributors
+# For license information, please see license.txt
 """
 Enhanced Cash Flow Tools
 Cash flow statement, trend analysis, and bank balances for AI Chatbot

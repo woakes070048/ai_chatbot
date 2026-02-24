@@ -1,3 +1,5 @@
+# Copyright (c) 2026, Sanjay Kumar and contributors
+# For license information, please see license.txt
 """
 Selling Tools Module
 Sales and customer analytics tools for AI Chatbot

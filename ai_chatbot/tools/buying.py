@@ -1,3 +1,5 @@
+# Copyright (c) 2026, Sanjay Kumar and contributors
+# For license information, please see license.txt
 """
 Buying Tools Module
 Purchase and supplier management tools for AI Chatbot

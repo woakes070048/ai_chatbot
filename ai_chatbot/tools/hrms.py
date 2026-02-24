@@ -1,3 +1,5 @@
+# Copyright (c) 2026, Sanjay Kumar and contributors
+# For license information, please see license.txt
 """
 HRMS Tools Module
 Human Resource Management tools for AI Chatbot

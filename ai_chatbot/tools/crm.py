@@ -1,3 +1,5 @@
+# Copyright (c) 2026, Sanjay Kumar and contributors
+# For license information, please see license.txt
 """
 CRM Tools Module
 Customer Relationship Management tools for AI Chatbot

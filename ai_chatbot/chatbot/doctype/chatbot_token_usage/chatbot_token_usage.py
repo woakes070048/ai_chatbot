@@ -1,3 +1,8 @@
 # Copyright (c) 2026, Sanjay Kumar and contributors
 # For license information, please see license.txt
-__version__ = "0.0.1"
+import frappe
+from frappe.model.document import Document
+
+
+class ChatbotTokenUsage(Document):
+	pass

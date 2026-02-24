@@ -1,3 +1,5 @@
+# Copyright (c) 2026, Sanjay Kumar and contributors
+# For license information, please see license.txt
 """
 Streaming API Module
 Real-time token streaming via frappe.publish_realtime (Socket.IO/WebSocket)
@@ -13,6 +15,8 @@ import uuid
 import frappe
 
 from ai_chatbot.core.prompts import build_system_prompt
+from ai_chatbot.core.token_optimizer import optimize_history
+from ai_chatbot.core.token_tracker import track_token_usage
 from ai_chatbot.tools.base import BaseTool, get_all_tools_schema
 from ai_chatbot.utils.ai_providers import get_ai_provider
 
@@ -104,6 +108,9 @@ def _run_streaming_job(conversation_id: str, stream_id: str, ai_provider: str, u
 		system_prompt = build_system_prompt()
 		history = [{"role": "system", "content": system_prompt}, *history]
 
+		# Optimize history (trim + compress tool results)
+		history = optimize_history(history)
+
 		provider = get_ai_provider(ai_provider)
 		tools = get_all_tools_schema()
 
@@ -131,6 +138,16 @@ def _run_streaming_job(conversation_id: str, stream_id: str, ai_provider: str, u
 				"tool_results": json.dumps(tool_results_data) if tool_results_data else None,
 			}
 		).insert()
+
+		# Track token usage (streaming uses estimated tokens)
+		track_token_usage(
+			provider=ai_provider,
+			model=provider.model,
+			prompt_tokens=0,
+			completion_tokens=tokens_used,
+			user=user,
+			conversation_id=conversation_id,
+		)
 
 		# Update conversation metadata
 		conversation = frappe.get_doc("Chatbot Conversation", conversation_id)
@@ -217,7 +234,7 @@ def _stream_with_tools(
 		all_tool_calls.extend(round_tool_calls)
 
 		# Add assistant message with tool calls to history
-		if ai_provider == "OpenAI":
+		if ai_provider in ("OpenAI", "Gemini"):
 			openai_tool_calls = []
 			for tc in round_tool_calls:
 				openai_tool_calls.append(

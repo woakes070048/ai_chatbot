@@ -1,3 +1,5 @@
+# Copyright (c) 2026, Sanjay Kumar and contributors
+# For license information, please see license.txt
 """
 Budget Analysis Tools
 Budget vs actual comparison and variance analysis for AI Chatbot

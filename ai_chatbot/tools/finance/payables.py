@@ -1,3 +1,5 @@
+# Copyright (c) 2026, Sanjay Kumar and contributors
+# For license information, please see license.txt
 """
 Accounts Payable Tools
 AP aging analysis and top creditors for AI Chatbot

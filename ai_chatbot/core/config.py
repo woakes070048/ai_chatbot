@@ -1,3 +1,5 @@
+# Copyright (c) 2026, Sanjay Kumar and contributors
+# For license information, please see license.txt
 """
 Centralized Configuration for AI Chatbot
 Reads from Chatbot Settings DocType and user defaults.

@@ -1,3 +1,5 @@
+<!-- Copyright (c) 2026, Sanjay Kumar and contributors -->
+<!-- For license information, please see license.txt -->
 <template>
   <div class="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-4 shadow-md">
     <div class="flex items-center gap-4">
@@ -86,6 +88,7 @@ const dropdownOpen = ref(false)
 const providerOptions = [
   { label: 'OpenAI', value: 'OpenAI' },
   { label: 'Claude', value: 'Claude' },
+  { label: 'Gemini', value: 'Gemini' },
 ]
 
 const selectProvider = (value) => {

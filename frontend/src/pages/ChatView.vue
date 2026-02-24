@@ -1,3 +1,5 @@
+<!-- Copyright (c) 2026, Sanjay Kumar and contributors -->
+<!-- For license information, please see license.txt -->
 <template>
   <div class="flex h-screen overflow-hidden">
     <!-- Sidebar (collapsible) -->
@@ -40,6 +42,7 @@
           v-for="message in messages"
           :key="message.name || message._tempId"
           :message="message"
+          :user-info="userInfo"
         />
 
         <!-- Streaming Message (live tokens) -->
@@ -47,9 +50,11 @@
           <div class="max-w-3xl rounded-2xl px-6 py-4 shadow-sm bg-white border border-gray-200">
             <div class="text-gray-800">
               <div class="flex items-start gap-3">
-                <div class="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-sm font-semibold text-blue-600 flex-shrink-0">
-                  AI
-                </div>
+                <img
+                  :src="logoSvg"
+                  alt="AI"
+                  class="w-8 h-8 rounded-full flex-shrink-0"
+                />
                 <div class="flex-1">
                   <!-- Tool calls in progress -->
                   <div v-if="streamToolCalls.length > 0" class="mb-3">
@@ -123,6 +128,7 @@ import { chatAPI } from '../utils/api'
 import { renderMarkdown } from '../utils/markdown'
 import { useStreaming } from '../composables/useStreaming'
 import { useSocket } from '../composables/useSocket'
+import logoSvg from '../assets/logo.svg'
 import { useVoiceOutput } from '../composables/useVoiceOutput'
 
 const conversations = ref([])
@@ -132,6 +138,9 @@ const isLoading = ref(false)
 const selectedProvider = ref('OpenAI')
 const messagesContainer = ref(null)
 const streamingEnabled = ref(true)
+
+// Current user info (fullname + avatar)
+const userInfo = ref({ fullname: '', avatar: '' })
 
 // Sidebar toggle (persisted in localStorage)
 const sidebarCollapsed = ref(localStorage.getItem('ai_chatbot_sidebar') === 'collapsed')
@@ -181,6 +190,12 @@ onMounted(async () => {
 
   if (settingsResult?.success) {
     streamingEnabled.value = settingsResult.settings.enable_streaming ?? true
+    if (settingsResult.settings.ai_provider) {
+      selectedProvider.value = settingsResult.settings.ai_provider
+    }
+    if (settingsResult.user) {
+      userInfo.value = settingsResult.user
+    }
   }
 
   // Initialize Socket.IO connection if streaming is enabled

@@ -39,7 +39,7 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "AI Provider",
-   "options": "OpenAI\nClaude",
+   "options": "OpenAI\nClaude\nGemini",
    "reqd": 1
   },
   {

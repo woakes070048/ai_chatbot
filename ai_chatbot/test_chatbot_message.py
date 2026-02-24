@@ -1,3 +1,5 @@
+# Copyright (c) 2026, Sanjay Kumar and contributors
+# For license information, please see license.txt
 #!/usr/bin/env python3
 """
 Check what's in the Chatbot Message that's causing repetitive display

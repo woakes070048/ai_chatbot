@@ -1,3 +1,5 @@
+# Copyright (c) 2026, Sanjay Kumar and contributors
+# For license information, please see license.txt
 """
 Stock Tools Module
 Inventory and warehouse management tools for AI Chatbot

@@ -1,3 +1,5 @@
+# Copyright (c) 2026, Sanjay Kumar and contributors
+# For license information, please see license.txt
 """
 Create Tools Module
 Document creation tools for AI Chatbot (write operations)

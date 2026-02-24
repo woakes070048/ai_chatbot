@@ -1,3 +1,5 @@
+# Copyright (c) 2026, Sanjay Kumar and contributors
+# For license information, please see license.txt
 """
 Chat API Module
 RESTful API endpoints for AI chatbot
@@ -8,6 +10,8 @@ import json
 import frappe
 
 from ai_chatbot.core.prompts import build_system_prompt
+from ai_chatbot.core.token_optimizer import optimize_history
+from ai_chatbot.core.token_tracker import track_token_usage
 from ai_chatbot.tools.base import BaseTool, get_all_tools_schema
 from ai_chatbot.utils.ai_providers import get_ai_provider
 
@@ -155,6 +159,9 @@ def send_message(conversation_id: str, message: str, stream: bool = False, attac
 		system_prompt = build_system_prompt()
 		history = [{"role": "system", "content": system_prompt}, *history]
 
+		# Optimize history (trim + compress tool results)
+		history = optimize_history(history)
+
 		# Get AI provider
 		provider = get_ai_provider(conversation.ai_provider)
 
@@ -204,33 +211,62 @@ def get_conversation_history(conversation_id: str) -> list[dict]:
 	return history
 
 
+def _is_openai_format(provider_name: str) -> bool:
+	"""Return True if the provider uses OpenAI-compatible response format."""
+	return provider_name in ("OpenAI", "Gemini")
+
+
+def _extract_response(provider_name: str, response: dict) -> tuple:
+	"""Extract content, tool_calls, prompt_tokens, completion_tokens from a provider response."""
+	if _is_openai_format(provider_name):
+		msg = response["choices"][0]["message"]
+		content = msg.get("content") or ""
+		tool_calls = msg.get("tool_calls", [])
+		usage = response.get("usage", {})
+		prompt_tokens = usage.get("prompt_tokens", 0)
+		completion_tokens = usage.get("completion_tokens", 0)
+	else:  # Claude
+		content = ""
+		tool_calls = []
+		for block in response.get("content", []):
+			if block.get("type") == "text":
+				content += block.get("text", "")
+			elif block.get("type") == "tool_use":
+				tool_calls.append(block)
+		usage = response.get("usage", {})
+		prompt_tokens = usage.get("input_tokens", 0)
+		completion_tokens = usage.get("output_tokens", 0)
+
+	return content, tool_calls, prompt_tokens, completion_tokens
+
+
+def _extract_tool_info(provider_name: str, tool_call: dict) -> tuple:
+	"""Extract (func_name, func_args) from a tool_call dict."""
+	if _is_openai_format(provider_name):
+		func_name = tool_call["function"]["name"]
+		func_args = json.loads(tool_call["function"]["arguments"])
+	else:  # Claude
+		func_name = tool_call["name"]
+		func_args = tool_call.get("input", {})
+	return func_name, func_args
+
+
 def generate_ai_response(conversation, provider, history, tools) -> dict:
-	"""Generate non-streaming AI response"""
+	"""Generate non-streaming AI response with provider-agnostic parsing."""
 	try:
 		response = provider.chat_completion(history, tools=tools, stream=False)
+		ai_provider = conversation.ai_provider
 
 		# Extract response content
-		if conversation.ai_provider == "OpenAI":
-			content = response["choices"][0]["message"]["content"]
-			tool_calls = response["choices"][0]["message"].get("tool_calls", [])
-			tokens_used = response["usage"]["total_tokens"]
-		else:  # Claude
-			content = response["content"][0]["text"] if response["content"] else ""
-			tool_calls = []
-			tokens_used = response["usage"]["input_tokens"] + response["usage"]["output_tokens"]
+		content, tool_calls, prompt_tokens, completion_tokens = _extract_response(ai_provider, response)
+		tokens_used = prompt_tokens + completion_tokens
 
-			# Handle tool calls if present
+		# Handle tool calls if present
 		all_tool_results = []
 		if tool_calls:
 			tool_results = []
 			for tool_call in tool_calls:
-				if conversation.ai_provider == "OpenAI":
-					func_name = tool_call["function"]["name"]
-					func_args = json.loads(tool_call["function"]["arguments"])
-				else:
-					func_name = tool_call["name"]
-					func_args = tool_call["input"]
-
+				func_name, func_args = _extract_tool_info(ai_provider, tool_call)
 				result = BaseTool.execute_tool(func_name, func_args)
 				tool_results.append(result)
 
@@ -256,14 +292,20 @@ def generate_ai_response(conversation, provider, history, tools) -> dict:
 
 			# Get final response with tool results
 			final_response = provider.chat_completion(history, tools=tools, stream=False)
-			if conversation.ai_provider == "OpenAI":
-				content = final_response["choices"][0]["message"]["content"]
-				tokens_used += final_response["usage"]["total_tokens"]
-			else:
-				content = final_response["content"][0]["text"]
-				tokens_used += (
-					final_response["usage"]["input_tokens"] + final_response["usage"]["output_tokens"]
-				)
+			final_content, _, final_prompt, final_completion = _extract_response(ai_provider, final_response)
+			content = final_content
+			prompt_tokens += final_prompt
+			completion_tokens += final_completion
+			tokens_used = prompt_tokens + completion_tokens
+
+		# Track token usage
+		track_token_usage(
+			provider=ai_provider,
+			model=provider.model,
+			prompt_tokens=prompt_tokens,
+			completion_tokens=completion_tokens,
+			conversation_id=conversation.name,
+		)
 
 		# Save assistant message
 		frappe.get_doc(
@@ -358,14 +400,22 @@ def update_conversation_title(conversation_id: str, title: str) -> dict:
 
 @frappe.whitelist()
 def get_settings() -> dict:
-	"""Get chatbot settings"""
+	"""Get chatbot settings and current user info"""
 	try:
 		settings = frappe.get_single("Chatbot Settings")
+
+		# Get current user's fullname and avatar
+		from frappe.utils.user import get_fullname_and_avatar
+
+		user_info = get_fullname_and_avatar(frappe.session.user)
+
+		# Unified provider (new) or legacy dual-provider flags
+		ai_provider = getattr(settings, "ai_provider", None)
+
 		return {
 			"success": True,
 			"settings": {
-				"openai_enabled": settings.openai_enabled,
-				"claude_enabled": settings.claude_enabled,
+				"ai_provider": ai_provider or "OpenAI",
 				"enable_streaming": settings.enable_streaming if hasattr(settings, "enable_streaming") else 1,
 				"tools_enabled": {
 					"crm": settings.enable_crm_tools,
@@ -375,6 +425,10 @@ def get_settings() -> dict:
 					"inventory": settings.enable_inventory_tools,
 					"operations": getattr(settings, "enable_write_operations", 0),
 				},
+			},
+			"user": {
+				"fullname": user_info.get("fullname"),
+				"avatar": user_info.get("avatar"),
 			},
 		}
 	except Exception as e:

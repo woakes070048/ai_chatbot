@@ -1,12 +1,24 @@
+# Copyright (c) 2026, Sanjay Kumar and contributors
+# For license information, please see license.txt
 """
 AI Provider Integration Module
-Handles OpenAI and Claude API integrations with streaming support
+Handles OpenAI, Claude, and Gemini API integrations with streaming support.
+
+Provider configuration uses the unified Chatbot Settings fields:
+  ai_provider, api_key, model, temperature, max_tokens
 """
 
 import json
 
 import frappe
 import requests
+
+# Default models per provider
+DEFAULT_MODELS = {
+	"OpenAI": "gpt-4o",
+	"Claude": "claude-sonnet-4-5-20250929",
+	"Gemini": "gemini-2.5-flash",
+}
 
 
 class AIProvider:
@@ -38,15 +50,15 @@ class OpenAIProvider(AIProvider):
 
 	def __init__(self, settings):
 		super().__init__(settings)
-		self.api_key = settings.get("openai_api_key")
-		self.model = settings.get("openai_model", "gpt-4o")
-		self.temperature = settings.get("openai_temperature", 0.7)
-		self.max_tokens = settings.get("openai_max_tokens", 4000)
+		self.api_key = settings.get("api_key")
+		self.model = settings.get("model") or DEFAULT_MODELS["OpenAI"]
+		self.temperature = settings.get("temperature") or 0.7
+		self.max_tokens = settings.get("max_tokens") or 4000
 		self.base_url = "https://api.openai.com/v1"
 
 	def validate_settings(self):
 		if not self.api_key:
-			frappe.throw("OpenAI API Key is required")
+			frappe.throw("API Key is required for OpenAI")
 		return True
 
 	def chat_completion(self, messages, tools=None, stream=False):
@@ -186,21 +198,44 @@ class OpenAIProvider(AIProvider):
 			yield {"type": "error", "content": str(e)}
 
 
+class GeminiProvider(OpenAIProvider):
+	"""Google Gemini provider via OpenAI-compatible endpoint.
+
+	Gemini exposes an OpenAI-compatible /chat/completions API at
+	generativelanguage.googleapis.com, so we extend OpenAIProvider
+	and only override the base URL and defaults.
+	"""
+
+	def __init__(self, settings):
+		# Skip OpenAIProvider.__init__ — set fields directly
+		AIProvider.__init__(self, settings)
+		self.api_key = settings.get("api_key")
+		self.model = settings.get("model") or DEFAULT_MODELS["Gemini"]
+		self.temperature = settings.get("temperature") or 1.0
+		self.max_tokens = settings.get("max_tokens") or 8192
+		self.base_url = "https://generativelanguage.googleapis.com/v1beta/openai"
+
+	def validate_settings(self):
+		if not self.api_key:
+			frappe.throw("API Key is required for Gemini")
+		return True
+
+
 class ClaudeProvider(AIProvider):
 	"""Anthropic Claude API Integration"""
 
 	def __init__(self, settings):
 		super().__init__(settings)
-		self.api_key = settings.get("claude_api_key")
-		self.model = settings.get("claude_model", "claude-sonnet-4-5-20250929")
-		self.temperature = settings.get("claude_temperature", 0.7)
-		self.max_tokens = settings.get("claude_max_tokens", 4000)
+		self.api_key = settings.get("api_key")
+		self.model = settings.get("model") or DEFAULT_MODELS["Claude"]
+		self.temperature = settings.get("temperature") or 0.7
+		self.max_tokens = settings.get("max_tokens") or 4000
 		self.base_url = "https://api.anthropic.com/v1"
 		self.api_version = "2023-06-01"
 
 	def validate_settings(self):
 		if not self.api_key:
-			frappe.throw("Claude API Key is required")
+			frappe.throw("API Key is required for Claude")
 		return True
 
 	def chat_completion(self, messages, tools=None, stream=False):
@@ -449,17 +484,55 @@ class ClaudeProvider(AIProvider):
 		return claude_tools
 
 
-def get_ai_provider(provider_name: str):
-	"""Factory function to get AI provider instance"""
+def _resolve_settings(provider_name: str) -> dict:
+	"""Build a unified settings dict for the given provider.
+
+	Reads the new unified fields first; falls back to legacy per-provider
+	fields for backward compatibility with existing deployments.
+	"""
 	settings = frappe.get_single("Chatbot Settings")
+	sd = settings.as_dict()
+
+	# New unified fields — use get_password for encrypted Password field
+	api_key = settings.get_password("api_key") if sd.get("api_key") else None
+	model = sd.get("model")
+	temperature = sd.get("temperature")
+	max_tokens = sd.get("max_tokens")
+
+	# Fallback to legacy fields if unified api_key is not set
+	if not api_key:
+		if provider_name == "OpenAI":
+			api_key = sd.get("openai_api_key")
+			model = model or sd.get("openai_model")
+			temperature = temperature or sd.get("openai_temperature")
+			max_tokens = max_tokens or sd.get("openai_max_tokens")
+		elif provider_name == "Claude":
+			api_key = sd.get("claude_api_key")
+			model = model or sd.get("claude_model")
+			temperature = temperature or sd.get("claude_temperature")
+			max_tokens = max_tokens or sd.get("claude_max_tokens")
+
+	return {
+		"api_key": api_key,
+		"model": model or DEFAULT_MODELS.get(provider_name),
+		"temperature": temperature or 0.7,
+		"max_tokens": max_tokens or 4000,
+	}
+
+
+def get_ai_provider(provider_name: str) -> AIProvider:
+	"""Factory function to get AI provider instance.
+
+	Uses the unified Chatbot Settings fields, with fallback to legacy
+	per-provider fields for backward compatibility.
+	"""
+	resolved = _resolve_settings(provider_name)
 
 	if provider_name == "OpenAI":
-		if not settings.openai_enabled:
-			frappe.throw("OpenAI is not enabled in settings")
-		return OpenAIProvider(settings.as_dict())
+		return OpenAIProvider(resolved)
 	elif provider_name == "Claude":
-		if not settings.claude_enabled:
-			frappe.throw("Claude is not enabled in settings")
-		return ClaudeProvider(settings.as_dict())
+		return ClaudeProvider(resolved)
+	elif provider_name == "Gemini":
+		return GeminiProvider(resolved)
 	else:
 		frappe.throw(f"Unknown AI provider: {provider_name}")
