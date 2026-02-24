@@ -7,7 +7,8 @@ import frappe
 from frappe.query_builder import functions as fn
 from frappe.utils import date_diff, flt, nowdate
 
-from ai_chatbot.core.config import get_default_company
+from ai_chatbot.core.config import get_default_company, get_top_n_limit
+from ai_chatbot.core.dimensions import apply_dimension_filters
 from ai_chatbot.core.constants import AGING_BUCKETS
 from ai_chatbot.data.charts import build_bar_chart, build_horizontal_bar
 from ai_chatbot.data.currency import build_currency_response
@@ -39,9 +40,13 @@ def _get_aging_bucket(days_overdue: int) -> str:
 			"type": "string",
 			"description": "Company name. Optional — omit to use user's default company.",
 		},
+		"cost_center": {"type": "string", "description": "Filter by cost center"},
+		"department": {"type": "string", "description": "Filter by department"},
+		"project": {"type": "string", "description": "Filter by project"},
 	},
+	doctypes=["Sales Invoice"],
 )
-def get_receivable_aging(ageing_based_on="Due Date", customer=None, company=None):
+def get_receivable_aging(ageing_based_on="Due Date", customer=None, company=None, cost_center=None, department=None, project=None):
 	"""Get AR aging analysis from outstanding Sales Invoices."""
 	company = get_default_company(company)
 	today = nowdate()
@@ -66,6 +71,8 @@ def get_receivable_aging(ageing_based_on="Due Date", customer=None, company=None
 
 	if customer:
 		query = query.where(si.customer == customer)
+
+	query = apply_dimension_filters(query, si, cost_center=cost_center, department=department, project=project)
 
 	invoices = query.run(as_dict=True)
 
@@ -120,15 +127,20 @@ def get_receivable_aging(ageing_based_on="Due Date", customer=None, company=None
 			"type": "string",
 			"description": "Company name. Optional — omit to use user's default company.",
 		},
+		"cost_center": {"type": "string", "description": "Filter by cost center"},
+		"department": {"type": "string", "description": "Filter by department"},
+		"project": {"type": "string", "description": "Filter by project"},
 	},
+	doctypes=["Sales Invoice"],
 )
-def get_top_debtors(limit=10, company=None):
+def get_top_debtors(limit=10, company=None, cost_center=None, department=None, project=None):
 	"""Get top customers by outstanding receivable amount."""
+	limit = get_top_n_limit(limit)
 	company = get_default_company(company)
 
 	si = frappe.qb.DocType("Sales Invoice")
 
-	debtors = (
+	query = (
 		frappe.qb.from_(si)
 		.select(
 			si.customer,
@@ -138,6 +150,10 @@ def get_top_debtors(limit=10, company=None):
 		.where(si.docstatus == 1)
 		.where(si.company == company)
 		.where(si.outstanding_amount > 0)
+	)
+	query = apply_dimension_filters(query, si, cost_center=cost_center, department=department, project=project)
+	debtors = (
+		query
 		.groupby(si.customer)
 		.orderby(fn.Sum(si.outstanding_amount), order=frappe.qb.desc)
 		.limit(limit)

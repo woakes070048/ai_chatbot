@@ -37,6 +37,7 @@ from ai_chatbot.tools.registry import register_tool
 			"description": "Company name. Optional — omit to use user's default company.",
 		},
 	},
+	doctypes=["Lead"],
 )
 def get_lead_statistics(from_date=None, to_date=None, company=None):
 	"""Get lead statistics with multi-company support and pie chart."""
@@ -95,6 +96,7 @@ def get_lead_statistics(from_date=None, to_date=None, company=None):
 			"description": "Company name. Optional — omit to use user's default company.",
 		},
 	},
+	doctypes=["Opportunity"],
 )
 def get_opportunity_pipeline(status=None, company=None):
 	"""Get opportunity pipeline with multi-company, currency support, and bar chart."""
@@ -193,6 +195,7 @@ def get_opportunity_pipeline(status=None, company=None):
 			"description": "Company name. Optional — omit to use user's default company.",
 		},
 	},
+	doctypes=["Lead"],
 )
 def get_lead_conversion_rate(from_date=None, to_date=None, company=None):
 	"""Get lead-to-opportunity conversion rate."""
@@ -251,6 +254,7 @@ def get_lead_conversion_rate(from_date=None, to_date=None, company=None):
 			"description": "Company name. Optional — omit to use user's default company.",
 		},
 	},
+	doctypes=["Lead"],
 )
 def get_lead_source_analysis(from_date=None, to_date=None, company=None):
 	"""Get lead source analysis with pie chart."""
@@ -327,6 +331,7 @@ def get_lead_source_analysis(from_date=None, to_date=None, company=None):
 			"description": "Company name. Optional — omit to use user's default company.",
 		},
 	},
+	doctypes=["Lead", "Opportunity", "Quotation", "Sales Order"],
 )
 def get_sales_funnel(from_date=None, to_date=None, company=None):
 	"""Get sales funnel: Lead → Opportunity → Quotation → Sales Order."""
@@ -438,6 +443,7 @@ def get_sales_funnel(from_date=None, to_date=None, company=None):
 			"description": "Company name. Optional — omit to use user's default company.",
 		},
 	},
+	doctypes=["Opportunity"],
 )
 def get_opportunity_by_stage(from_date=None, to_date=None, status=None, company=None):
 	"""Get opportunities grouped by sales stage with bar chart."""

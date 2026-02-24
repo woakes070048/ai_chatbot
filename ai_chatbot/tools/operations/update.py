@@ -40,6 +40,7 @@ OPPORTUNITY_STATUSES = ["Open", "Quotation", "Converted", "Lost", "Replied", "Cl
 			),
 		},
 	},
+	doctypes=["Lead"],
 )
 def update_lead_status(lead_name=None, status=None):
 	"""Update a Lead's status."""
@@ -68,6 +69,7 @@ def update_lead_status(lead_name=None, status=None):
 			"description": "New status. Valid values: Open, Quotation, Converted, Lost, Replied, Closed",
 		},
 	},
+	doctypes=["Opportunity"],
 )
 def update_opportunity_status(opportunity_name=None, status=None):
 	"""Update an Opportunity's status."""
@@ -96,6 +98,7 @@ def update_opportunity_status(opportunity_name=None, status=None):
 		"description": {"type": "string", "description": "Updated task description"},
 		"date": {"type": "string", "description": "Updated due date (YYYY-MM-DD)"},
 	},
+	doctypes=["ToDo"],
 )
 def update_todo(todo_name=None, status=None, priority=None, description=None, date=None):
 	"""Update a ToDo task."""

@@ -42,6 +42,7 @@ _HRMS_NOT_INSTALLED = {
 			"description": "Company name. Optional — omit to use user's default company.",
 		},
 	},
+	doctypes=["Employee"],
 )
 def get_employee_count(department=None, status="Active", designation=None, company=None):
 	"""Get employee headcount with department breakdown and pie chart."""
@@ -123,6 +124,7 @@ def get_employee_count(department=None, status="Active", designation=None, compa
 			"description": "Company name. Optional — omit to use user's default company.",
 		},
 	},
+	doctypes=["Attendance"],
 )
 def get_attendance_summary(from_date=None, to_date=None, department=None, company=None):
 	"""Get attendance summary grouped by status with bar chart."""
@@ -209,6 +211,7 @@ def get_attendance_summary(from_date=None, to_date=None, department=None, compan
 			"description": "Company name. Optional — omit to use user's default company.",
 		},
 	},
+	doctypes=["Leave Allocation", "Leave Application"],
 )
 def get_leave_balance(employee=None, leave_type=None, company=None):
 	"""Get leave balance: allocated minus consumed, per leave type."""
@@ -327,6 +330,7 @@ def get_leave_balance(employee=None, leave_type=None, company=None):
 			"description": "Company name. Optional — omit to use user's default company.",
 		},
 	},
+	doctypes=["Salary Slip"],
 )
 def get_payroll_summary(from_date=None, to_date=None, company=None):
 	"""Get payroll totals with bar chart of gross/deductions/net."""
@@ -407,6 +411,7 @@ def get_payroll_summary(from_date=None, to_date=None, company=None):
 			"description": "Company name. Optional — omit to use user's default company.",
 		},
 	},
+	doctypes=["Salary Slip"],
 )
 def get_department_wise_salary(from_date=None, to_date=None, company=None):
 	"""Get salary breakdown by department with pie chart."""
@@ -487,6 +492,7 @@ def get_department_wise_salary(from_date=None, to_date=None, company=None):
 			"description": "Company name. Optional — omit to use user's default company.",
 		},
 	},
+	doctypes=["Employee"],
 )
 def get_employee_turnover(from_date=None, to_date=None, company=None):
 	"""Get employee turnover: new hires vs exits with multi-series bar chart."""

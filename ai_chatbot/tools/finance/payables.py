@@ -7,11 +7,13 @@ import frappe
 from frappe.query_builder import functions as fn
 from frappe.utils import date_diff, flt, nowdate
 
-from ai_chatbot.core.config import get_default_company
+from ai_chatbot.core.config import get_default_company, get_top_n_limit
 from ai_chatbot.core.constants import AGING_BUCKETS
 from ai_chatbot.data.charts import build_bar_chart, build_horizontal_bar
 from ai_chatbot.data.currency import build_currency_response
 from ai_chatbot.tools.registry import register_tool
+
+from ai_chatbot.core.dimensions import apply_dimension_filters
 
 
 def _get_aging_bucket(days_overdue: int) -> str:
@@ -39,9 +41,13 @@ def _get_aging_bucket(days_overdue: int) -> str:
 			"type": "string",
 			"description": "Company name. Optional — omit to use user's default company.",
 		},
+		"cost_center": {"type": "string", "description": "Filter by cost center"},
+		"department": {"type": "string", "description": "Filter by department"},
+		"project": {"type": "string", "description": "Filter by project"},
 	},
+	doctypes=["Purchase Invoice"],
 )
-def get_payable_aging(ageing_based_on="Due Date", supplier=None, company=None):
+def get_payable_aging(ageing_based_on="Due Date", supplier=None, company=None, cost_center=None, department=None, project=None):
 	"""Get AP aging analysis from outstanding Purchase Invoices."""
 	company = get_default_company(company)
 	today = nowdate()
@@ -66,6 +72,8 @@ def get_payable_aging(ageing_based_on="Due Date", supplier=None, company=None):
 
 	if supplier:
 		query = query.where(pi.supplier == supplier)
+
+	query = apply_dimension_filters(query, pi, cost_center=cost_center, department=department, project=project)
 
 	invoices = query.run(as_dict=True)
 
@@ -120,15 +128,20 @@ def get_payable_aging(ageing_based_on="Due Date", supplier=None, company=None):
 			"type": "string",
 			"description": "Company name. Optional — omit to use user's default company.",
 		},
+		"cost_center": {"type": "string", "description": "Filter by cost center"},
+		"department": {"type": "string", "description": "Filter by department"},
+		"project": {"type": "string", "description": "Filter by project"},
 	},
+	doctypes=["Purchase Invoice"],
 )
-def get_top_creditors(limit=10, company=None):
+def get_top_creditors(limit=10, company=None, cost_center=None, department=None, project=None):
 	"""Get top suppliers by outstanding payable amount."""
+	limit = get_top_n_limit(limit)
 	company = get_default_company(company)
 
 	pi = frappe.qb.DocType("Purchase Invoice")
 
-	creditors = (
+	query = (
 		frappe.qb.from_(pi)
 		.select(
 			pi.supplier,
@@ -138,6 +151,10 @@ def get_top_creditors(limit=10, company=None):
 		.where(pi.docstatus == 1)
 		.where(pi.company == company)
 		.where(pi.outstanding_amount > 0)
+	)
+	query = apply_dimension_filters(query, pi, cost_center=cost_center, department=department, project=project)
+	creditors = (
+		query
 		.groupby(pi.supplier)
 		.orderby(fn.Sum(pi.outstanding_amount), order=frappe.qb.desc)
 		.limit(limit)

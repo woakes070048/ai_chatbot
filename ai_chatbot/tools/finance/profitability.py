@@ -7,13 +7,14 @@ import frappe
 from frappe.query_builder import functions as fn
 from frappe.utils import flt
 
-from ai_chatbot.core.config import get_default_company, get_fiscal_year_dates
+from ai_chatbot.core.config import get_default_company, get_fiscal_year_dates, get_top_n_limit
 from ai_chatbot.data.charts import build_horizontal_bar, build_pie_chart
 from ai_chatbot.data.currency import build_currency_response
 from ai_chatbot.tools.registry import register_tool
+from ai_chatbot.core.dimensions import apply_dimension_filters
 
 
-def _get_profitability_data(group_field, from_date, to_date, company, limit=None):
+def _get_profitability_data(group_field, from_date, to_date, company, limit=None, **dimensions):
 	"""Shared query for profitability analysis grouped by a Sales Invoice field.
 
 	Revenue comes from Sales Invoice Item base_amount.
@@ -53,6 +54,8 @@ def _get_profitability_data(group_field, from_date, to_date, company, limit=None
 		.groupby(si[group_field])
 		.orderby(revenue_expr, order=frappe.qb.desc)
 	)
+
+	query = apply_dimension_filters(query, si, **dimensions)
 
 	if limit:
 		query = query.limit(limit)
@@ -96,10 +99,15 @@ def _get_profitability_data(group_field, from_date, to_date, company, limit=None
 			"type": "string",
 			"description": "Company name. Optional — omit to use user's default company.",
 		},
+		"cost_center": {"type": "string", "description": "Filter by cost center"},
+		"department": {"type": "string", "description": "Filter by department"},
+		"project": {"type": "string", "description": "Filter by project"},
 	},
+	doctypes=["Sales Invoice"],
 )
-def get_profitability_by_customer(from_date=None, to_date=None, limit=10, company=None):
+def get_profitability_by_customer(from_date=None, to_date=None, limit=10, company=None, cost_center=None, department=None, project=None):
 	"""Profitability analysis grouped by customer."""
+	limit = get_top_n_limit(limit)
 	company = get_default_company(company)
 
 	if not from_date or not to_date:
@@ -107,7 +115,7 @@ def get_profitability_by_customer(from_date=None, to_date=None, limit=10, compan
 		from_date = from_date or fy_from
 		to_date = to_date or fy_to
 
-	data = _get_profitability_data("customer", from_date, to_date, company, limit)
+	data = _get_profitability_data("customer", from_date, to_date, company, limit, cost_center=cost_center, department=department, project=project)
 
 	# Chart — horizontal bar of margin amounts (reversed for top-at-top)
 	customers = [d["name"] for d in reversed(data)]
@@ -145,10 +153,15 @@ def get_profitability_by_customer(from_date=None, to_date=None, limit=10, compan
 			"type": "string",
 			"description": "Company name. Optional — omit to use user's default company.",
 		},
+		"cost_center": {"type": "string", "description": "Filter by cost center"},
+		"department": {"type": "string", "description": "Filter by department"},
+		"project": {"type": "string", "description": "Filter by project"},
 	},
+	doctypes=["Sales Invoice"],
 )
-def get_profitability_by_item(from_date=None, to_date=None, limit=10, company=None):
+def get_profitability_by_item(from_date=None, to_date=None, limit=10, company=None, cost_center=None, department=None, project=None):
 	"""Profitability analysis grouped by item_code."""
+	limit = get_top_n_limit(limit)
 	company = get_default_company(company)
 
 	if not from_date or not to_date:
@@ -163,7 +176,7 @@ def get_profitability_by_item(from_date=None, to_date=None, limit=10, company=No
 	revenue_expr = fn.Sum(sii.base_amount).as_("revenue")
 	cost_expr = fn.Sum(sii.incoming_rate * sii.stock_qty).as_("cost")
 
-	rows = (
+	query = (
 		frappe.qb.from_(sii)
 		.join(si)
 		.on(sii.parent == si.name)
@@ -178,6 +191,10 @@ def get_profitability_by_item(from_date=None, to_date=None, limit=10, company=No
 		.where(si.company == company)
 		.where(si.posting_date >= from_date)
 		.where(si.posting_date <= to_date)
+	)
+	query = apply_dimension_filters(query, si, cost_center=cost_center, department=department, project=project)
+	rows = (
+		query
 		.groupby(sii.item_code, sii.item_name)
 		.orderby(revenue_expr, order=frappe.qb.desc)
 		.limit(limit)
@@ -235,9 +252,13 @@ def get_profitability_by_item(from_date=None, to_date=None, limit=10, company=No
 			"type": "string",
 			"description": "Company name. Optional — omit to use user's default company.",
 		},
+		"cost_center": {"type": "string", "description": "Filter by cost center"},
+		"department": {"type": "string", "description": "Filter by department"},
+		"project": {"type": "string", "description": "Filter by project"},
 	},
+	doctypes=["Sales Invoice"],
 )
-def get_profitability_by_territory(from_date=None, to_date=None, company=None):
+def get_profitability_by_territory(from_date=None, to_date=None, company=None, cost_center=None, department=None, project=None):
 	"""Profitability analysis grouped by territory."""
 	company = get_default_company(company)
 
@@ -246,7 +267,7 @@ def get_profitability_by_territory(from_date=None, to_date=None, company=None):
 		from_date = from_date or fy_from
 		to_date = to_date or fy_to
 
-	data = _get_profitability_data("territory", from_date, to_date, company, limit=None)
+	data = _get_profitability_data("territory", from_date, to_date, company, limit=None, cost_center=cost_center, department=department, project=project)
 
 	# Pie chart of margin by territory
 	pie_data = [{"name": d["name"], "value": d["margin"]} for d in data if d["margin"] > 0]

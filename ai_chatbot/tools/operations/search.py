@@ -20,6 +20,7 @@ from ai_chatbot.tools.registry import register_tool
 		"limit": {"type": "integer", "description": "Maximum results to return (default 10)"},
 		"company": {"type": "string", "description": "Company name. Defaults to user's default company."},
 	},
+	doctypes=["Customer"],
 )
 def search_customers(query=None, customer_group=None, territory=None, limit=10, company=None):
 	"""Search customers with fuzzy name matching and optional filters."""
@@ -65,6 +66,7 @@ def search_customers(query=None, customer_group=None, territory=None, limit=10, 
 		"limit": {"type": "integer", "description": "Maximum results to return (default 10)"},
 		"company": {"type": "string", "description": "Company name. Defaults to user's default company."},
 	},
+	doctypes=["Item"],
 )
 def search_items(query=None, item_group=None, limit=10, company=None):
 	"""Search items by name, code, or group."""
@@ -113,6 +115,7 @@ def search_items(query=None, item_group=None, limit=10, company=None):
 		"limit": {"type": "integer", "description": "Maximum results to return (default 10)"},
 		"company": {"type": "string", "description": "Company name. Defaults to user's default company."},
 	},
+	doctypes=[],
 )
 def search_documents(doctype=None, query=None, status=None, limit=10, company=None):
 	"""Search documents of a specified DocType."""

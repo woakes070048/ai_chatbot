@@ -7,7 +7,7 @@ import frappe
 from frappe.query_builder import functions as fn
 from frappe.utils import flt
 
-from ai_chatbot.core.config import get_default_company, get_fiscal_year_dates
+from ai_chatbot.core.config import get_default_company, get_fiscal_year_dates, get_top_n_limit
 from ai_chatbot.data.analytics import get_time_series
 from ai_chatbot.data.charts import build_bar_chart, build_line_chart
 from ai_chatbot.data.currency import build_currency_response
@@ -23,6 +23,7 @@ from ai_chatbot.tools.registry import register_tool
 		"to_date": {"type": "string", "description": "End date (YYYY-MM-DD). Optional — omit to use current fiscal year end."},
 		"company": {"type": "string", "description": "Company name. Optional — omit to use user's default company."},
 	},
+	doctypes=["Purchase Invoice"],
 )
 def get_purchase_analytics(from_date=None, to_date=None, company=None):
 	"""Get purchase analytics with multi-company and base currency support."""
@@ -65,6 +66,7 @@ def get_purchase_analytics(from_date=None, to_date=None, company=None):
 		"supplier": {"type": "string", "description": "Supplier name"},
 		"company": {"type": "string", "description": "Company name. Optional — omit to use user's default company."},
 	},
+	doctypes=["Purchase Order"],
 )
 def get_supplier_performance(supplier=None, company=None):
 	"""Get supplier performance metrics with multi-company support."""
@@ -98,6 +100,7 @@ def get_supplier_performance(supplier=None, company=None):
 		"months": {"type": "integer", "description": "Number of months to show (default 12)"},
 		"company": {"type": "string", "description": "Company name. Optional — omit to use user's default company."},
 	},
+	doctypes=["Purchase Invoice"],
 )
 def get_purchase_trend(months=12, company=None):
 	"""Monthly spending time series from Purchase Invoice."""
@@ -144,9 +147,11 @@ def get_purchase_trend(months=12, company=None):
 		"limit": {"type": "integer", "description": "Number of item groups to return (default 10)"},
 		"company": {"type": "string", "description": "Company name. Optional — omit to use user's default company."},
 	},
+	doctypes=["Purchase Invoice"],
 )
 def get_purchase_by_item_group(from_date=None, to_date=None, limit=10, company=None):
 	"""Purchases grouped by item_group from Purchase Invoice Item."""
+	limit = get_top_n_limit(limit)
 	company = get_default_company(company)
 
 	if not from_date or not to_date:

@@ -30,7 +30,18 @@
   "data_operations_section",
   "enable_write_operations",
   "streaming_section",
-  "enable_streaming"
+  "enable_streaming",
+  "query_config_section",
+  "default_query_limit",
+  "default_top_n_limit",
+  "column_break_query",
+  "max_query_limit",
+  "prompt_config_section",
+  "ai_persona",
+  "response_language",
+  "column_break_prompt",
+  "custom_system_prompt",
+  "custom_instructions"
  ],
  "fields": [
   {
@@ -184,12 +195,76 @@
    "fieldname": "enable_streaming",
    "fieldtype": "Check",
    "label": "Enable Streaming"
+  },
+  {
+   "fieldname": "query_config_section",
+   "fieldtype": "Section Break",
+   "label": "Query Configuration"
+  },
+  {
+   "default": "20",
+   "description": "Default number of records returned by tools. Set to 0 to use system default (20).",
+   "fieldname": "default_query_limit",
+   "fieldtype": "Int",
+   "label": "Default Query Limit"
+  },
+  {
+   "default": "10",
+   "description": "Default limit for ranking/top-N tools (e.g. top customers, top debtors). Set to 0 to use system default (10).",
+   "fieldname": "default_top_n_limit",
+   "fieldtype": "Int",
+   "label": "Default Top-N Limit"
+  },
+  {
+   "fieldname": "column_break_query",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "100",
+   "description": "Maximum number of records any tool can return, regardless of requested limit.",
+   "fieldname": "max_query_limit",
+   "fieldtype": "Int",
+   "label": "Max Query Limit"
+  },
+  {
+   "fieldname": "prompt_config_section",
+   "fieldtype": "Section Break",
+   "label": "Prompt Configuration"
+  },
+  {
+   "description": "Custom AI persona description. Leave blank for default: 'an intelligent ERPNext business assistant'.",
+   "fieldname": "ai_persona",
+   "fieldtype": "Small Text",
+   "label": "AI Persona"
+  },
+  {
+   "description": "Preferred language for AI responses.",
+   "fieldname": "response_language",
+   "fieldtype": "Select",
+   "label": "Response Language",
+   "options": "\nEnglish\nHindi\nSpanish\nFrench\nGerman\nPortuguese\nArabic\nChinese\nJapanese\nKorean"
+  },
+  {
+   "fieldname": "column_break_prompt",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Additional system prompt instructions appended to the default prompt. Use this for domain-specific or company-specific guidelines.",
+   "fieldname": "custom_system_prompt",
+   "fieldtype": "Text Editor",
+   "label": "Custom System Prompt"
+  },
+  {
+   "description": "Additional behavioral instructions for the AI assistant (e.g. tone, formatting preferences).",
+   "fieldname": "custom_instructions",
+   "fieldtype": "Text Editor",
+   "label": "Custom Instructions"
   }
  ],
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-02-13 12:00:00.000000",
+ "modified": "2026-02-19 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Chatbot",
  "name": "Chatbot Settings",

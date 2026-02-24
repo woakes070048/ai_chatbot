@@ -7,7 +7,7 @@ import frappe
 from frappe.query_builder import functions as fn
 from frappe.utils import flt
 
-from ai_chatbot.core.config import get_default_company, get_fiscal_year_dates
+from ai_chatbot.core.config import get_default_company, get_fiscal_year_dates, get_top_n_limit
 from ai_chatbot.data.analytics import get_grouped_sum, get_time_series
 from ai_chatbot.data.charts import build_bar_chart, build_line_chart, build_pie_chart
 from ai_chatbot.data.currency import build_currency_response
@@ -24,6 +24,7 @@ from ai_chatbot.tools.registry import register_tool
 		"customer": {"type": "string", "description": "Filter by customer name"},
 		"company": {"type": "string", "description": "Company name. Optional — omit to use user's default company."},
 	},
+	doctypes=["Sales Invoice"],
 )
 def get_sales_analytics(from_date=None, to_date=None, customer=None, company=None):
 	"""Get sales analytics with multi-company and base currency support."""
@@ -77,9 +78,11 @@ def get_sales_analytics(from_date=None, to_date=None, customer=None, company=Non
 		"to_date": {"type": "string", "description": "End date (YYYY-MM-DD). Optional — omit to use current fiscal year end."},
 		"company": {"type": "string", "description": "Company name. Optional — omit to use user's default company."},
 	},
+	doctypes=["Sales Invoice"],
 )
 def get_top_customers(limit=10, from_date=None, to_date=None, company=None):
 	"""Get top customers by revenue using the analytics data layer (no raw SQL)."""
+	limit = get_top_n_limit(limit)
 	company = get_default_company(company)
 
 	if not from_date or not to_date:
@@ -120,6 +123,7 @@ def get_top_customers(limit=10, from_date=None, to_date=None, company=None):
 		"months": {"type": "integer", "description": "Number of months to show (default 12)"},
 		"company": {"type": "string", "description": "Company name. Optional — omit to use user's default company."},
 	},
+	doctypes=["Sales Invoice"],
 )
 def get_sales_trend(months=12, company=None):
 	"""Monthly revenue time series from Sales Invoice."""
@@ -165,6 +169,7 @@ def get_sales_trend(months=12, company=None):
 		"to_date": {"type": "string", "description": "End date (YYYY-MM-DD). Optional — omit to use current fiscal year end."},
 		"company": {"type": "string", "description": "Company name. Optional — omit to use user's default company."},
 	},
+	doctypes=["Sales Invoice"],
 )
 def get_sales_by_territory(from_date=None, to_date=None, company=None):
 	"""Sales grouped by territory from Sales Invoice."""
@@ -218,9 +223,11 @@ def get_sales_by_territory(from_date=None, to_date=None, company=None):
 		"limit": {"type": "integer", "description": "Number of item groups to return (default 10)"},
 		"company": {"type": "string", "description": "Company name. Optional — omit to use user's default company."},
 	},
+	doctypes=["Sales Invoice"],
 )
 def get_sales_by_item_group(from_date=None, to_date=None, limit=10, company=None):
 	"""Sales grouped by item_group from Sales Invoice Item."""
+	limit = get_top_n_limit(limit)
 	company = get_default_company(company)
 
 	if not from_date or not to_date:

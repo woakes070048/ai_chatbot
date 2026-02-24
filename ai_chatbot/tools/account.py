@@ -21,6 +21,7 @@ from ai_chatbot.tools.registry import register_tool
 		"to_date": {"type": "string", "description": "End date (YYYY-MM-DD). Optional — omit to use current fiscal year end."},
 		"company": {"type": "string", "description": "Company name. Optional — omit to use user's default company."},
 	},
+	doctypes=["Sales Invoice", "Purchase Invoice"],
 )
 def get_financial_summary(from_date=None, to_date=None, company=None):
 	"""Get financial summary using base currency fields and frappe.qb."""
@@ -74,6 +75,7 @@ def get_financial_summary(from_date=None, to_date=None, company=None):
 		"months": {"type": "integer", "description": "Number of months to analyze (default 6)"},
 		"company": {"type": "string", "description": "Company name. Optional — omit to use user's default company."},
 	},
+	doctypes=["Payment Entry"],
 )
 def get_cash_flow_analysis(months=6, company=None):
 	"""Get cash flow analysis using base currency fields and frappe.qb."""

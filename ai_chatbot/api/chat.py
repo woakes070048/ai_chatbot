@@ -407,7 +407,7 @@ def get_mention_values(mention_type: str, search_term: str = "", company: str = 
 				"Company",
 				filters=filters,
 				pluck="name",
-				limit_page_length=20,
+				limit_page_length=50,
 				order_by="name asc",
 			)
 			# Put the user's default company first

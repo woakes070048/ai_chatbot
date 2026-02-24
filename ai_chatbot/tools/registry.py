@@ -18,8 +18,11 @@ from ai_chatbot.core.logger import log_tool_error
 # Global tool store — populated by @register_tool decorator at import time
 _TOOL_REGISTRY = {}
 
+# Extra categories registered by external apps via register_tool_category()
+_EXTRA_CATEGORIES = {}
 
-def register_tool(name, category, description, parameters=None):
+
+def register_tool(name, category, description, parameters=None, doctypes=None):
 	"""Decorator to register a tool function.
 
 	Usage:
@@ -31,7 +34,8 @@ def register_tool(name, category, description, parameters=None):
 				"from_date": {"type": "string", "description": "Start date (YYYY-MM-DD)"},
 				"to_date": {"type": "string", "description": "End date (YYYY-MM-DD)"},
 				"company": {"type": "string", "description": "Company name. Defaults to user's default company."},
-			}
+			},
+			doctypes=["Sales Invoice"],
 		)
 		def get_sales_analytics(from_date=None, to_date=None, company=None):
 			...
@@ -41,6 +45,7 @@ def register_tool(name, category, description, parameters=None):
 		category: Tool category key (e.g. "crm", "selling", "buying", "finance", "inventory").
 		description: Human-readable description for the LLM.
 		parameters: Dict of parameter definitions for OpenAI function calling schema.
+		doctypes: List of DocType names the tool accesses. Used for permission checks.
 	"""
 
 	def decorator(func):
@@ -49,6 +54,7 @@ def register_tool(name, category, description, parameters=None):
 			"category": category,
 			"description": description,
 			"parameters": parameters or {},
+			"doctypes": doctypes or [],
 			"function": func,
 		}
 		return func
@@ -60,21 +66,33 @@ def get_all_tools_schema():
 	"""Get OpenAI function calling schema for all enabled tools.
 
 	Checks Chatbot Settings to determine which categories are enabled,
-	then builds the schema from registered tools in those categories.
+	then filters by user permissions on declared doctypes,
+	and builds the schema from the remaining tools.
 
 	Returns:
 		List of dicts in OpenAI function calling format.
 	"""
 	_ensure_tools_loaded()
 
+	all_categories = {**TOOL_CATEGORIES, **_EXTRA_CATEGORIES}
 	tools = []
 	for _tool_name, tool_info in _TOOL_REGISTRY.items():
 		category = tool_info["category"]
-		settings_field = TOOL_CATEGORIES.get(category)
+		settings_field = all_categories.get(category)
 
 		# If the category has a settings flag, check it
 		if settings_field and not is_tool_category_enabled(settings_field):
 			continue
+
+		# Skip tools the user has no permission for
+		tool_doctypes = tool_info.get("doctypes", [])
+		if tool_doctypes:
+			has_perm = all(
+				frappe.has_permission(dt, "read", user=frappe.session.user)
+				for dt in tool_doctypes
+			)
+			if not has_perm:
+				continue
 
 		tools.append(_build_schema(tool_info))
 
@@ -83,6 +101,8 @@ def get_all_tools_schema():
 
 def execute_tool(tool_name: str, arguments: dict) -> dict:
 	"""Execute a registered tool by name.
+
+	Checks user permissions on declared doctypes before executing.
 
 	Args:
 		tool_name: The registered tool name.
@@ -97,6 +117,11 @@ def execute_tool(tool_name: str, arguments: dict) -> dict:
 	if not tool_info:
 		log_tool_error(tool_name, "Tool not found", arguments)
 		return {"success": False, "error": f"Tool '{tool_name}' not found"}
+
+	# Permission check on declared doctypes
+	for dt in tool_info.get("doctypes", []):
+		if not frappe.has_permission(dt, "read", user=frappe.session.user):
+			return {"success": False, "error": f"You do not have permission to access {dt}"}
 
 	try:
 		result = tool_info["function"](**arguments)
@@ -127,6 +152,21 @@ def get_registered_tools():
 	"""
 	_ensure_tools_loaded()
 	return {name: info["category"] for name, info in _TOOL_REGISTRY.items()}
+
+
+def register_tool_category(name, settings_field=None):
+	"""Register a new tool category from an external app.
+
+	External apps can call this to declare new tool categories.
+	If settings_field is None, the category is always enabled
+	(no toggle in Chatbot Settings).
+
+	Args:
+		name: Category key (e.g. "manufacturing").
+		settings_field: Chatbot Settings field name (e.g. "enable_manufacturing_tools").
+			If None, tools in this category are always enabled.
+	"""
+	_EXTRA_CATEGORIES[name] = settings_field
 
 
 def _build_schema(tool_info):
@@ -188,8 +228,22 @@ def _ensure_tools_loaded():
 		import ai_chatbot.tools.finance.profitability
 		import ai_chatbot.tools.finance.ratios
 		import ai_chatbot.tools.finance.receivables
+		import ai_chatbot.tools.finance.cfo
 		import ai_chatbot.tools.finance.working_capital
+
+		# Phase 5B: Multi-company consolidation tool
+		import ai_chatbot.tools.consolidation
 
 	# Phase 5: HRMS tools (only if HRMS app is installed)
 	if is_hrms_installed():
 		import ai_chatbot.tools.hrms
+
+	# Load external plugin tools via Frappe hooks
+	for module_path in frappe.get_hooks("ai_chatbot_tool_modules") or []:
+		try:
+			frappe.get_module(module_path)
+		except Exception as e:
+			frappe.log_error(
+				f"Failed to load AI Chatbot tool plugin: {module_path}: {e}",
+				"AI Chatbot Plugin Error",
+			)

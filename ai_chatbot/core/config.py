@@ -115,3 +115,37 @@ def is_tool_category_enabled(category):
 	"""
 	settings = get_chatbot_settings()
 	return bool(getattr(settings, category, False))
+
+
+def get_query_limit(requested=None):
+	"""Get effective query limit, capped at the configured maximum.
+
+	Args:
+		requested: Caller-requested limit (e.g. from a tool parameter).
+
+	Returns:
+		int: The effective limit.
+	"""
+	from ai_chatbot.core.constants import DEFAULT_QUERY_LIMIT, MAX_QUERY_LIMIT
+
+	settings = get_chatbot_settings()
+	max_limit = getattr(settings, "max_query_limit", 0) or MAX_QUERY_LIMIT
+	default = getattr(settings, "default_query_limit", 0) or DEFAULT_QUERY_LIMIT
+	return min(requested or default, max_limit)
+
+
+def get_top_n_limit(requested=None):
+	"""Get effective top-N limit, capped at the configured maximum.
+
+	Args:
+		requested: Caller-requested limit (e.g. from a tool parameter).
+
+	Returns:
+		int: The effective limit.
+	"""
+	from ai_chatbot.core.constants import DEFAULT_TOP_N_LIMIT, MAX_QUERY_LIMIT
+
+	settings = get_chatbot_settings()
+	max_limit = getattr(settings, "max_query_limit", 0) or MAX_QUERY_LIMIT
+	default = getattr(settings, "default_top_n_limit", 0) or DEFAULT_TOP_N_LIMIT
+	return min(requested or default, max_limit)

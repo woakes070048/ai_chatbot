@@ -9,6 +9,7 @@ from frappe.utils import date_diff, flt, nowdate
 
 from ai_chatbot.core.config import get_default_company, get_fiscal_year_dates
 from ai_chatbot.data.currency import build_currency_response
+from ai_chatbot.core.dimensions import apply_dimension_filters
 from ai_chatbot.tools.registry import register_tool
 
 
@@ -99,6 +100,7 @@ def _get_current_assets_liabilities(company):
 			"description": "Company name. Optional — omit to use user's default company.",
 		},
 	},
+	doctypes=["Sales Invoice", "Purchase Invoice", "GL Entry"],
 )
 def get_liquidity_ratios(company=None):
 	"""Current Ratio = Current Assets / Current Liabilities.
@@ -151,9 +153,13 @@ def get_liquidity_ratios(company=None):
 			"type": "string",
 			"description": "Company name. Optional — omit to use user's default company.",
 		},
+		"cost_center": {"type": "string", "description": "Filter by cost center"},
+		"department": {"type": "string", "description": "Filter by department"},
+		"project": {"type": "string", "description": "Filter by project"},
 	},
+	doctypes=["Sales Invoice", "Purchase Invoice", "GL Entry"],
 )
-def get_profitability_ratios(from_date=None, to_date=None, company=None):
+def get_profitability_ratios(from_date=None, to_date=None, company=None, cost_center=None, department=None, project=None):
 	"""Gross Margin, Net Margin, ROA."""
 	company = get_default_company(company)
 
@@ -164,28 +170,30 @@ def get_profitability_ratios(from_date=None, to_date=None, company=None):
 
 	# Revenue
 	si = frappe.qb.DocType("Sales Invoice")
-	rev_result = (
+	rev_q = (
 		frappe.qb.from_(si)
 		.select(fn.Sum(si.base_grand_total).as_("total"))
 		.where(si.docstatus == 1)
 		.where(si.company == company)
 		.where(si.posting_date >= from_date)
 		.where(si.posting_date <= to_date)
-		.run(as_dict=True)
 	)
+	rev_q = apply_dimension_filters(rev_q, si, cost_center=cost_center, department=department, project=project)
+	rev_result = rev_q.run(as_dict=True)
 	revenue = flt(rev_result[0].total) if rev_result else 0
 
 	# COGS (Purchase Invoices as simplified proxy)
 	pi = frappe.qb.DocType("Purchase Invoice")
-	cogs_result = (
+	cogs_q = (
 		frappe.qb.from_(pi)
 		.select(fn.Sum(pi.base_grand_total).as_("total"))
 		.where(pi.docstatus == 1)
 		.where(pi.company == company)
 		.where(pi.posting_date >= from_date)
 		.where(pi.posting_date <= to_date)
-		.run(as_dict=True)
 	)
+	cogs_q = apply_dimension_filters(cogs_q, pi, cost_center=cost_center, department=department, project=project)
+	cogs_result = cogs_q.run(as_dict=True)
 	cogs = flt(cogs_result[0].total) if cogs_result else 0
 
 	gross_profit = revenue - cogs
@@ -243,9 +251,13 @@ def get_profitability_ratios(from_date=None, to_date=None, company=None):
 			"type": "string",
 			"description": "Company name. Optional — omit to use user's default company.",
 		},
+		"cost_center": {"type": "string", "description": "Filter by cost center"},
+		"department": {"type": "string", "description": "Filter by department"},
+		"project": {"type": "string", "description": "Filter by project"},
 	},
+	doctypes=["Sales Invoice", "Purchase Invoice"],
 )
-def get_efficiency_ratios(from_date=None, to_date=None, company=None):
+def get_efficiency_ratios(from_date=None, to_date=None, company=None, cost_center=None, department=None, project=None):
 	"""Inventory Turnover, Receivable Days (DSO), Payable Days (DPO)."""
 	company = get_default_company(company)
 
@@ -258,39 +270,42 @@ def get_efficiency_ratios(from_date=None, to_date=None, company=None):
 
 	# Revenue
 	si = frappe.qb.DocType("Sales Invoice")
-	rev_result = (
+	rev_q = (
 		frappe.qb.from_(si)
 		.select(fn.Sum(si.base_grand_total).as_("total"))
 		.where(si.docstatus == 1)
 		.where(si.company == company)
 		.where(si.posting_date >= from_date)
 		.where(si.posting_date <= to_date)
-		.run(as_dict=True)
 	)
+	rev_q = apply_dimension_filters(rev_q, si, cost_center=cost_center, department=department, project=project)
+	rev_result = rev_q.run(as_dict=True)
 	revenue = flt(rev_result[0].total) if rev_result else 0
 
 	# COGS
 	pi = frappe.qb.DocType("Purchase Invoice")
-	cogs_result = (
+	cogs_q = (
 		frappe.qb.from_(pi)
 		.select(fn.Sum(pi.base_grand_total).as_("total"))
 		.where(pi.docstatus == 1)
 		.where(pi.company == company)
 		.where(pi.posting_date >= from_date)
 		.where(pi.posting_date <= to_date)
-		.run(as_dict=True)
 	)
+	cogs_q = apply_dimension_filters(cogs_q, pi, cost_center=cost_center, department=department, project=project)
+	cogs_result = cogs_q.run(as_dict=True)
 	cogs = flt(cogs_result[0].total) if cogs_result else 0
 
 	# Average receivables
-	recv_result = (
+	recv_q = (
 		frappe.qb.from_(si)
 		.select(fn.Sum(si.outstanding_amount).as_("total"))
 		.where(si.docstatus == 1)
 		.where(si.company == company)
 		.where(si.outstanding_amount > 0)
-		.run(as_dict=True)
 	)
+	recv_q = apply_dimension_filters(recv_q, si, cost_center=cost_center, department=department, project=project)
+	recv_result = recv_q.run(as_dict=True)
 	avg_receivables = flt(recv_result[0].total) if recv_result else 0
 
 	# Average inventory
@@ -307,14 +322,15 @@ def get_efficiency_ratios(from_date=None, to_date=None, company=None):
 	avg_inventory = flt(inv_result[0].total) if inv_result else 0
 
 	# Average payables
-	pay_result = (
+	pay_q = (
 		frappe.qb.from_(pi)
 		.select(fn.Sum(pi.outstanding_amount).as_("total"))
 		.where(pi.docstatus == 1)
 		.where(pi.company == company)
 		.where(pi.outstanding_amount > 0)
-		.run(as_dict=True)
 	)
+	pay_q = apply_dimension_filters(pay_q, pi, cost_center=cost_center, department=department, project=project)
+	pay_result = pay_q.run(as_dict=True)
 	avg_payables = flt(pay_result[0].total) if pay_result else 0
 
 	# Inventory Turnover = COGS / Avg Inventory

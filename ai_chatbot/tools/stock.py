@@ -7,7 +7,7 @@ import frappe
 from frappe.query_builder import functions as fn
 from frappe.utils import date_diff, flt, nowdate
 
-from ai_chatbot.core.config import get_default_company, get_fiscal_year_dates
+from ai_chatbot.core.config import get_default_company, get_fiscal_year_dates, get_query_limit
 from ai_chatbot.core.constants import AGING_BUCKETS
 from ai_chatbot.data.charts import build_bar_chart, build_multi_series_chart
 from ai_chatbot.data.currency import build_currency_response
@@ -22,6 +22,7 @@ from ai_chatbot.tools.registry import register_tool
 		"warehouse": {"type": "string", "description": "Filter by warehouse"},
 		"company": {"type": "string", "description": "Company name. Defaults to user's default company."},
 	},
+	doctypes=["Bin", "Warehouse"],
 )
 def get_inventory_summary(warehouse=None, company=None):
 	"""Get inventory summary using frappe.qb — no raw SQL."""
@@ -65,9 +66,11 @@ def get_inventory_summary(warehouse=None, company=None):
 		"limit": {"type": "integer", "description": "Maximum number of items to return (default 50)"},
 		"company": {"type": "string", "description": "Company name. Defaults to user's default company."},
 	},
+	doctypes=["Bin", "Item"],
 )
 def get_low_stock_items(limit=50, company=None):
 	"""Get low stock items using frappe.qb — no raw SQL."""
+	limit = get_query_limit(limit)
 	company = get_default_company(company)
 
 	bin_table = frappe.qb.DocType("Bin")
@@ -118,6 +121,7 @@ def get_low_stock_items(limit=50, company=None):
 		"to_date": {"type": "string", "description": "End date (YYYY-MM-DD). Optional — omit to use current fiscal year end."},
 		"company": {"type": "string", "description": "Company name. Defaults to user's default company."},
 	},
+	doctypes=["Stock Ledger Entry"],
 )
 def get_stock_movement(item_code=None, warehouse=None, from_date=None, to_date=None, company=None):
 	"""Get stock in/out movement from Stock Ledger Entry."""
@@ -223,7 +227,7 @@ def get_stock_movement(item_code=None, warehouse=None, from_date=None, to_date=N
 			.where(sle.posting_date <= to_date)
 			.groupby(sle.item_code)
 			.orderby(fn.Sum(fn.Abs(sle.actual_qty)), order=frappe.qb.desc)
-			.limit(20)
+			.limit(get_query_limit())
 		)
 
 		if warehouse:
@@ -264,6 +268,7 @@ def get_stock_movement(item_code=None, warehouse=None, from_date=None, to_date=N
 		"warehouse": {"type": "string", "description": "Filter by specific warehouse"},
 		"company": {"type": "string", "description": "Company name. Defaults to user's default company."},
 	},
+	doctypes=["Stock Ledger Entry"],
 )
 def get_stock_ageing(warehouse=None, company=None):
 	"""Stock age analysis — oldest receipt date per item with positive balance."""

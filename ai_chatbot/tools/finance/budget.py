@@ -12,6 +12,8 @@ from ai_chatbot.data.charts import build_multi_series_chart
 from ai_chatbot.data.currency import build_currency_response
 from ai_chatbot.tools.registry import register_tool
 
+from ai_chatbot.core.dimensions import apply_dimension_filters
+
 
 def _get_current_fiscal_year(company):
 	"""Get the current fiscal year name for a company."""
@@ -35,13 +37,16 @@ def _get_current_fiscal_year(company):
 			"description": "Fiscal year name (e.g. '2025-2026'). Optional — omit to use current fiscal year.",
 		},
 		"cost_center": {"type": "string", "description": "Filter by cost center name"},
+		"department": {"type": "string", "description": "Filter by department"},
+		"project": {"type": "string", "description": "Filter by project"},
 		"company": {
 			"type": "string",
 			"description": "Company name. Optional — omit to use user's default company.",
 		},
 	},
+	doctypes=["Budget", "GL Entry"],
 )
-def get_budget_vs_actual(fiscal_year=None, cost_center=None, company=None):
+def get_budget_vs_actual(fiscal_year=None, cost_center=None, department=None, project=None, company=None):
 	"""Compare budget vs actual from Budget doctype and GL Entry."""
 	company = get_default_company(company)
 
@@ -76,8 +81,7 @@ def get_budget_vs_actual(fiscal_year=None, cost_center=None, company=None):
 		.groupby(budget_acct.account)
 	)
 
-	if cost_center:
-		budget_query = budget_query.where(budget.cost_center == cost_center)
+	budget_query = apply_dimension_filters(budget_query, budget, cost_center=cost_center, department=department, project=project)
 
 	budget_data = budget_query.run(as_dict=True)
 
@@ -111,8 +115,7 @@ def get_budget_vs_actual(fiscal_year=None, cost_center=None, company=None):
 		.groupby(gle.account)
 	)
 
-	if cost_center:
-		actual_query = actual_query.where(gle.cost_center == cost_center)
+	actual_query = apply_dimension_filters(actual_query, gle, cost_center=cost_center, department=department, project=project)
 
 	actual_data = actual_query.run(as_dict=True)
 
@@ -182,13 +185,17 @@ def get_budget_vs_actual(fiscal_year=None, cost_center=None, company=None):
 			"description": "Fiscal year name (e.g. '2025-2026'). Optional — omit to use current fiscal year.",
 		},
 		"account": {"type": "string", "description": "Filter by specific account name"},
+		"cost_center": {"type": "string", "description": "Filter by cost center"},
+		"department": {"type": "string", "description": "Filter by department"},
+		"project": {"type": "string", "description": "Filter by project"},
 		"company": {
 			"type": "string",
 			"description": "Company name. Optional — omit to use user's default company.",
 		},
 	},
+	doctypes=["Budget", "GL Entry"],
 )
-def get_budget_variance(fiscal_year=None, account=None, company=None):
+def get_budget_variance(fiscal_year=None, account=None, cost_center=None, department=None, project=None, company=None):
 	"""Get monthly budget vs actual variance for specific accounts."""
 	company = get_default_company(company)
 
@@ -224,6 +231,8 @@ def get_budget_variance(fiscal_year=None, account=None, company=None):
 	if account:
 		budget_query = budget_query.where(budget_acct.account == account)
 
+	budget_query = apply_dimension_filters(budget_query, budget, cost_center=cost_center, department=department, project=project)
+
 	budget_data = budget_query.run(as_dict=True)
 
 	if not budget_data:
@@ -244,7 +253,7 @@ def get_budget_variance(fiscal_year=None, account=None, company=None):
 	gle = frappe.qb.DocType("GL Entry")
 	month_expr = fn.DateFormat(gle.posting_date, "%Y-%m")
 
-	actual_query = (
+	actual_q = (
 		frappe.qb.from_(gle)
 		.select(
 			month_expr.as_("month"),
@@ -255,6 +264,10 @@ def get_budget_variance(fiscal_year=None, account=None, company=None):
 		.where(gle.posting_date >= fy_from)
 		.where(gle.posting_date <= fy_to)
 		.where(gle.is_cancelled == 0)
+	)
+	actual_q = apply_dimension_filters(actual_q, gle, cost_center=cost_center, department=department, project=project)
+	actual_query = (
+		actual_q
 		.groupby(month_expr)
 		.orderby(month_expr)
 		.run(as_dict=True)

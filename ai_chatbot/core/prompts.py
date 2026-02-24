@@ -20,21 +20,31 @@ def build_system_prompt():
 	"""Build the system prompt with dynamic context.
 
 	Includes:
-	- ERPNext assistant persona
+	- ERPNext assistant persona (configurable)
 	- Current user name, company, currency, fiscal year dates
 	- Guidelines for default date ranges and currency handling
 	- Enabled tool categories
+	- Accounting dimension filtering context
+	- Multi-company consolidation context (if parent company)
 	- Write operation confirmation rules (if enabled)
+	- Response language (configurable)
+	- Custom system prompt and instructions (configurable)
 	- Response format guidelines
 
 	Returns:
 		str: The complete system prompt.
 	"""
 	parts = []
+	settings = frappe.get_single("Chatbot Settings")
+	company = None
 
-	# --- Persona ---
+	# --- Persona (configurable) ---
+	persona = (getattr(settings, "ai_persona", "") or "").strip()
+	if not persona:
+		persona = "an intelligent ERPNext business assistant"
+
 	parts.append(
-		"You are an intelligent ERPNext business assistant. "
+		f"You are {persona}. "
 		"You help users analyze business data, manage records, and get insights "
 		"from their ERPNext system."
 	)
@@ -57,6 +67,34 @@ def build_system_prompt():
 		)
 	except Exception:
 		parts.append(f"\n## Current Context\n- **Today**: {nowdate()}")
+
+	# --- Multi-Company Consolidation Context ---
+	if company:
+		try:
+			from ai_chatbot.core.consolidation import get_child_companies, is_parent_company
+
+			if is_parent_company(company):
+				children = get_child_companies(company)
+				if children:
+					child_list = ", ".join(children[:10])
+					suffix = f" (and {len(children) - 10} more)" if len(children) > 10 else ""
+					parent_currency = get_company_currency(company)
+					parts.append(
+						f"\n## Multi-Company Context\n"
+						f'- Your company "{company}" is a parent company with subsidiaries: '
+						f"{child_list}{suffix}\n"
+						f"- When the user asks for consolidated/group/total data across companies, "
+						f"ask them:\n"
+						f"  1. Whether to include child companies in the report\n"
+						f"  2. Which currency to display results in "
+						f"(default: {parent_currency})\n"
+						f"- After the user confirms, use the `get_consolidated_report` tool with "
+						f"the appropriate tool name and parameters.\n"
+						f"- When filtering by a specific subsidiary, pass that company name "
+						f"explicitly to the individual tool instead."
+					)
+		except Exception:
+			pass
 
 	# --- Date Range Guidelines ---
 	parts.append(
@@ -83,11 +121,22 @@ def build_system_prompt():
 		"- When presenting data from tools, the `currency` field indicates the currency used."
 	)
 
+	# --- Dimension Filtering ---
+	parts.append(
+		"\n## Dimension Filtering\n"
+		"- Finance tools support optional filtering by `cost_center`, `department`, and `project`.\n"
+		"- Only pass these filters when the user explicitly mentions a cost center, department, "
+		"or project.\n"
+		"- Do NOT ask the user for dimension filters — they are optional."
+	)
+
 	# --- Enabled Tool Categories ---
+	from ai_chatbot.tools.registry import _EXTRA_CATEGORIES
+
+	all_categories = {**TOOL_CATEGORIES, **_EXTRA_CATEGORIES}
 	enabled = []
-	settings = frappe.get_single("Chatbot Settings")
-	for category, field in TOOL_CATEGORIES.items():
-		if getattr(settings, field, False):
+	for category, field in all_categories.items():
+		if field is None or getattr(settings, field, False):
 			enabled.append(category)
 
 	if enabled:
@@ -108,9 +157,24 @@ def build_system_prompt():
 			"2. Present the details in a clear format and ask 'Shall I proceed?'\n"
 			"3. Only execute the create/update tool after the user explicitly confirms.\n"
 			"4. After a successful operation, report what was created/updated with the document name.\n"
-		"5. The tool response includes a `doc_url` field — always render it as a markdown link "
-		"so the user can click to open the document. Example: [CRM-LEAD-00001](/app/lead/CRM-LEAD-00001)"
+			"5. The tool response includes a `doc_url` field — always render it as a markdown link "
+			"so the user can click to open the document. Example: [CRM-LEAD-00001](/app/lead/CRM-LEAD-00001)"
 		)
+
+	# --- Response Language (configurable) ---
+	lang = (getattr(settings, "response_language", "") or "").strip()
+	if lang and lang != "English":
+		parts.append(f"\n## Language\nAlways respond in {lang}.")
+
+	# --- Custom System Prompt (admin-configured) ---
+	custom_prompt = (getattr(settings, "custom_system_prompt", "") or "").strip()
+	if custom_prompt:
+		parts.append(f"\n## Custom Instructions\n{custom_prompt}")
+
+	# --- Custom Instructions (admin-configured) ---
+	custom_instructions = (getattr(settings, "custom_instructions", "") or "").strip()
+	if custom_instructions:
+		parts.append(f"\n## Additional Instructions\n{custom_instructions}")
 
 	# --- Response Format ---
 	parts.append(

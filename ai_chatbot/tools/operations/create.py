@@ -31,6 +31,7 @@ from ai_chatbot.tools.registry import register_tool
 			"description": "Company name. Optional — omit to use user's default company.",
 		},
 	},
+	doctypes=["Lead"],
 )
 def create_lead(
 	first_name=None,
@@ -90,6 +91,7 @@ def create_lead(
 		},
 		"company": {"type": "string", "description": "Company name. Optional — omit to use user's default company."},
 	},
+	doctypes=["Opportunity"],
 )
 def create_opportunity(
 	party_name=None,
@@ -205,6 +207,7 @@ def _resolve_party_name(party_name, opportunity_from):
 			"description": "Priority: 'Low', 'Medium', or 'High' (default: 'Medium')",
 		},
 	},
+	doctypes=["ToDo"],
 )
 def create_todo(description=None, allocated_to=None, date=None, priority="Medium"):
 	"""Create a new ToDo task."""

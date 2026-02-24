@@ -5,6 +5,11 @@ app_description = "Intelligent AI Chatbot with ERPNext Integration"
 app_email = "sanjay.kumar001@gmail.com"
 app_license = "mit"
 
+# Tool Plugins — external apps can register chatbot tools by extending this list.
+# Example (in another_app/hooks.py):
+#   ai_chatbot_tool_modules = ["another_app.chatbot_tools.manufacturing"]
+ai_chatbot_tool_modules = []
+
 # Apps
 # ------------------
 

@@ -22,6 +22,7 @@ from ai_chatbot.tools.registry import register_tool
 			"description": "Company name. Optional — omit to use user's default company.",
 		},
 	},
+	doctypes=["Sales Invoice", "Purchase Invoice"],
 )
 def get_working_capital_summary(company=None):
 	"""Working Capital = Receivables + Inventory - Payables."""
@@ -98,6 +99,7 @@ def get_working_capital_summary(company=None):
 			"description": "Company name. Optional — omit to use user's default company.",
 		},
 	},
+	doctypes=["Sales Invoice", "Purchase Invoice"],
 )
 def get_cash_conversion_cycle(from_date=None, to_date=None, company=None):
 	"""Calculate CCC = DSO + DIO - DPO."""
