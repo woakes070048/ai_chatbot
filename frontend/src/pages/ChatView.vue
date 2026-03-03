@@ -11,11 +11,14 @@
         :sidebar-collapsed="sidebarCollapsed"
         :search-results="searchResults"
         :is-searching="isSearching"
+        :selected-language="selectedLanguage"
+        :available-languages="availableLanguages"
         @new-chat="handleNewChat"
         @select-conversation="handleSelectConversation"
         @delete-conversation="handleDeleteConversation"
         @toggle-sidebar="toggleSidebar"
         @change-provider="handleChangeProvider"
+        @change-language="handleChangeLanguage"
         @search="handleSearch"
       />
     </div>
@@ -171,6 +174,10 @@ const selectedProvider = ref('OpenAI')
 const messagesContainer = ref(null)
 const streamingEnabled = ref(true)
 
+// Language state
+const selectedLanguage = ref('')
+const availableLanguages = ref([])
+
 // Current user info (fullname + avatar)
 const userInfo = ref({ fullname: '', avatar: '' })
 
@@ -266,6 +273,12 @@ onMounted(async () => {
     if (settingsResult.user) {
       userInfo.value = settingsResult.user
     }
+    if (settingsResult.settings.response_language !== undefined) {
+      selectedLanguage.value = settingsResult.settings.response_language
+    }
+    if (settingsResult.settings.available_languages) {
+      availableLanguages.value = settingsResult.settings.available_languages
+    }
   }
 
   // Initialize Socket.IO connection if streaming is enabled
@@ -306,6 +319,7 @@ const handleNewChat = async () => {
       if (newConv) {
         currentConversation.value = newConv
         messages.value = []
+        selectedLanguage.value = ''
       } else {
         currentConversation.value = response.data || {
           name: response.conversation_id,
@@ -313,6 +327,7 @@ const handleNewChat = async () => {
           ai_provider: selectedProvider.value,
         }
         messages.value = []
+        selectedLanguage.value = ''
       }
     }
   } catch (error) {
@@ -334,6 +349,12 @@ const loadMessages = async (conversationId) => {
     const response = await chatAPI.getConversationMessages(conversationId)
     if (response.success) {
       messages.value = response.messages
+      // Load conversation-level language preference from session context
+      if (response.session_context?.response_language) {
+        selectedLanguage.value = response.session_context.response_language
+      } else {
+        selectedLanguage.value = ''
+      }
       await nextTick()
       scrollToBottom()
     }
@@ -471,6 +492,17 @@ const handleDeleteConversation = async (conversationId) => {
 
 const handleChangeProvider = (provider) => {
   selectedProvider.value = provider
+}
+
+const handleChangeLanguage = async (language) => {
+  selectedLanguage.value = language
+  if (currentConversation.value) {
+    try {
+      await chatAPI.setConversationLanguage(currentConversation.value.name, language)
+    } catch (error) {
+      console.error('Error setting language:', error)
+    }
+  }
 }
 
 const scrollToBottom = (force = false) => {

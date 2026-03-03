@@ -2858,3 +2858,259 @@ cd apps/ai_chatbot && grep -rln "get_company_filter" ai_chatbot/tools/ --include
    print(resolve_dimension_name("vertical", dims))
    ```
 2. If `None` is returned, check that `business_vertical` exists in the dimensions dict and that there are no multiple matches.
+
+---
+
+## Phase 6C: Workspace, Help Button & Language Selection
+
+### Prerequisites
+
+```bash
+# Run migration to sync workspace and number card fixtures
+bench --site <SITE> migrate
+bench --site <SITE> clear-cache
+
+# Rebuild frontend
+cd apps/ai_chatbot/frontend && npm run build
+```
+
+---
+
+### 6C.1 Frappe Workspace & Number Cards
+
+#### 6C.1.1 Workspace Visibility
+
+1. Open Frappe desk: `http://<SITE>/app`
+2. Look at the left sidebar navigation.
+3. **Expected**: "AI Chatbot" workspace appears in the sidebar with a chat icon.
+4. Click on it, or navigate directly to `/app/ai-chatbot`.
+5. **Expected**: The workspace page loads with number cards, shortcuts, and administration links.
+
+#### 6C.1.2 Number Cards
+
+1. On the AI Chatbot workspace page, verify 3 number cards are displayed at the top:
+   - **Total Conversations** — count of all `Chatbot Conversation` records
+   - **Messages Today** — count of `Chatbot Message` records created today
+   - **Total Token Usage** — sum of `total_tokens` across all conversations
+2. **Expected**: Each card shows a numeric value. If no data exists yet, values will be 0.
+3. Create a new chat at `/ai-chatbot` and send a message, then refresh the workspace.
+4. **Expected**: "Total Conversations" and "Messages Today" counts increase.
+
+#### 6C.1.3 Workspace Shortcuts
+
+1. On the workspace page, verify 4 shortcut buttons are visible:
+   - **Open AI Chatbot** — links to `/ai-chatbot`
+   - **Chatbot Settings** — opens `Chatbot Settings` DocType
+   - **Chatbot Conversation** — opens conversation list view
+   - **Chatbot Message** — opens message list view
+2. Click each shortcut.
+3. **Expected**: Each opens the correct page.
+
+#### 6C.1.4 Administration Links
+
+1. Below the shortcuts, verify an "Administration" card with links:
+   - Chatbot Settings
+   - Chatbot Conversation
+   - Chatbot Message
+   - Chatbot Token Usage
+2. Click each link.
+3. **Expected**: Each opens the correct DocType list or form view.
+
+#### 6C.1.5 Fixture Verification (Console)
+
+```bash
+bench --site <SITE> execute "frappe.get_all('Workspace', filters={'module': 'Chatbot'}, fields=['name', 'label', 'icon', 'public'])"
+# Expected: [{"name": "AI Chatbot", "label": "AI Chatbot", "icon": "chat", "public": 1}]
+
+bench --site <SITE> execute "frappe.get_all('Number Card', filters={'module': 'Chatbot'}, fields=['name', 'label'])"
+# Expected: 3 number cards (Total Conversations, Messages Today, Total Token Usage)
+```
+
+---
+
+### 6C.2 Help Button & Sample Prompts Modal
+
+#### 6C.2.1 Help Button Placement
+
+1. Open the chatbot at `/ai-chatbot`.
+2. Look at the chat input area at the bottom.
+3. **Expected**: A help icon button (circle with question mark) appears alongside the send button — after the microphone button, before the stop/send button.
+4. The button order should be: `[Paperclip] [Textarea] [Microphone] [Help] [Send]`
+
+#### 6C.2.2 Help Modal Opening
+
+1. Click the help icon button.
+2. **Expected**: A modal overlay appears with the title "Sample Prompts".
+3. The modal should have a semi-transparent backdrop.
+
+#### 6C.2.3 Sample Prompt Categories
+
+1. Inside the modal, verify 6 categories are listed:
+   - **Sales** (TrendingUp icon)
+   - **Finance** (DollarSign icon)
+   - **HR** (Users icon)
+   - **CRM** (Target icon)
+   - **Stock** (Package icon)
+   - **Purchasing** (ShoppingCart icon)
+2. Each category should have 4 sample prompts.
+3. **Expected**: 24 prompts total across all categories.
+
+#### 6C.2.4 Prompt Type Badges
+
+1. Each prompt should show a colored badge indicating the output type:
+   - **table** — blue badge
+   - **chart** — green badge
+   - **number** — amber badge
+2. **Expected**: Badges are visible and correctly colored for each prompt.
+
+#### 6C.2.5 Prompt Selection
+
+1. Click any sample prompt (e.g., "What is the total sales amount this quarter?").
+2. **Expected**: The modal closes and the prompt text is filled into the chat input textarea.
+3. The textarea should be focused and ready to send.
+4. Press Enter to send the prompt.
+5. **Expected**: The AI processes the prompt and returns a response matching the expected output type.
+
+#### 6C.2.6 Modal Closing
+
+1. Open the help modal again.
+2. Click the X button in the top-right corner.
+3. **Expected**: Modal closes.
+4. Open the modal again.
+5. Click the backdrop (dark area outside the modal).
+6. **Expected**: Modal closes.
+7. Open the modal again.
+8. Press the Escape key.
+9. **Expected**: Modal closes.
+
+#### 6C.2.7 SAMPLE_USER_PROMPT.md
+
+1. Verify the file exists at the project root: `apps/ai_chatbot/SAMPLE_USER_PROMPT.md`
+2. **Expected**: Contains all 24 sample prompts organized by the same 6 categories as the modal.
+3. Each prompt shows the expected output format (table, chart, or number).
+
+---
+
+### 6C.3 Response Language Selector
+
+#### 6C.3.1 Language Dropdown in Sidebar
+
+1. Open the chatbot at `/ai-chatbot`.
+2. Expand the sidebar (if collapsed).
+3. Look at the bottom of the sidebar, below the AI provider selector.
+4. **Expected**: A language dropdown is visible with a globe/languages icon and the text "Default".
+
+#### 6C.3.2 Available Languages
+
+1. Click the language dropdown.
+2. **Expected**: A list of available languages appears (configured in Chatbot Settings).
+3. If no languages are configured in settings, the dropdown should still show "Default".
+
+#### 6C.3.3 Dropdown Mutual Exclusion
+
+1. Open the provider dropdown (e.g., showing "OpenAI").
+2. While it's open, click the language dropdown.
+3. **Expected**: The provider dropdown closes and the language dropdown opens.
+4. Repeat in reverse: open language, then click provider.
+5. **Expected**: Language dropdown closes, provider dropdown opens.
+
+#### 6C.3.4 Language Selection
+
+1. Select a non-English language from the dropdown (e.g., "Hindi", "Spanish", "French").
+2. **Expected**: The dropdown closes and shows the selected language name.
+3. Send a message: `What is the total sales this month?`
+4. **Expected**: The AI responds in the selected language.
+
+#### 6C.3.5 Per-Conversation Persistence
+
+1. Set the language to "Hindi" in the current conversation.
+2. Click "New Chat" to create a new conversation.
+3. **Expected**: The language selector resets to "Default" for the new conversation.
+4. Switch back to the previous conversation.
+5. **Expected**: The language selector shows "Hindi" (the previously saved language).
+
+#### 6C.3.6 Language in Backend
+
+1. Set a language in the chatbot UI.
+2. Verify it persists in the database:
+   ```bash
+   bench --site <SITE> execute "frappe.get_value('Chatbot Conversation', '<CONVERSATION_ID>', 'session_context')"
+   ```
+3. **Expected**: The `session_context` JSON includes `"response_language": "Hindi"` (or whichever language was selected).
+
+#### 6C.3.7 Language Fallback
+
+1. In Chatbot Settings (`/app/chatbot-settings`), set a global **Response Language** (e.g., "French").
+2. Start a new conversation (no per-conversation language set).
+3. Send a message.
+4. **Expected**: AI responds in French (global fallback).
+5. Now set the conversation language to "Spanish" using the sidebar dropdown.
+6. Send another message.
+7. **Expected**: AI responds in Spanish (per-conversation override takes priority over global).
+
+---
+
+### 6C.4 Settings Integration
+
+#### 6C.4.1 Available Languages in Settings
+
+1. Go to Chatbot Settings (`/app/chatbot-settings`).
+2. Find the **Available Languages** field (small text or table field).
+3. Add languages separated by newlines or commas (e.g., "English, Hindi, Spanish, French, German, Japanese").
+4. Save.
+5. Reload the chatbot UI.
+6. **Expected**: The language dropdown in the sidebar shows all configured languages.
+
+#### 6C.4.2 Default Response Language
+
+1. In Chatbot Settings, set **Response Language** to "German".
+2. Save.
+3. Open a new conversation in the chatbot.
+4. **Expected**: The language selector shows "Default" but the AI uses German as the fallback language.
+
+---
+
+### Troubleshooting Phase 6C
+
+#### Workspace not appearing in sidebar
+
+1. Ensure `bench --site <SITE> migrate` has been run after adding the workspace fixture.
+2. Run `bench --site <SITE> clear-cache` and hard-refresh the browser (Ctrl+Shift+R).
+3. Verify the workspace exists:
+   ```bash
+   bench --site <SITE> execute "frappe.get_all('Workspace', filters={'module': 'Chatbot'})"
+   ```
+4. Check that `ai_chatbot/modules.txt` contains `Chatbot`.
+
+#### Number cards showing 0 or error
+
+1. Verify number cards exist in the database:
+   ```bash
+   bench --site <SITE> execute "frappe.get_all('Number Card', filters={'module': 'Chatbot'}, fields=['name', 'document_type', 'function'])"
+   ```
+2. Check that the DocTypes referenced (`Chatbot Conversation`, `Chatbot Message`) have data.
+3. For "Total Token Usage", ensure the `total_tokens` field exists on `Chatbot Conversation` and has values > 0.
+
+#### Help modal not appearing
+
+1. Check browser console for JavaScript errors.
+2. Verify `HelpModal.vue` is imported in `ChatInput.vue`.
+3. Ensure the frontend was rebuilt: `cd apps/ai_chatbot/frontend && npm run build`
+
+#### Language selector not showing languages
+
+1. Check that `available_languages` is configured in Chatbot Settings.
+2. Verify the `get_settings()` API returns languages:
+   ```bash
+   bench --site <SITE> execute "from ai_chatbot.api.chat import get_settings; print(get_settings())"
+   ```
+3. Look for `available_languages` in the response.
+
+#### Language not persisting per conversation
+
+1. Verify the `set_conversation_language` endpoint works:
+   ```bash
+   bench --site <SITE> execute "from ai_chatbot.api.chat import set_conversation_language; print(set_conversation_language('<CONV_ID>', 'Hindi'))"
+   ```
+2. Check that `session_context` field on `Chatbot Conversation` DocType exists and is writable.
+3. Verify `get_conversation_messages()` returns `session_context` in its response.

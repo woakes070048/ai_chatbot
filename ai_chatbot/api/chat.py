@@ -106,9 +106,19 @@ def get_conversation_messages(conversation_id: str) -> dict:
 				except (json.JSONDecodeError, TypeError):
 					msg["attachments"] = None
 
+		# Load session context for conversation-level preferences
+		session_context = {}
+		try:
+			raw_ctx = frappe.db.get_value("Chatbot Conversation", conversation_id, "session_context")
+			if raw_ctx:
+				session_context = json.loads(raw_ctx) if isinstance(raw_ctx, str) else raw_ctx
+		except (json.JSONDecodeError, TypeError):
+			pass
+
 		return {
 			"success": True,
 			"messages": messages,
+			"session_context": session_context,
 		}
 	except Exception as e:
 		frappe.log_error(f"Error getting messages: {e!s}", "AI Chatbot")
@@ -409,6 +419,36 @@ def update_conversation_title(conversation_id: str, title: str) -> dict:
 
 
 @frappe.whitelist()
+def set_conversation_language(conversation_id: str, language: str = "") -> dict:
+	"""Set the response language for a specific conversation.
+
+	Stores the language preference in the conversation's session_context JSON.
+	Pass an empty string to reset to the global default.
+
+	Args:
+		conversation_id: The conversation document name.
+		language: Language name (e.g. "Hindi", "Spanish") or empty string to reset.
+
+	Returns:
+		dict with success status.
+	"""
+	try:
+		conversation = frappe.get_doc("Chatbot Conversation", conversation_id)
+		if conversation.user != frappe.session.user:
+			frappe.throw("Unauthorized access to conversation")
+
+		from ai_chatbot.core.session_context import set_session_context
+
+		set_session_context(conversation_id, "response_language", language or None)
+		frappe.db.commit()
+
+		return {"success": True, "language": language}
+	except Exception as e:
+		frappe.log_error(f"Error setting conversation language: {e!s}", "AI Chatbot")
+		return {"success": False, "error": str(e)}
+
+
+@frappe.whitelist()
 def get_settings() -> dict:
 	"""Get chatbot settings and current user info"""
 	try:
@@ -422,11 +462,20 @@ def get_settings() -> dict:
 		# Unified provider (new) or legacy dual-provider flags
 		ai_provider = getattr(settings, "ai_provider", None)
 
+		# Language options from the Select field
+		lang_options = (getattr(settings, "response_language", "") or "").strip()
+		available_languages = [
+			"", "English", "Hindi", "Spanish", "French", "German",
+			"Portuguese", "Arabic", "Chinese", "Japanese", "Korean",
+		]
+
 		return {
 			"success": True,
 			"settings": {
 				"ai_provider": ai_provider or "OpenAI",
 				"enable_streaming": settings.enable_streaming if hasattr(settings, "enable_streaming") else 1,
+				"response_language": lang_options,
+				"available_languages": available_languages,
 				"tools_enabled": {
 					"crm": settings.enable_crm_tools,
 					"sales": settings.enable_sales_tools,

@@ -138,6 +138,17 @@
             <Mic :size="20" :class="isListening ? 'text-white' : 'text-gray-500 dark:text-gray-400'" />
           </button>
 
+          <!-- Help Button -->
+          <button
+            type="button"
+            @click="showHelpModal = true"
+            :disabled="disabled && !isStreaming"
+            class="h-10 w-10 flex-shrink-0 rounded-lg flex items-center justify-center bg-transparent hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Sample prompts &amp; help"
+          >
+            <HelpCircle :size="20" class="text-gray-500 dark:text-gray-400" />
+          </button>
+
           <!-- Stop Button (shown during streaming) -->
           <button
             v-if="isStreaming"
@@ -166,13 +177,20 @@
           {{ uploadError || voiceError }}
         </div>
       </form>
+
+      <!-- Help Modal -->
+      <HelpModal
+        v-model="showHelpModal"
+        @select-prompt="handleSelectPrompt"
+      />
     </div>
   </div>
 </template>
 
 <script setup>
 import { ref, watch, nextTick, computed, onMounted, onUnmounted } from 'vue'
-import { Send, Square, Paperclip, Mic, X, FileText, AtSign } from 'lucide-vue-next'
+import { Send, Square, Paperclip, Mic, X, FileText, AtSign, HelpCircle } from 'lucide-vue-next'
+import HelpModal from './HelpModal.vue'
 import { useVoiceInput } from '../composables/useVoiceInput'
 import { useFileUpload, ALLOWED_TYPES } from '../composables/useFileUpload'
 import { chatAPI } from '../utils/api'
@@ -193,6 +211,16 @@ const fileInputRef = ref(null)
 const mentionDropdownRef = ref(null)
 const isDragOver = ref(false)
 const isVoiceMessage = ref(false)
+const showHelpModal = ref(false)
+
+const handleSelectPrompt = (text) => {
+  inputValue.value = text
+  showHelpModal.value = false
+  nextTick(() => {
+    textareaRef.value?.focus()
+    adjustTextareaHeight()
+  })
+}
 
 // Voice input (auto-send after 2s silence)
 const {

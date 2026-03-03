@@ -207,6 +207,16 @@ class ChatAPI {
   }
 
   /**
+   * Set conversation language preference
+   */
+  async setConversationLanguage(conversationId, language) {
+    return this.request('set_conversation_language', {
+      conversation_id: conversationId,
+      language,
+    })
+  }
+
+  /**
    * Get chatbot settings
    */
   async getSettings() {

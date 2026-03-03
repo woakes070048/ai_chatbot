@@ -164,11 +164,12 @@
       </template>
     </div>
 
-    <!-- Provider Selector (bottom of sidebar) -->
-    <div class="px-3 py-3 border-t border-gray-200 dark:border-gray-800">
+    <!-- Provider & Language Selectors (bottom of sidebar) -->
+    <div class="px-3 py-3 border-t border-gray-200 dark:border-gray-800 space-y-2">
+      <!-- Provider Selector -->
       <div class="relative">
         <button
-          @click="showProviderDropdown = !showProviderDropdown"
+          @click="toggleProviderDropdown"
           class="w-full flex items-center justify-between px-3 py-2 text-sm bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
         >
           <span class="flex items-center gap-2">
@@ -196,6 +197,38 @@
           </button>
         </div>
       </div>
+
+      <!-- Language Selector -->
+      <div v-if="availableLanguages.length > 0" class="relative">
+        <button
+          @click="toggleLanguageDropdown"
+          class="w-full flex items-center justify-between px-3 py-2 text-sm bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+        >
+          <span class="flex items-center gap-2">
+            <Languages :size="14" class="text-gray-500" />
+            <span class="text-gray-700 dark:text-gray-300">{{ displayLanguage }}</span>
+          </span>
+          <ChevronDown :size="14" class="text-gray-400" />
+        </button>
+        <div
+          v-if="showLanguageDropdown"
+          class="absolute bottom-full left-0 right-0 mb-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg overflow-hidden z-20 max-h-48 overflow-y-auto"
+        >
+          <button
+            v-for="lang in availableLanguages"
+            :key="lang"
+            @click="selectLanguage(lang)"
+            :class="[
+              'w-full px-3 py-2 text-sm text-left transition-colors',
+              lang === selectedLanguage
+                ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
+                : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
+            ]"
+          >
+            {{ lang || 'Default' }}
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -204,7 +237,7 @@
 import { ref, computed } from 'vue'
 import {
   Plus, Search, Settings, Trash2, MessageSquare,
-  PanelLeftOpen, PanelLeftClose, Cpu, ChevronDown, X,
+  PanelLeftOpen, PanelLeftClose, Cpu, ChevronDown, X, Languages,
 } from 'lucide-vue-next'
 import logoSvg from '../assets/logo.svg'
 
@@ -233,17 +266,28 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  selectedLanguage: {
+    type: String,
+    default: '',
+  },
+  availableLanguages: {
+    type: Array,
+    default: () => [],
+  },
 })
 
 const emit = defineEmits([
   'new-chat', 'select-conversation', 'delete-conversation',
-  'toggle-sidebar', 'change-provider', 'search',
+  'toggle-sidebar', 'change-provider', 'change-language', 'search',
 ])
 
 const localSearchQuery = ref('')
 const showProviderDropdown = ref(false)
+const showLanguageDropdown = ref(false)
 
 const providerOptions = ['OpenAI', 'Claude', 'Gemini']
+
+const displayLanguage = computed(() => props.selectedLanguage || 'Default')
 
 // Group conversations by date
 const groupedConversations = computed(() => {
@@ -311,6 +355,21 @@ const handleSearchResultClick = (conversation) => {
 const selectProvider = (provider) => {
   showProviderDropdown.value = false
   emit('change-provider', provider)
+}
+
+const toggleProviderDropdown = () => {
+  showProviderDropdown.value = !showProviderDropdown.value
+  if (showProviderDropdown.value) showLanguageDropdown.value = false
+}
+
+const selectLanguage = (language) => {
+  showLanguageDropdown.value = false
+  emit('change-language', language)
+}
+
+const toggleLanguageDropdown = () => {
+  showLanguageDropdown.value = !showLanguageDropdown.value
+  if (showLanguageDropdown.value) showProviderDropdown.value = false
 }
 
 const openSettings = () => {

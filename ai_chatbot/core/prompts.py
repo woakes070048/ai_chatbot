@@ -209,8 +209,17 @@ def build_system_prompt(conversation_id: str | None = None):
 			"so the user can click to open the document. Example: [CRM-LEAD-00001](/app/lead/CRM-LEAD-00001)"
 		)
 
-	# --- Response Language (configurable) ---
-	lang = (getattr(settings, "response_language", "") or "").strip()
+	# --- Response Language (per-conversation or global fallback) ---
+	lang = None
+	if conversation_id:
+		from ai_chatbot.core.session_context import get_session_context
+
+		lang_ctx = get_session_context(conversation_id)
+		lang = (lang_ctx.get("response_language") or "").strip() or None
+
+	if not lang:
+		lang = (getattr(settings, "response_language", "") or "").strip() or None
+
 	if lang and lang != "English":
 		parts.append(f"\n## Language\nAlways respond in {lang}.")
 

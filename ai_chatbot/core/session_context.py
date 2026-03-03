@@ -10,6 +10,7 @@ document's `session_context` field.
 Session variables:
 - include_subsidiaries: bool — whether to include child company data
 - target_currency: str | None — user-specified display currency (via @Currency)
+- response_language: str | None — per-conversation response language override
 """
 
 import json
@@ -27,7 +28,7 @@ def get_session_context(conversation_id: str) -> dict:
 		- include_subsidiaries: bool (default False)
 		- target_currency: str | None (default None)
 	"""
-	default = {"include_subsidiaries": False, "target_currency": None}
+	default = {"include_subsidiaries": False, "target_currency": None, "response_language": None}
 
 	try:
 		raw = frappe.db.get_value("Chatbot Conversation", conversation_id, "session_context")

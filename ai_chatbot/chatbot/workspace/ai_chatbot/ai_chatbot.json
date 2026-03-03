@@ -1,0 +1,114 @@
+{
+ "app": "ai_chatbot",
+ "charts": [],
+ "content": "[{\"id\":\"nc1\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Total Conversations\",\"col\":4}},{\"id\":\"nc2\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Messages Today\",\"col\":4}},{\"id\":\"nc3\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Total Token Usage\",\"col\":4}},{\"id\":\"sp1\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"sc1\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Open AI Chatbot\",\"col\":3}},{\"id\":\"sc2\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Chatbot Settings\",\"col\":3}},{\"id\":\"sc3\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Chatbot Conversation\",\"col\":3}},{\"id\":\"sc4\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Chatbot Message\",\"col\":3}},{\"id\":\"sp2\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"card1\",\"type\":\"card\",\"data\":{\"card_name\":\"Administration\",\"col\":4}}]",
+ "creation": "2026-03-03 12:00:00.000000",
+ "custom_blocks": [],
+ "docstatus": 0,
+ "doctype": "Workspace",
+ "for_user": "",
+ "hide_custom": 0,
+ "icon": "chat",
+ "idx": 0,
+ "is_hidden": 0,
+ "label": "AI Chatbot",
+ "links": [
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Administration",
+   "link_count": 4,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Chatbot Settings",
+   "link_count": 0,
+   "link_to": "Chatbot Settings",
+   "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Chatbot Conversation",
+   "link_count": 0,
+   "link_to": "Chatbot Conversation",
+   "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Chatbot Message",
+   "link_count": 0,
+   "link_to": "Chatbot Message",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Chatbot Token Usage",
+   "link_count": 0,
+   "link_to": "Chatbot Token Usage",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  }
+ ],
+ "modified": "2026-03-03 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Chatbot",
+ "name": "AI Chatbot",
+ "number_cards": [
+  {
+   "label": "Total Conversations",
+   "number_card_name": "Total Conversations"
+  },
+  {
+   "label": "Messages Today",
+   "number_card_name": "Messages Today"
+  },
+  {
+   "label": "Total Token Usage",
+   "number_card_name": "Total Token Usage"
+  }
+ ],
+ "owner": "Administrator",
+ "parent_page": "",
+ "public": 1,
+ "quick_lists": [],
+ "restrict_to_domain": "",
+ "roles": [],
+ "sequence_id": 50.0,
+ "shortcuts": [
+  {
+   "label": "Open AI Chatbot",
+   "type": "URL",
+   "url": "/ai-chatbot"
+  },
+  {
+   "label": "Chatbot Settings",
+   "link_to": "Chatbot Settings",
+   "type": "DocType"
+  },
+  {
+   "label": "Chatbot Conversation",
+   "link_to": "Chatbot Conversation",
+   "type": "DocType"
+  },
+  {
+   "label": "Chatbot Message",
+   "link_to": "Chatbot Message",
+   "type": "DocType"
+  }
+ ],
+ "title": "AI Chatbot",
+ "type": "Workspace"
+}
