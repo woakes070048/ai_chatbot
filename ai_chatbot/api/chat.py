@@ -116,7 +116,7 @@ def get_conversation_messages(conversation_id: str) -> dict:
 
 
 @frappe.whitelist()
-def send_message(conversation_id: str, message: str, stream: bool = False, attachments: str = None) -> dict:
+def send_message(conversation_id: str, message: str, stream: bool = False, attachments: str | None = None) -> dict:
 	"""Send a message and get AI response.
 
 	When stream=True, delegates to the streaming API which delivers tokens
@@ -140,6 +140,9 @@ def send_message(conversation_id: str, message: str, stream: bool = False, attac
 		if conversation.user != frappe.session.user:
 			frappe.throw("Unauthorized access to conversation")
 
+		# Set conversation context for session tools
+		frappe.flags.current_conversation_id = conversation_id
+
 		# Save user message
 		msg_doc = {
 			"doctype": "Chatbot Message",
@@ -155,8 +158,8 @@ def send_message(conversation_id: str, message: str, stream: bool = False, attac
 		# Get conversation history
 		history = get_conversation_history(conversation_id)
 
-		# Prepend system prompt
-		system_prompt = build_system_prompt()
+		# Prepend system prompt (pass conversation_id for session context)
+		system_prompt = build_system_prompt(conversation_id=conversation_id)
 		history = [{"role": "system", "content": system_prompt}, *history]
 
 		# Optimize history (trim + compress tool results)
@@ -254,49 +257,56 @@ def _extract_tool_info(provider_name: str, tool_call: dict) -> tuple:
 def generate_ai_response(conversation, provider, history, tools) -> dict:
 	"""Generate non-streaming AI response with provider-agnostic parsing."""
 	try:
-		response = provider.chat_completion(history, tools=tools, stream=False)
 		ai_provider = conversation.ai_provider
+		max_tool_rounds = 5
 
-		# Extract response content
-		content, tool_calls, prompt_tokens, completion_tokens = _extract_response(ai_provider, response)
-		tokens_used = prompt_tokens + completion_tokens
-
-		# Handle tool calls if present
+		# Multi-round tool call loop
+		content = ""
+		all_tool_calls = []
 		all_tool_results = []
-		if tool_calls:
-			tool_results = []
-			for tool_call in tool_calls:
-				func_name, func_args = _extract_tool_info(ai_provider, tool_call)
-				result = BaseTool.execute_tool(func_name, func_args)
-				tool_results.append(result)
+		prompt_tokens = 0
+		completion_tokens = 0
 
-			all_tool_results = tool_results
+		for _round in range(max_tool_rounds):
+			response = provider.chat_completion(history, tools=tools, stream=False)
 
-			# Add tool results to history and get final response
+			round_content, tool_calls, round_prompt, round_completion = _extract_response(ai_provider, response)
+			content = round_content
+			prompt_tokens += round_prompt
+			completion_tokens += round_completion
+
+			if not tool_calls:
+				# No tool calls — we're done
+				break
+
+			# Execute tool calls
+			all_tool_calls.extend(tool_calls)
+
 			history.append(
 				{
 					"role": "assistant",
-					"content": content,
+					"content": round_content,
 					"tool_calls": tool_calls,
 				}
 			)
 
-			for i, result in enumerate(tool_results):
+			for i, tool_call in enumerate(tool_calls):
+				func_name, func_args = _extract_tool_info(ai_provider, tool_call)
+				result = BaseTool.execute_tool(func_name, func_args)
+				all_tool_results.append(result)
+
 				history.append(
 					{
 						"role": "tool",
 						"content": json.dumps(result),
-						"tool_call_id": tool_calls[i].get("id", f"tool_{i}"),
+						"tool_call_id": tool_call.get("id", f"tool_{i}"),
 					}
 				)
 
-			# Get final response with tool results
-			final_response = provider.chat_completion(history, tools=tools, stream=False)
-			final_content, _, final_prompt, final_completion = _extract_response(ai_provider, final_response)
-			content = final_content
-			prompt_tokens += final_prompt
-			completion_tokens += final_completion
-			tokens_used = prompt_tokens + completion_tokens
+			# Continue loop — next iteration gets the final response (or more tool calls)
+
+		tool_calls = all_tool_calls
+		tokens_used = prompt_tokens + completion_tokens
 
 		# Track token usage
 		track_token_usage(
@@ -508,7 +518,7 @@ def search_conversations(query: str, limit: int = 20) -> dict:
 
 
 @frappe.whitelist()
-def get_mention_values(mention_type: str, search_term: str = "", company: str = None) -> dict:
+def get_mention_values(mention_type: str, search_term: str = "", company: str | None = None) -> dict:
 	"""Return values for @mention autocomplete in chat input.
 
 	Args:
@@ -581,7 +591,7 @@ def get_mention_values(mention_type: str, search_term: str = "", company: str = 
 		return {"success": False, "error": str(e)}
 
 
-def _get_period_presets(company: str = None) -> list[dict]:
+def _get_period_presets(company: str | None = None) -> list[dict]:
 	"""Return date range presets for @period mention."""
 	from datetime import timedelta
 
@@ -651,7 +661,7 @@ def _get_period_presets(company: str = None) -> list[dict]:
 	return presets
 
 
-def _get_accounting_dimensions(company: str = None, search_term: str = "") -> list[dict]:
+def _get_accounting_dimensions(company: str | None = None, search_term: str = "") -> list[dict]:
 	"""Return available accounting dimensions and their values.
 
 	Uses frappe.get_all("Accounting Dimension") to list configured dimensions,

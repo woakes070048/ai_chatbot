@@ -17,7 +17,8 @@
   "updated_at",
   "section_break_2",
   "message_count",
-  "total_tokens"
+  "total_tokens",
+  "session_context"
  ],
  "fields": [
   {
@@ -86,6 +87,12 @@
    "fieldtype": "Int",
    "label": "Total Tokens",
    "read_only": 1
+  },
+  {
+   "fieldname": "session_context",
+   "fieldtype": "JSON",
+   "hidden": 1,
+   "label": "Session Context"
   }
  ],
  "index_web_pages_for_search": 1,

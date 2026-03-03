@@ -9,7 +9,8 @@ import frappe
 from frappe.query_builder import functions as fn
 from frappe.utils import flt
 
-from ai_chatbot.core.config import get_default_company, get_fiscal_year_dates, get_top_n_limit
+from ai_chatbot.core.config import get_fiscal_year_dates, get_top_n_limit
+from ai_chatbot.core.session_context import get_company_filter
 from ai_chatbot.data.analytics import get_grouped_sum, get_time_series
 from ai_chatbot.data.charts import build_bar_chart, build_line_chart, build_pie_chart
 from ai_chatbot.data.currency import build_currency_response
@@ -30,10 +31,10 @@ from ai_chatbot.tools.registry import register_tool
 )
 def get_sales_analytics(from_date=None, to_date=None, customer=None, company=None):
 	"""Get sales analytics with multi-company and base currency support."""
-	company = get_default_company(company)
+	company = get_company_filter(company)
 
 	if not from_date or not to_date:
-		fy_from, fy_to = get_fiscal_year_dates(company)
+		fy_from, fy_to = get_fiscal_year_dates(company[0] if isinstance(company, list) else company)
 		from_date = from_date or fy_from
 		to_date = to_date or fy_to
 
@@ -42,7 +43,10 @@ def get_sales_analytics(from_date=None, to_date=None, customer=None, company=Non
 		filters["customer"] = customer
 
 	# Build list filters for date range to support both from_date and to_date
-	list_filters = [["docstatus", "=", 1], ["company", "=", company]]
+	if isinstance(company, list):
+		list_filters = [["docstatus", "=", 1], ["company", "in", company]]
+	else:
+		list_filters = [["docstatus", "=", 1], ["company", "=", company]]
 	if from_date:
 		list_filters.append(["posting_date", ">=", from_date])
 	if to_date:
@@ -67,7 +71,7 @@ def get_sales_analytics(from_date=None, to_date=None, customer=None, company=Non
 		"average_order_value": total_revenue / invoice_count if invoice_count else 0,
 		"period": {"from": from_date, "to": to_date},
 	}
-	return build_currency_response(result, company)
+	return build_currency_response(result, company[0] if isinstance(company, list) else company)
 
 
 @register_tool(
@@ -85,10 +89,10 @@ def get_sales_analytics(from_date=None, to_date=None, customer=None, company=Non
 def get_top_customers(limit=10, from_date=None, to_date=None, company=None):
 	"""Get top customers by revenue using the analytics data layer (no raw SQL)."""
 	limit = get_top_n_limit(limit)
-	company = get_default_company(company)
+	company = get_company_filter(company)
 
 	if not from_date or not to_date:
-		fy_from, fy_to = get_fiscal_year_dates(company)
+		fy_from, fy_to = get_fiscal_year_dates(company[0] if isinstance(company, list) else company)
 		from_date = from_date or fy_from
 		to_date = to_date or fy_to
 
@@ -114,7 +118,7 @@ def get_top_customers(limit=10, from_date=None, to_date=None, company=None):
 			for c in customers
 		],
 	}
-	return build_currency_response(result, company)
+	return build_currency_response(result, company[0] if isinstance(company, list) else company)
 
 
 @register_tool(
@@ -129,7 +133,7 @@ def get_top_customers(limit=10, from_date=None, to_date=None, company=None):
 )
 def get_sales_trend(months=12, company=None):
 	"""Monthly revenue time series from Sales Invoice."""
-	company = get_default_company(company)
+	company = get_company_filter(company)
 
 	data = get_time_series(
 		doctype="Sales Invoice",
@@ -159,7 +163,7 @@ def get_sales_trend(months=12, company=None):
 			series_name="Revenue",
 		),
 	}
-	return build_currency_response(result, company)
+	return build_currency_response(result, company[0] if isinstance(company, list) else company)
 
 
 @register_tool(
@@ -175,10 +179,10 @@ def get_sales_trend(months=12, company=None):
 )
 def get_sales_by_territory(from_date=None, to_date=None, company=None):
 	"""Sales grouped by territory from Sales Invoice."""
-	company = get_default_company(company)
+	company = get_company_filter(company)
 
 	if not from_date or not to_date:
-		fy_from, fy_to = get_fiscal_year_dates(company)
+		fy_from, fy_to = get_fiscal_year_dates(company[0] if isinstance(company, list) else company)
 		from_date = from_date or fy_from
 		to_date = to_date or fy_to
 
@@ -212,7 +216,7 @@ def get_sales_by_territory(from_date=None, to_date=None, company=None):
 			data=pie_data,
 		),
 	}
-	return build_currency_response(result, company)
+	return build_currency_response(result, company[0] if isinstance(company, list) else company)
 
 
 @register_tool(
@@ -230,17 +234,17 @@ def get_sales_by_territory(from_date=None, to_date=None, company=None):
 def get_sales_by_item_group(from_date=None, to_date=None, limit=10, company=None):
 	"""Sales grouped by item_group from Sales Invoice Item."""
 	limit = get_top_n_limit(limit)
-	company = get_default_company(company)
+	company = get_company_filter(company)
 
 	if not from_date or not to_date:
-		fy_from, fy_to = get_fiscal_year_dates(company)
+		fy_from, fy_to = get_fiscal_year_dates(company[0] if isinstance(company, list) else company)
 		from_date = from_date or fy_from
 		to_date = to_date or fy_to
 
 	si = frappe.qb.DocType("Sales Invoice")
 	sii = frappe.qb.DocType("Sales Invoice Item")
 
-	rows = (
+	query = (
 		frappe.qb.from_(sii)
 		.join(si)
 		.on(sii.parent == si.name)
@@ -251,7 +255,15 @@ def get_sales_by_item_group(from_date=None, to_date=None, limit=10, company=None
 			fn.Count("*").as_("line_count"),
 		)
 		.where(si.docstatus == 1)
-		.where(si.company == company)
+	)
+
+	if isinstance(company, list):
+		query = query.where(si.company.isin(company))
+	else:
+		query = query.where(si.company == company)
+
+	rows = (
+		query
 		.where(si.posting_date >= from_date)
 		.where(si.posting_date <= to_date)
 		.groupby(sii.item_group)
@@ -283,4 +295,4 @@ def get_sales_by_item_group(from_date=None, to_date=None, limit=10, company=None
 			series_name="Sales",
 		),
 	}
-	return build_currency_response(result, company)
+	return build_currency_response(result, company[0] if isinstance(company, list) else company)

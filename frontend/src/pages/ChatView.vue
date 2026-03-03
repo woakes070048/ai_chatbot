@@ -29,7 +29,18 @@
         class="flex-1 flex flex-col items-center justify-center px-4"
       >
         <div class="text-center mb-8">
-          <img :src="logoSvg" alt="AI Chatbot" class="w-24 h-24 mx-auto mb-4" />
+          <img
+            v-if="userInfo.avatar"
+            :src="userInfo.avatar"
+            :alt="userInfo.fullname || 'User'"
+            class="w-24 h-24 rounded-full object-cover mx-auto mb-4"
+          />
+          <div
+            v-else
+            class="w-24 h-24 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 flex items-center justify-center text-3xl font-semibold mx-auto mb-4"
+          >
+            {{ greetingInitials }}
+          </div>
           <h1 class="text-2xl font-semibold text-gray-800 dark:text-gray-100 mb-2">
             Hello, {{ userInfo.fullname || 'there' }}!
           </h1>
@@ -203,6 +214,17 @@ const lastMessageWasVoice = ref(false)
 const hasNoMessages = computed(() =>
   messages.value.length === 0 && !isLoading.value && !isStreaming.value
 )
+
+// User initials for greeting avatar fallback
+const greetingInitials = computed(() => {
+  const name = userInfo.value?.fullname || ''
+  if (!name) return 'U'
+  const parts = name.trim().split(/\s+/)
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+  }
+  return parts[0][0].toUpperCase()
+})
 
 // Streaming composable
 const {

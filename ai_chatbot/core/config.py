@@ -34,6 +34,10 @@ def is_erpnext_installed():
 def get_default_company(company=None):
 	"""Get the effective company — passed value, user default, or global default.
 
+	When an explicit company name is passed, it is validated against the DB.
+	If the exact name isn't found, a fuzzy (LIKE) lookup is attempted so that
+	"Tara Technologies" correctly resolves to "Tara Technologies (Demo)".
+
 	Args:
 		company: Explicitly passed company name. If provided and valid, returned as-is.
 
@@ -44,7 +48,7 @@ def get_default_company(company=None):
 		ai_chatbot.core.exceptions.CompanyRequiredError: If no company can be resolved.
 	"""
 	if company:
-		return company
+		return _resolve_company_name(company)
 
 	company = frappe.defaults.get_user_default("Company")
 	if company:
@@ -57,6 +61,35 @@ def get_default_company(company=None):
 	from ai_chatbot.core.exceptions import CompanyRequiredError
 
 	raise CompanyRequiredError()
+
+
+def _resolve_company_name(name: str) -> str:
+	"""Resolve an AI-provided company name to the exact DB name.
+
+	Tries exact match first, then LIKE match for partial/fuzzy names.
+	Returns the original name if no match is found (lets the caller
+	handle the empty result set).
+	"""
+	# Exact match — fast path
+	if frappe.db.exists("Company", name):
+		return name
+
+	# Fuzzy match: "Tara Technologies" → "Tara Technologies (Demo)"
+	matches = frappe.get_all(
+		"Company",
+		filters={"name": ["like", f"%{name}%"]},
+		pluck="name",
+		limit_page_length=5,
+	)
+	if len(matches) == 1:
+		return matches[0]
+
+	# Multiple matches — prefer the shortest name (closest match)
+	if matches:
+		return min(matches, key=len)
+
+	# No match at all — return as-is
+	return name
 
 
 def get_fiscal_year_dates(company=None):

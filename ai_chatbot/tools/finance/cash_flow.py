@@ -9,11 +9,24 @@ import frappe
 from frappe.query_builder import functions as fn
 from frappe.utils import add_months, flt, get_first_day, get_last_day, nowdate
 
-from ai_chatbot.core.config import get_default_company, get_fiscal_year_dates
+from ai_chatbot.core.config import get_fiscal_year_dates
+from ai_chatbot.core.dimensions import apply_dimension_filters
+from ai_chatbot.core.session_context import get_company_filter
 from ai_chatbot.data.charts import build_multi_series_chart
 from ai_chatbot.data.currency import build_currency_response
-from ai_chatbot.core.dimensions import apply_dimension_filters
 from ai_chatbot.tools.registry import register_tool
+
+
+def _primary(company):
+	"""Get primary company name (first in list or string as-is)."""
+	return company[0] if isinstance(company, list) else company
+
+
+def _apply_company_filter(query, doctype_ref, company):
+	"""Apply company filter supporting both single string and list."""
+	if isinstance(company, list):
+		return query.where(doctype_ref.company.isin(company))
+	return query.where(doctype_ref.company == company)
 
 
 @register_tool(
@@ -41,10 +54,10 @@ from ai_chatbot.tools.registry import register_tool
 )
 def get_cash_flow_statement(from_date=None, to_date=None, company=None, cost_center=None, department=None, project=None):
 	"""Get structured cash flow statement from Payment Entries."""
-	company = get_default_company(company)
+	company = get_company_filter(company)
 
 	if not from_date or not to_date:
-		fy_from, fy_to = get_fiscal_year_dates(company)
+		fy_from, fy_to = get_fiscal_year_dates(_primary(company))
 		from_date = from_date or fy_from
 		to_date = to_date or fy_to
 
@@ -55,12 +68,12 @@ def get_cash_flow_statement(from_date=None, to_date=None, company=None, cost_cen
 		frappe.qb.from_(pe)
 		.select(fn.Sum(pe.base_paid_amount).as_("total"))
 		.where(pe.docstatus == 1)
-		.where(pe.company == company)
 		.where(pe.payment_type == "Receive")
 		.where(pe.party_type == "Customer")
 		.where(pe.posting_date >= from_date)
 		.where(pe.posting_date <= to_date)
 	)
+	op_inflow_q = _apply_company_filter(op_inflow_q, pe, company)
 	op_inflow_q = apply_dimension_filters(op_inflow_q, pe, cost_center=cost_center, department=department, project=project)
 	op_inflow = op_inflow_q.run(as_dict=True)
 	operating_inflow = flt(op_inflow[0].total) if op_inflow else 0
@@ -70,12 +83,12 @@ def get_cash_flow_statement(from_date=None, to_date=None, company=None, cost_cen
 		frappe.qb.from_(pe)
 		.select(fn.Sum(pe.base_paid_amount).as_("total"))
 		.where(pe.docstatus == 1)
-		.where(pe.company == company)
 		.where(pe.payment_type == "Pay")
 		.where(pe.party_type == "Supplier")
 		.where(pe.posting_date >= from_date)
 		.where(pe.posting_date <= to_date)
 	)
+	op_outflow_q = _apply_company_filter(op_outflow_q, pe, company)
 	op_outflow_q = apply_dimension_filters(op_outflow_q, pe, cost_center=cost_center, department=department, project=project)
 	op_outflow = op_outflow_q.run(as_dict=True)
 	operating_outflow = flt(op_outflow[0].total) if op_outflow else 0
@@ -85,12 +98,12 @@ def get_cash_flow_statement(from_date=None, to_date=None, company=None, cost_cen
 		frappe.qb.from_(pe)
 		.select(fn.Sum(pe.base_paid_amount).as_("total"))
 		.where(pe.docstatus == 1)
-		.where(pe.company == company)
 		.where(pe.payment_type == "Receive")
 		.where((pe.party_type != "Customer") | (pe.party_type.isnull()))
 		.where(pe.posting_date >= from_date)
 		.where(pe.posting_date <= to_date)
 	)
+	other_inflow_q = _apply_company_filter(other_inflow_q, pe, company)
 	other_inflow_q = apply_dimension_filters(other_inflow_q, pe, cost_center=cost_center, department=department, project=project)
 	other_inflow = other_inflow_q.run(as_dict=True)
 	financing_inflow = flt(other_inflow[0].total) if other_inflow else 0
@@ -100,12 +113,12 @@ def get_cash_flow_statement(from_date=None, to_date=None, company=None, cost_cen
 		frappe.qb.from_(pe)
 		.select(fn.Sum(pe.base_paid_amount).as_("total"))
 		.where(pe.docstatus == 1)
-		.where(pe.company == company)
 		.where(pe.payment_type == "Pay")
 		.where((pe.party_type != "Supplier") | (pe.party_type.isnull()))
 		.where(pe.posting_date >= from_date)
 		.where(pe.posting_date <= to_date)
 	)
+	other_outflow_q = _apply_company_filter(other_outflow_q, pe, company)
 	other_outflow_q = apply_dimension_filters(other_outflow_q, pe, cost_center=cost_center, department=department, project=project)
 	other_outflow = other_outflow_q.run(as_dict=True)
 	financing_outflow = flt(other_outflow[0].total) if other_outflow else 0
@@ -128,7 +141,7 @@ def get_cash_flow_statement(from_date=None, to_date=None, company=None, cost_cen
 		"total_net_cash_flow": flt(total_net, 2),
 		"period": {"from": from_date, "to": to_date},
 	}
-	return build_currency_response(result, company)
+	return build_currency_response(result, _primary(company))
 
 
 @register_tool(
@@ -149,7 +162,7 @@ def get_cash_flow_statement(from_date=None, to_date=None, company=None, cost_cen
 )
 def get_cash_flow_trend(months=12, company=None, cost_center=None, department=None, project=None):
 	"""Get monthly inflow/outflow/net trend from Payment Entry."""
-	company = get_default_company(company)
+	company = get_company_filter(company)
 
 	pe = frappe.qb.DocType("Payment Entry")
 	start_date = get_first_day(add_months(nowdate(), -months + 1))
@@ -164,11 +177,11 @@ def get_cash_flow_trend(months=12, company=None, cost_center=None, department=No
 			fn.Sum(pe.base_paid_amount).as_("total"),
 		)
 		.where(pe.docstatus == 1)
-		.where(pe.company == company)
 		.where(pe.payment_type == "Receive")
 		.where(pe.posting_date >= start_date)
 		.where(pe.posting_date <= end_date)
 	)
+	inflow_q = _apply_company_filter(inflow_q, pe, company)
 	inflow_q = apply_dimension_filters(inflow_q, pe, cost_center=cost_center, department=department, project=project)
 	inflow_data = (
 		inflow_q
@@ -185,11 +198,11 @@ def get_cash_flow_trend(months=12, company=None, cost_center=None, department=No
 			fn.Sum(pe.base_paid_amount).as_("total"),
 		)
 		.where(pe.docstatus == 1)
-		.where(pe.company == company)
 		.where(pe.payment_type == "Pay")
 		.where(pe.posting_date >= start_date)
 		.where(pe.posting_date <= end_date)
 	)
+	outflow_q = _apply_company_filter(outflow_q, pe, company)
 	outflow_q = apply_dimension_filters(outflow_q, pe, cost_center=cost_center, department=department, project=project)
 	outflow_data = (
 		outflow_q
@@ -235,7 +248,7 @@ def get_cash_flow_trend(months=12, company=None, cost_center=None, department=No
 			chart_type="line",
 		),
 	}
-	return build_currency_response(result, company)
+	return build_currency_response(result, _primary(company))
 
 
 @register_tool(
@@ -253,7 +266,7 @@ def get_cash_flow_trend(months=12, company=None, cost_center=None, department=No
 )
 def get_bank_balance(account=None, company=None):
 	"""Get current balances for bank and cash accounts from GL Entry."""
-	company = get_default_company(company)
+	company = get_company_filter(company)
 
 	acc = frappe.qb.DocType("Account")
 	gle = frappe.qb.DocType("GL Entry")
@@ -262,10 +275,13 @@ def get_bank_balance(account=None, company=None):
 	acc_query = (
 		frappe.qb.from_(acc)
 		.select(acc.name, acc.account_type)
-		.where(acc.company == company)
 		.where(acc.account_type.isin(["Bank", "Cash"]))
 		.where(acc.is_group == 0)
 	)
+	if isinstance(company, list):
+		acc_query = acc_query.where(acc.company.isin(company))
+	else:
+		acc_query = acc_query.where(acc.company == company)
 
 	if account:
 		acc_query = acc_query.where(acc.name == account)
@@ -278,23 +294,26 @@ def get_bank_balance(account=None, company=None):
 			"total_balance": 0,
 			"message": "No bank or cash accounts found",
 		}
-		return build_currency_response(result, company)
+		return build_currency_response(result, _primary(company))
 
 	account_names = [a.name for a in accounts]
 
 	# Get balances from GL Entry (debit - credit)
-	balances = (
+	bal_query = (
 		frappe.qb.from_(gle)
 		.select(
 			gle.account,
 			(fn.Sum(gle.debit) - fn.Sum(gle.credit)).as_("balance"),
 		)
-		.where(gle.company == company)
 		.where(gle.account.isin(account_names))
 		.where(gle.is_cancelled == 0)
 		.groupby(gle.account)
-		.run(as_dict=True)
 	)
+	if isinstance(company, list):
+		bal_query = bal_query.where(gle.company.isin(company))
+	else:
+		bal_query = bal_query.where(gle.company == company)
+	balances = bal_query.run(as_dict=True)
 
 	balance_map = {b.account: flt(b.balance, 2) for b in balances}
 	account_type_map = {a.name: a.account_type for a in accounts}
@@ -314,4 +333,4 @@ def get_bank_balance(account=None, company=None):
 		"accounts": account_list,
 		"total_balance": flt(total_balance, 2),
 	}
-	return build_currency_response(result, company)
+	return build_currency_response(result, _primary(company))

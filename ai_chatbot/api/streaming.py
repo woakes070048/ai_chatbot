@@ -25,7 +25,7 @@ TOKEN_BUFFER_SIZE = 20  # characters
 
 
 @frappe.whitelist()
-def send_message_streaming(conversation_id: str, message: str, attachments: str = None) -> dict:
+def send_message_streaming(conversation_id: str, message: str, attachments: str | None = None) -> dict:
 	"""Send a message and stream the AI response via frappe.publish_realtime.
 
 	Saves the user message, then enqueues a background job that streams
@@ -91,6 +91,9 @@ def _run_streaming_job(conversation_id: str, stream_id: str, ai_provider: str, u
 	Publishes tokens via frappe.publish_realtime as they arrive.
 	"""
 	try:
+		# Set conversation context for session tools
+		frappe.flags.current_conversation_id = conversation_id
+
 		# Notify frontend: stream started
 		_publish(
 			"ai_chat_stream_start",
@@ -106,8 +109,8 @@ def _run_streaming_job(conversation_id: str, stream_id: str, ai_provider: str, u
 		# Get conversation history and provider
 		history = _get_conversation_history(conversation_id)
 
-		# Prepend system prompt
-		system_prompt = build_system_prompt()
+		# Prepend system prompt (pass conversation_id for session context)
+		system_prompt = build_system_prompt(conversation_id=conversation_id)
 		history = [{"role": "system", "content": system_prompt}, *history]
 
 		# Optimize history (trim + compress tool results)

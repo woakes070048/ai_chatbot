@@ -12,10 +12,16 @@ import frappe
 from frappe.query_builder import functions as fn
 from frappe.utils import flt
 
-from ai_chatbot.core.config import get_company_currency, get_default_company, get_fiscal_year_dates
+from ai_chatbot.core.config import get_company_currency, get_fiscal_year_dates
+from ai_chatbot.core.session_context import get_company_filter
 from ai_chatbot.data.charts import build_bar_chart, build_horizontal_bar, build_pie_chart
-from ai_chatbot.data.currency import build_currency_response
+from ai_chatbot.data.currency import build_company_context, build_currency_response
 from ai_chatbot.tools.registry import register_tool
+
+
+def _primary(company):
+	"""Get primary company name (first in list or string as-is)."""
+	return company[0] if isinstance(company, list) else company
 
 
 # ---------------------------------------------------------------------------
@@ -43,14 +49,15 @@ from ai_chatbot.tools.registry import register_tool
 )
 def get_lead_statistics(from_date=None, to_date=None, company=None):
 	"""Get lead statistics with multi-company support and pie chart."""
-	company = get_default_company(company)
+	company = get_company_filter(company)
 
 	if not from_date or not to_date:
-		fy_from, fy_to = get_fiscal_year_dates(company)
+		fy_from, fy_to = get_fiscal_year_dates(_primary(company))
 		from_date = from_date or fy_from
 		to_date = to_date or fy_to
 
-	filters = [["company", "=", company]]
+	company_filter = ["company", "in", company] if isinstance(company, list) else ["company", "=", company]
+	filters = [company_filter]
 	if from_date:
 		filters.append(["creation", ">=", from_date])
 	if to_date:
@@ -67,7 +74,6 @@ def get_lead_statistics(from_date=None, to_date=None, company=None):
 		"total_leads": len(leads),
 		"status_breakdown": status_count,
 		"period": {"from": from_date, "to": to_date},
-		"company": company,
 	}
 
 	# Add ECharts pie chart for status breakdown
@@ -78,7 +84,7 @@ def get_lead_statistics(from_date=None, to_date=None, company=None):
 			data=pie_data,
 		)
 
-	return result
+	return build_company_context(result, _primary(company))
 
 
 # ---------------------------------------------------------------------------
@@ -102,10 +108,11 @@ def get_lead_statistics(from_date=None, to_date=None, company=None):
 )
 def get_opportunity_pipeline(status=None, company=None):
 	"""Get opportunity pipeline with multi-company, currency support, and bar chart."""
-	company = get_default_company(company)
-	currency = get_company_currency(company)
+	company = get_company_filter(company)
+	currency = get_company_currency(_primary(company))
 
-	filters = {"company": company}
+	company_filter = {"company": ["in", company]} if isinstance(company, list) else {"company": company}
+	filters = {**company_filter}
 	if status:
 		filters["status"] = status
 
@@ -173,7 +180,7 @@ def get_opportunity_pipeline(status=None, company=None):
 			series_name="Pipeline Value",
 		)
 
-	return build_currency_response(result, company)
+	return build_currency_response(result, _primary(company))
 
 
 # ---------------------------------------------------------------------------
@@ -201,15 +208,16 @@ def get_opportunity_pipeline(status=None, company=None):
 )
 def get_lead_conversion_rate(from_date=None, to_date=None, company=None):
 	"""Get lead-to-opportunity conversion rate."""
-	company = get_default_company(company)
+	company = get_company_filter(company)
 
 	if not from_date or not to_date:
-		fy_from, fy_to = get_fiscal_year_dates(company)
+		fy_from, fy_to = get_fiscal_year_dates(_primary(company))
 		from_date = from_date or fy_from
 		to_date = to_date or fy_to
 
+	company_filter = ["company", "in", company] if isinstance(company, list) else ["company", "=", company]
 	filters = [
-		["company", "=", company],
+		company_filter,
 		["creation", ">=", from_date],
 		["creation", "<=", to_date],
 	]
@@ -224,15 +232,14 @@ def get_lead_conversion_rate(from_date=None, to_date=None, company=None):
 
 	conversion_rate = round(converted / total * 100, 1) if total > 0 else 0
 
-	return {
+	return build_company_context({
 		"total_leads": total,
 		"converted_leads": converted,
 		"conversion_rate": conversion_rate,
 		"replied": replied,
 		"lost": lost,
 		"period": {"from": from_date, "to": to_date},
-		"company": company,
-	}
+	}, _primary(company))
 
 
 # ---------------------------------------------------------------------------
@@ -260,10 +267,10 @@ def get_lead_conversion_rate(from_date=None, to_date=None, company=None):
 )
 def get_lead_source_analysis(from_date=None, to_date=None, company=None):
 	"""Get lead source analysis with pie chart."""
-	company = get_default_company(company)
+	company = get_company_filter(company)
 
 	if not from_date or not to_date:
-		fy_from, fy_to = get_fiscal_year_dates(company)
+		fy_from, fy_to = get_fiscal_year_dates(_primary(company))
 		from_date = from_date or fy_from
 		to_date = to_date or fy_to
 
@@ -272,19 +279,22 @@ def get_lead_source_analysis(from_date=None, to_date=None, company=None):
 	# Check if utm_source field exists (newer ERPNext) or fall back to source
 	source_field = lead.utm_source if hasattr(lead, "utm_source") else lead.source
 
-	rows = (
+	query = (
 		frappe.qb.from_(lead)
 		.select(
 			source_field.as_("source"),
 			fn.Count("*").as_("total"),
 		)
-		.where(lead.company == company)
 		.where(lead.creation >= from_date)
 		.where(lead.creation <= to_date)
 		.groupby(source_field)
 		.orderby(fn.Count("*"), order=frappe.qb.desc)
-		.run(as_dict=True)
 	)
+	if isinstance(company, list):
+		query = query.where(lead.company.isin(company))
+	else:
+		query = query.where(lead.company == company)
+	rows = query.run(as_dict=True)
 
 	sources = [
 		{"source": r.source or "Unknown", "total_leads": r.total}
@@ -297,7 +307,6 @@ def get_lead_source_analysis(from_date=None, to_date=None, company=None):
 		"sources": sources,
 		"total_sources": len(sources),
 		"period": {"from": from_date, "to": to_date},
-		"company": company,
 	}
 
 	if pie_data:
@@ -306,7 +315,7 @@ def get_lead_source_analysis(from_date=None, to_date=None, company=None):
 			data=pie_data,
 		)
 
-	return result
+	return build_company_context(result, _primary(company))
 
 
 # ---------------------------------------------------------------------------
@@ -337,18 +346,20 @@ def get_lead_source_analysis(from_date=None, to_date=None, company=None):
 )
 def get_sales_funnel(from_date=None, to_date=None, company=None):
 	"""Get sales funnel: Lead → Opportunity → Quotation → Sales Order."""
-	company = get_default_company(company)
+	company = get_company_filter(company)
 
 	if not from_date or not to_date:
-		fy_from, fy_to = get_fiscal_year_dates(company)
+		fy_from, fy_to = get_fiscal_year_dates(_primary(company))
 		from_date = from_date or fy_from
 		to_date = to_date or fy_to
+
+	company_filter = ["in", company] if isinstance(company, list) else company
 
 	# Stage 1: Leads created in the period
 	leads_count = frappe.db.count(
 		"Lead",
 		[
-			["company", "=", company],
+			["company", "=", company_filter] if not isinstance(company, list) else ["company", "in", company],
 			["creation", ">=", from_date],
 			["creation", "<=", to_date],
 		],
@@ -358,7 +369,7 @@ def get_sales_funnel(from_date=None, to_date=None, company=None):
 	opps_count = frappe.db.count(
 		"Opportunity",
 		{
-			"company": company,
+			"company": company_filter,
 			"transaction_date": ["between", [from_date, to_date]],
 		},
 	)
@@ -367,7 +378,7 @@ def get_sales_funnel(from_date=None, to_date=None, company=None):
 	quotations_count = frappe.db.count(
 		"Quotation",
 		{
-			"company": company,
+			"company": company_filter,
 			"docstatus": 1,
 			"transaction_date": ["between", [from_date, to_date]],
 		},
@@ -377,7 +388,7 @@ def get_sales_funnel(from_date=None, to_date=None, company=None):
 	orders_count = frappe.db.count(
 		"Sales Order",
 		{
-			"company": company,
+			"company": company_filter,
 			"docstatus": 1,
 			"transaction_date": ["between", [from_date, to_date]],
 		},
@@ -407,7 +418,6 @@ def get_sales_funnel(from_date=None, to_date=None, company=None):
 			"overall_lead_to_order": overall,
 		},
 		"period": {"from": from_date, "to": to_date},
-		"company": company,
 		"echart_option": build_horizontal_bar(
 			title="Sales Funnel",
 			categories=stages,
@@ -417,7 +427,7 @@ def get_sales_funnel(from_date=None, to_date=None, company=None):
 		),
 	}
 
-	return result
+	return build_company_context(result, _primary(company))
 
 
 # ---------------------------------------------------------------------------
@@ -449,10 +459,10 @@ def get_sales_funnel(from_date=None, to_date=None, company=None):
 )
 def get_opportunity_by_stage(from_date=None, to_date=None, status=None, company=None):
 	"""Get opportunities grouped by sales stage with bar chart."""
-	company = get_default_company(company)
+	company = get_company_filter(company)
 
 	if not from_date or not to_date:
-		fy_from, fy_to = get_fiscal_year_dates(company)
+		fy_from, fy_to = get_fiscal_year_dates(_primary(company))
 		from_date = from_date or fy_from
 		to_date = to_date or fy_to
 
@@ -465,12 +475,15 @@ def get_opportunity_by_stage(from_date=None, to_date=None, status=None, company=
 			fn.Count("*").as_("count"),
 			fn.Sum(opp.base_opportunity_amount).as_("total_value"),
 		)
-		.where(opp.company == company)
 		.where(opp.transaction_date >= from_date)
 		.where(opp.transaction_date <= to_date)
 		.groupby(opp.sales_stage)
 		.orderby(fn.Sum(opp.base_opportunity_amount), order=frappe.qb.desc)
 	)
+	if isinstance(company, list):
+		query = query.where(opp.company.isin(company))
+	else:
+		query = query.where(opp.company == company)
 
 	if status:
 		query = query.where(opp.status == status)
@@ -505,4 +518,4 @@ def get_opportunity_by_stage(from_date=None, to_date=None, status=None, company=
 			series_name="Pipeline Value",
 		)
 
-	return build_currency_response(result, company)
+	return build_currency_response(result, _primary(company))

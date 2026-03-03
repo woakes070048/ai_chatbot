@@ -2417,3 +2417,444 @@ If you're using nginx and see CORS errors for `/socket.io`:
 1. Ensure streaming is enabled in Chatbot Settings.
 2. Check browser console for `ai_chat_process_step` events (they should appear in the Socket.IO log).
 3. Verify `useStreaming.js` exports `processStep` — check browser DevTools → Sources.
+
+---
+
+## Phase 6B: Multi-Dimensional Analytics & GL-Based Finance
+
+### 6B.1 Multi-Dimensional Grouping
+
+#### 6B.1.1 Single Dimension
+
+1. Ask: `Show revenue by territory`
+2. **Expected**: A stacked bar chart + hierarchical table showing territories with total and period columns (quarterly by default). Tool name `Multidimensional Summary` should appear in the "Used ERPNext Tools" badge.
+
+#### 6B.1.2 Multiple Dimensions
+
+1. Ask: `Show sales by territory and customer group, quarterly`
+2. **Expected**: Hierarchical table with territory as group headers (bold, tinted background), customer groups as indented children. Each group header has subtotals. Stacked bar chart shows top-level territories.
+
+#### 6B.1.3 Different Metrics
+
+1. Ask: `Show expenses by department, monthly`
+2. **Expected**: Purchase Invoice-based expenses grouped by department with monthly columns.
+3. Ask: `Show profit by territory`
+4. **Expected**: Computed profit (revenue - expenses) by territory.
+
+#### 6B.1.4 Accounting Dimensions
+
+1. If you have created Accounting Dimensions in ERPNext (e.g., "Business Vertical", "Business Segment"):
+   - Ask: `Show sales by business_vertical` (use the exact fieldname)
+   - **Expected**: The tool automatically discovers the accounting dimension and groups by it. If the dimension exists on Sales Invoice, data is returned.
+2. If the dimension does NOT exist on the target doctype:
+   - **Expected**: A clear error message: "Dimension 'xyz' does not exist on Sales Invoice. It may not be set up as an accounting dimension for this doctype."
+3. If no accounting dimensions are set up, ask: `Show sales by some_random_field`
+   - **Expected**: An error message listing the supported dimensions.
+
+#### 6B.1.5 Item Group (Child Table JOIN)
+
+1. Ask: `Show revenue by item group`
+2. **Expected**: Revenue grouped by item group using Sales Invoice Item child table JOIN with `base_amount` aggregation.
+
+---
+
+### 6B.2 GL Entry Analytics
+
+#### 6B.2.1 GL Summary
+
+1. Ask: `Show GL summary by root type`
+2. **Expected**: Aggregated debit/credit by root type (Asset, Liability, Equity, Income, Expense) with bar chart.
+3. Ask: `Show GL summary by account type for expenses`
+4. **Expected**: Filtered to Expense root type, grouped by account type.
+
+#### 6B.2.2 Trial Balance
+
+1. Ask: `Show trial balance for this fiscal year`
+2. **Expected**: Accounts grouped by root type with opening balance, debit, credit, closing balance columns. Subtotals per root type. Grand total row at the bottom.
+
+#### 6B.2.3 Account Statement
+
+1. Ask: `Show account statement for [specific account name]`
+2. **Expected**: Opening balance + individual GL entries with running balance column. Line chart showing balance trend over time.
+
+---
+
+### 6B.3 CFO Dashboard BI Cards
+
+#### 6B.3.1 BI Cards Display
+
+1. Ask: `Show CFO dashboard` or `Show financial overview`
+2. **Expected**: A row of 5 metric cards appears above the chart: Revenue, Net Profit, Cash Position, AR Outstanding, AP Outstanding.
+3. Revenue and Net Profit cards should show YoY change percentage with green (up) or red (down) trend indicator.
+4. Values should be abbreviated (e.g., 1.2M, 450K).
+
+#### 6B.3.2 BI Cards Responsiveness
+
+1. Resize the browser window to different widths.
+2. **Expected**: Cards reflow — 5 columns on large screens, 3 on medium, 2 on small.
+
+---
+
+### 6B.4 Sidebar Header
+
+1. Open `/ai-chatbot` with sidebar expanded.
+2. **Expected**: Sidebar header shows: App logo (left side), Settings gear button + Collapse toggle button (right side, grouped together).
+3. **Before (6A)**: `[Toggle] [Logo] [Settings]` — centered logo.
+4. **After (6B)**: `[Logo] ... [Settings] [Toggle]` — logo anchored left, actions right.
+
+---
+
+### 6B.5 Personalized Greeting Avatar
+
+1. Click "New Chat" to see the greeting screen.
+2. **Expected**: Shows your **user avatar** (profile picture) in a large circle (96×96px), NOT the app's orbital logo.
+3. If you don't have a profile picture, it should show your initials in a gray circle.
+4. Below the avatar: "Hello, {YourName}!" and "How can I help you today?"
+
+---
+
+### 6B.6 Hierarchical Table Rendering
+
+1. Ask any multi-dimensional query (e.g., `Show revenue by territory and customer`)
+2. **Expected hierarchical table features**:
+   - Group rows (level 0) are **bold** with a slightly tinted background
+   - Child rows are indented based on their level
+   - Values are right-aligned with consistent decimal formatting
+   - Table has horizontal scroll if many period columns
+   - Table has proper dark mode styling (borders, text colors)
+
+---
+
+### Troubleshooting Phase 6B
+
+#### BI cards not showing
+
+1. Ensure the CFO dashboard tool returns `bi_cards` in the response. Check browser DevTools → Network → response payload.
+2. Verify `ChatMessage.vue` imports `BiCards` component and has the `biCardsData` computed property.
+
+#### Hierarchical table not rendering
+
+1. Check that the tool result contains `hierarchical_table` with `headers` and `rows` arrays.
+2. Verify `ChatMessage.vue` imports `HierarchicalTable` component.
+
+#### Accounting dimension not recognized
+
+1. Verify the accounting dimension exists: Go to **Accounting Dimension** list in ERPNext.
+2. Ensure it is not disabled.
+3. Check that the dimension's custom field was created on the target doctype (e.g., Sales Invoice).
+4. Use the exact fieldname (not the label). Check fieldname in the Accounting Dimension document.
+5. Run: `bench --site <SITE> console` → `from erpnext.accounts.doctype.accounting_dimension.accounting_dimension import get_accounting_dimensions; print(get_accounting_dimensions(as_list=False))`
+
+#### GL tools not registered
+
+1. Verify `tools/registry.py` imports both `ai_chatbot.tools.finance.analytics` and `ai_chatbot.tools.finance.gl_analytics`.
+2. Run: `bench --site <SITE> console` → `from ai_chatbot.tools.registry import get_registered_tools; print([t for t in get_registered_tools() if 'gl' in t or 'multi' in t])`
+
+---
+
+## Phase 6B+: Parent-Child Company, Session Context & Refinements
+
+### 6B+.0 Prerequisites
+
+```bash
+# Apply the new session_context field on Chatbot Conversation
+bench --site test.local migrate
+
+# Rebuild frontend (markdown table stripping fix)
+cd apps/ai_chatbot/frontend && npm run build
+
+# Restart bench
+bench start
+```
+
+Verify session tools are registered:
+```bash
+bench --site test.local console
+>>> from ai_chatbot.tools.registry import get_registered_tools
+>>> print([t for t in get_registered_tools() if 'session' in t or 'subsidiar' in t or 'currency' in t])
+# Should include set_include_subsidiaries, set_target_currency
+```
+
+---
+
+### 6B+.1 Session Context — Include Subsidiaries
+
+#### 6B+.1.1 Proactive Subsidiary Detection (New Chat)
+
+1. Ensure your ERPNext has a **parent company** with at least one **child company** (Settings → Company → set `Parent Company` on the child).
+2. Verify your default company: `frappe.defaults.get_user_default("Company")` — should return the parent company name.
+3. Start a **new chat session** and ask any business question: `What is the total sales this month?`
+4. **Expected**: Since this is the first query and the user's company has subsidiaries, the AI should **proactively ask** whether to include subsidiary data:
+   > "Your company [Parent] has subsidiaries: [Child1, Child2, ...]. Would you like to include subsidiary data in your reports, or show only [Parent]?"
+5. Reply: `Yes, include subsidiaries`
+6. **Expected**: AI calls `set_include_subsidiaries` tool with `include=True`, confirms the setting, then proceeds to answer the original question with consolidated data.
+
+#### 6B+.1.2 Verify Subsidiaries in Queries
+
+1. After enabling subsidiaries (6B+.1.1), ask: `What is the total sales this month?`
+2. **Expected**:
+   - Response mentions **"[Parent Company] including its subsidiaries"** (the `company_label` field).
+   - Revenue aggregates data from the parent AND all child companies.
+   - Currency is the parent company's default currency.
+   - AI does NOT ask about subsidiaries again — it uses the saved session preference.
+3. Ask: `Show revenue by territory`
+4. **Expected**: Grouped data includes transactions from all companies in the hierarchy.
+
+#### 6B+.1.3 Disable Subsidiaries
+
+1. Say: `Don't include subsidiaries` or `Exclude child companies`
+2. **Expected**: AI calls `set_include_subsidiaries` with `include=False`. Confirms change.
+3. Ask: `What is the total sales this month?`
+4. **Expected**: Response now shows only the parent company data. Label says just the company name without "including its subsidiaries".
+
+---
+
+### 6B+.2 Session Context — Target Currency
+
+#### 6B+.2.1 Set Target Currency
+
+1. Say: `Show all amounts in USD` or mention `@USD` in your message.
+2. **Expected**: AI calls `set_target_currency` with `currency="USD"`. Confirms target currency is set.
+3. Ask: `What is total revenue this quarter?`
+4. **Expected**: Response `currency` field shows "USD" regardless of the company's default currency.
+
+#### 6B+.2.2 Reset Target Currency
+
+1. Say: `Don't use target currency` or `Reset to default currency`
+2. **Expected**: AI calls `set_target_currency` with `currency=None`. Confirms reset.
+3. Ask: `What is total revenue this quarter?`
+4. **Expected**: Response `currency` field shows the company's default currency.
+
+#### 6B+.2.3 Company Grouping with Currency
+
+1. Ask: `Show revenue by company` (requires multiple companies in ERPNext).
+2. **Expected**: Each company's revenue is shown in its own default currency (unless target currency is set).
+3. Set a target currency: `Use EUR for all amounts`
+4. Ask again: `Show revenue by company`
+5. **Expected**: All values shown in EUR.
+
+---
+
+### 6B+.3 BI Cards Display (Fix)
+
+#### 6B+.3.1 CFO Dashboard
+
+1. Ask: `Show CFO dashboard`
+2. **Expected**: A row of 5 BI metric cards appears: Revenue, Gross Profit (with margin %), Cash Position, Receivables, Payables.
+
+#### 6B+.3.2 Financial Overview
+
+1. Ask: `Show financial overview`
+2. **Expected**: Same 5 BI cards appear. The `get_financial_overview` tool now includes `bi_cards` in the response.
+
+---
+
+### 6B+.4 Duplicate Table Fix
+
+1. Ask: `Show revenue by territory and customer`
+2. **Expected**:
+   - The hierarchical table appears **once** (the compact, styled `HierarchicalTable` component after the chart).
+   - There should be NO raw markdown table (pipe-delimited `| ... |` format) in the text above the chart.
+3. If the AI still outputs markdown text alongside, the markdown table portion should be stripped automatically — only the Vue component table renders.
+
+---
+
+### 6B+.5 Dimension Name Partial Matching
+
+#### 6B+.5.1 Suffix Match
+
+1. If you have an accounting dimension `business_vertical`:
+   - Ask: `Show revenue by vertical`
+   - **Expected**: Resolves `vertical` → `business_vertical` via suffix match. Returns grouped data.
+2. If you have `business_segment`:
+   - Ask: `Show sales by segment`
+   - **Expected**: Resolves `segment` → `business_segment`.
+
+#### 6B+.5.2 Label Word Match
+
+1. Ask: `Show revenue by Business Vertical` (using the dimension label, not fieldname).
+2. **Expected**: Resolves via label matching. Returns grouped data.
+
+#### 6B+.5.3 Ambiguous Match
+
+1. If you have both `business_vertical` and `custom_vertical`:
+   - Ask: `Show revenue by vertical`
+   - **Expected**: Returns `None` (ambiguous — multiple matches). AI should inform the user to be more specific.
+
+---
+
+### 6B+.6 Hierarchical Table "Particular" Column
+
+1. Ask any grouped query: `Show revenue by territory`
+2. **Expected**: The hierarchical table's first column header is **"Particular"** (not the dimension name like "Territory").
+3. Ask: `Show profit by territory`
+4. **Expected**: Same — first column header is "Particular".
+
+---
+
+### 6B+.7 Company Label in All Tool Responses
+
+#### 6B+.7.1 Monetary Tools
+
+1. Ask: `What are the total purchases this month?`
+2. **Expected**: Response includes `company_label` field (e.g., "My Company Ltd").
+3. Enable subsidiaries, then ask the same question.
+4. **Expected**: `company_label` is "My Company Ltd including its subsidiaries".
+
+#### 6B+.7.2 Non-Monetary Tools (CRM, Stock, HRMS)
+
+1. Ask: `How many employees do we have?`
+2. **Expected**: Response includes `company_label` field with company name.
+3. Ask: `Show lead conversion rate`
+4. **Expected**: `company_label` field present.
+5. Ask: `Show low stock items`
+6. **Expected**: `company_label` field present.
+
+---
+
+### 6B+.8 Session Persistence
+
+1. Enable subsidiaries and set target currency in one conversation.
+2. Switch to a different conversation.
+3. Switch back to the original conversation.
+4. Ask a business question.
+5. **Expected**: Session context (subsidiaries + target currency) is **preserved** — settings persist because they are stored in the Chatbot Conversation DocType's `session_context` field.
+
+---
+
+### 6B+.9 Multi-Company Query Migration Verification
+
+All 51+ tool functions across 15 modules have been migrated from `get_default_company` to `get_company_filter` for session-aware multi-company support. Test each category with subsidiaries enabled.
+
+#### 6B+.9.1 Selling Tools
+
+1. Enable subsidiaries: `Include subsidiary data`
+2. Ask: `What are the total sales this month?`
+3. **Expected**: Response aggregates sales from parent + child companies. `company_label` shows "including its subsidiaries".
+4. Ask: `Who are the top 5 customers?`
+5. **Expected**: Customers from all companies in the hierarchy appear.
+6. Ask: `Show sales by item`
+7. **Expected**: Item sales consolidated across companies.
+
+#### 6B+.9.2 Buying Tools
+
+1. With subsidiaries enabled, ask: `What are the total purchases this quarter?`
+2. **Expected**: Purchase data from all companies. `company_label` includes subsidiary notation.
+3. Ask: `Who are the top suppliers?`
+4. **Expected**: Suppliers from parent and child companies combined.
+
+#### 6B+.9.3 Finance Tools
+
+1. Ask: `Show CFO dashboard`
+2. **Expected**: All KPIs (revenue, COGS, receivables, payables, cash position) aggregate across companies.
+3. Ask: `Show budget vs actual`
+4. **Expected**: Budget data uses primary company (budget is per-company), actuals aggregate if subsidiaries enabled.
+5. Ask: `Show cash flow statement`
+6. **Expected**: Payment entries from all companies included.
+7. Ask: `Show receivable aging`
+8. **Expected**: Outstanding invoices from all companies.
+9. Ask: `Show working capital summary`
+10. **Expected**: Receivables, payables, inventory consolidated.
+11. Ask: `Show financial ratios`
+12. **Expected**: Ratios calculated from consolidated data.
+13. Ask: `Show month over month comparison`
+14. **Expected**: Monthly revenue/expenses aggregate across companies.
+
+#### 6B+.9.4 GL Entry Tools
+
+1. Ask: `Show trial balance`
+2. **Expected**: GL balances from all companies in the hierarchy.
+3. Ask: `Show account statement for Cash - [Company]`
+4. **Expected**: GL entries from all companies included.
+
+#### 6B+.9.5 Stock Tools
+
+1. Ask: `Show low stock items`
+2. **Expected**: Items from warehouses across all companies.
+3. Ask: `Show stock ageing`
+4. **Expected**: Stock age data from all company warehouses.
+
+#### 6B+.9.6 HRMS Tools
+
+1. Ask: `How many employees do we have?`
+2. **Expected**: Headcount from all companies. Department breakdown includes all.
+3. Ask: `Show payroll summary`
+4. **Expected**: Salary slips from all companies aggregated.
+5. Ask: `Show department wise salary`
+6. **Expected**: Departments from all companies in pie chart.
+7. Ask: `Show employee turnover`
+8. **Expected**: Hires and exits across all companies.
+
+#### 6B+.9.7 CRM Tools
+
+1. Ask: `Show lead statistics`
+2. **Expected**: Leads from all companies.
+3. Ask: `Show sales funnel`
+4. **Expected**: Funnel stages aggregate across companies.
+5. Ask: `Show opportunity by stage`
+6. **Expected**: Opportunities from all companies.
+
+#### 6B+.9.8 Single Company Mode (Disable Subsidiaries)
+
+1. Say: `Don't include subsidiaries`
+2. Repeat any query from above (e.g., `What are the total sales this month?`)
+3. **Expected**: Data is scoped to only the default company. `company_label` shows just the company name.
+
+#### 6B+.9.9 Code-Level Verification
+
+Run in bench console to verify no session-aware tool still uses `get_default_company`:
+
+```bash
+# Should show only: consolidation.py, operations/search.py, session.py, finance/analytics.py
+cd apps/ai_chatbot && grep -rn "get_default_company" ai_chatbot/tools/ --include="*.py"
+```
+
+Verify all tool modules import `get_company_filter`:
+```bash
+# Should list 15 tool modules
+cd apps/ai_chatbot && grep -rln "get_company_filter" ai_chatbot/tools/ --include="*.py"
+```
+
+---
+
+### Troubleshooting Phase 6B+
+
+#### Session tools not appearing
+
+1. Verify `tools/registry.py` imports `ai_chatbot.tools.session`.
+2. Run: `bench --site <SITE> console` → `from ai_chatbot.tools.registry import get_registered_tools; print([t for t in get_registered_tools()])`
+3. Look for `set_include_subsidiaries` and `set_target_currency` in the output.
+
+#### Session context not persisting
+
+1. Check that the `session_context` field exists on Chatbot Conversation DocType:
+   - `bench --site <SITE> console` → `frappe.get_meta("Chatbot Conversation").has_field("session_context")`
+   - Should return `True`. If not, run `bench --site <SITE> migrate`.
+2. Verify `frappe.flags.current_conversation_id` is set:
+   - Check `api/chat.py` and `api/streaming.py` — both should set `frappe.flags.current_conversation_id = conversation_id` before tool execution.
+
+#### Subsidiaries not included in queries
+
+1. Confirm parent-child relationship in ERPNext: Company list → child company has `Parent Company` set.
+2. Check `get_companies_for_query()` in console:
+   ```python
+   from ai_chatbot.core.session_context import get_companies_for_query
+   print(get_companies_for_query("Parent Company Name"))
+   ```
+3. Verify the function returns `["Parent Company", "Child Company 1", "Child Company 2", ...]`.
+
+#### Markdown table still showing alongside hierarchical table
+
+1. Check `ChatMessage.vue` `renderedContent` computed property — it should strip markdown tables when `hierarchicalTables.value.length > 0`.
+2. Open DevTools → Elements → inspect the message content area. Look for `<table>` elements generated by markdown rendering vs `HierarchicalTable` Vue component.
+
+#### Dimension partial match not working
+
+1. Run in console:
+   ```python
+   from ai_chatbot.data.grouping import resolve_dimension_name, _get_all_dimensions
+   dims = _get_all_dimensions("Sales Invoice")
+   print(dims.keys())
+   print(resolve_dimension_name("vertical", dims))
+   ```
+2. If `None` is returned, check that `business_vertical` exists in the dimensions dict and that there are no multiple matches.

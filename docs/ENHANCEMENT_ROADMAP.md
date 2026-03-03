@@ -1,11 +1,11 @@
 # AI Chatbot — Phase-wise Enhancement Roadmap
 
-## Current State Summary (Post Phase 6A)
+## Current State Summary (Post Phase 6B)
 
 The AI Chatbot is a functional Frappe app with:
 
 - **4 DocTypes:** Chatbot Settings (Single), Chatbot Conversation, Chatbot Message, Chatbot Token Usage
-- **47+ tools** across 10 categories: CRM (5), Selling (8), Buying (6), Stock (6), Account (2), Finance (20 incl. CFO), HRMS (6), Operations (3), Consolidation (1)
+- **51+ tools** across 10 categories: CRM (5), Selling (8), Buying (6), Stock (6), Account (2), Finance (24 incl. CFO, GL analytics, multi-dimensional), HRMS (6), Operations (3), Consolidation (1)
 - **3 AI providers:** OpenAI (GPT-4o), Claude (Sonnet 4.5), and Gemini (2.5 Flash) — unified single-provider configuration
 - **Streaming:** Real-time token streaming via Frappe Realtime (Socket.IO/WebSocket) with process step indicators
 - **CRUD:** Create, update, search ERPNext records via chat with confirmation pattern
@@ -29,8 +29,12 @@ The AI Chatbot is a functional Frappe app with:
 - **Voice I/O:** Speech-to-text input (Web Speech API) and text-to-speech output (SpeechSynthesis)
 - **@Mention autocomplete:** `@company`, `@period`, `@cost_center`, `@department`, `@warehouse`, `@customer`, `@item`, `@accounting_dimension`
 - **Favicon & Logo:** Custom orbital SVG (violet gradient, RGB dots) as favicon and AI assistant avatar
-- **User Avatar:** User's profile image on right side of message bubbles; initials fallback
+- **User Avatar:** User's profile image on right side of message bubbles; initials fallback. Personalized greeting shows large user avatar (not app logo)
 - **Settings tabs:** Chatbot Settings organized into tabs (API Configuration, Tools, Query Configuration, Prompts, Streaming)
+- **Multi-dimensional analytics:** Hierarchical grouping by territory, customer_group, customer, item_group, cost_center, department with period columns (monthly/quarterly/yearly)
+- **GL Entry finance:** Trial balance, GL summary, account statement — authoritative accounting data from GL entries
+- **BI metric cards:** CFO dashboard returns styled metric cards with YoY change percentages (Revenue, Net Profit, Cash, AR, AP)
+- **Hierarchical tables:** Frontend renders indented data tables with group headers, subtotals, and bold formatting
 
 ---
 
@@ -873,129 +877,259 @@ Every Python, JavaScript, and Vue source file has been prepended with:
 
 ---
 
-## Phase 6B: Multi-Dimensional Analytics & GL-Based Finance
+## Phase 6B: Multi-Dimensional Analytics & GL-Based Finance ✅
 
-**Goal:** Support multi-dimensional/hierarchical data grouping (Company → Vertical → Segment × Period) and enhance finance tools with GL Entry-based queries for authoritative accounting data.
+**Goal:** Support multi-dimensional/hierarchical data grouping across dimensions and time periods, enhance finance tools with GL Entry-based queries for authoritative accounting data, add BI metric cards to CFO dashboard, and UI refinements.
 
-**Priority:** Medium
-
-### 6B.1 Multi-Dimensional Data Grouping Tool
+### 6B.1 Multi-Dimensional Data Grouping Tool ✅
 
 **Files:** `tools/finance/analytics.py` (new), `data/grouping.py` (new)
 
 **Architecture:**
-A generic multi-dimensional grouping tool that accepts user-specified dimensions and periods:
-
-```python
-@register_tool(
-    name="get_multidimensional_summary",
-    category="finance",
-    description="Generate a multi-dimensional summary grouped by any combination of Company, Business Vertical, Business Segment, Cost Center, Department, Territory, and time period (Monthly/Quarterly/Yearly)",
-    parameters={
-        "metric": {"type": "string", "description": "What to measure: 'revenue', 'expenses', 'profit', 'orders'"},
-        "group_by": {"type": "array", "items": {"type": "string"}, "description": "Dimensions to group by, in order (e.g. ['company', 'business_vertical', 'business_segment'])"},
-        "period": {"type": "string", "description": "Time grouping: 'monthly', 'quarterly', 'yearly'"},
-        "from_date": {"type": "string"},
-        "to_date": {"type": "string"},
-        "company": {"type": "string"},
-    },
-    doctypes=["Sales Invoice", "GL Entry"],
-)
-def get_multidimensional_summary(metric, group_by, period="quarterly", ...):
-    ...
-```
+- **Grouping engine** (`data/grouping.py`): `METRIC_CONFIG` maps metrics to doctypes/fields; `DIMENSION_FIELDS` maps dimension names to doctype fields with optional child-table JOIN support; custom PyPika `Quarter(Function)` for MySQL `QUARTER()`.
+- **Built-in dimensions:** `territory`, `customer_group`, `customer`, `item_group`, `cost_center`, `department`.
+- **Accounting Dimensions:** Any Accounting Dimension created in ERPNext (e.g. `business_vertical`, `business_segment`, `project`) is automatically discovered via `get_accounting_dimensions()` and available for grouping. The tool validates that the dimension field actually exists on the target doctype before querying (`_validate_dimension_on_doctype()` uses `frappe.get_meta().has_field()`). `get_all_dimensions()` merges built-in + accounting dimensions at runtime.
+- **Supported metrics:** `revenue` (Sales Invoice), `expenses` (Purchase Invoice), `profit` (computed: revenue - expenses), `orders` (Sales Order)
+- **Hierarchical output:** `_pivot_to_hierarchical()` transforms flat SQL GROUP BY results into indented tree with group header rows and subtotals. Max 3 dimensions.
+- **Stacked bar chart:** `data/charts.py` → `build_stacked_bar_chart()` with series stacking.
 
 **Output format:**
-Hierarchical data with parent/child relationships and period columns:
 ```json
 {
-    "headers": ["Description", "Total", "Q4", "Q3", "Q2", "Q1"],
+    "headers": ["Territory", "Total", "2025-Q1", "2025-Q2", "2025-Q3", "2025-Q4"],
     "rows": [
-        {"description": "Company I", "level": 0, "is_group": true, "values": [218.50, 65.00, 57.50, 51.00, 45.00]},
-        {"description": "Vertical I", "level": 1, "is_group": true, "values": [149.50, 45.00, 39.50, 35.00, 30.00]},
-        {"description": "Segment I", "level": 2, "is_group": false, "values": [60.00, 18.00, 16.00, 14.00, 12.00]},
+        {"description": "India", "level": 0, "is_group": true, "values": [218.50, 45.00, 51.00, 57.50, 65.00]},
+        {"description": "North", "level": 1, "is_group": false, "values": [120.00, 25.00, 28.00, 32.00, 35.00]},
         ...
     ]
 }
 ```
 
 **Frontend rendering:**
-- Parent rows in **bold** with different background colour
-- Child rows indented by level
-- Period total column
-- Appropriate chart (stacked bar or grouped bar by top-level dimension)
+- `HierarchicalTable.vue`: Parent rows in bold with tinted background, child rows indented by level, values right-aligned with tabular-nums, overflow-x scroll for many period columns
+- `BiCards.vue`: Responsive grid of metric cards with trend icons, YoY change percentages, abbreviated values (K/M)
+- Stacked bar chart via existing `ChartMessage.vue` / `EChartRenderer.vue`
 
-### 6B.2 GL Entry-Based Finance Queries
+### 6B.2 GL Entry-Based Finance Queries ✅
 
 **Files:** `tools/finance/gl_analytics.py` (new)
 
-Use `tabGL Entry` joined with `tabAccount` and `tabCompany` for authoritative accounting data:
+Three GL Entry-based tools using `frappe.qb` JOIN of `GL Entry` + `Account`:
 
-```python
-@register_tool(
-    name="get_gl_summary",
-    category="finance",
-    description="Get General Ledger summary with flexible grouping by account type, root type, party, and time period. Uses GL entries for authoritative accounting data.",
-    parameters={
-        "group_by": {"type": "string", "description": "Group by: 'account_type', 'root_type', 'party_type', 'voucher_type', 'account_name'"},
-        "root_type": {"type": "string", "description": "Filter by root type: 'Asset', 'Liability', 'Equity', 'Income', 'Expense'"},
-        "account_type": {"type": "string", "description": "Filter by account type: 'Bank', 'Cash', 'Receivable', 'Payable', etc."},
-        "from_date": {"type": "string"},
-        "to_date": {"type": "string"},
-        "company": {"type": "string"},
-    },
-    doctypes=["GL Entry", "Account"],
-)
-def get_gl_summary(...):
-    """Query GL entries with Account and Company joins.
+1. **`get_gl_summary`** — GL Entry aggregation grouped by `root_type`, `account_type`, `party_type`, `voucher_type`, or `account_name`. Filters by root_type, account_type, date range, company. Returns bar/horizontal-bar chart.
+2. **`get_trial_balance`** — Two-query approach (opening balance before from_date + period movement). Accounts grouped by root_type with subtotals and grand total.
+3. **`get_account_statement`** — Opening balance + individual GL entries with running balance per row + line chart.
 
-    Key fields: posting_date, fiscal_year, account_name, root_type, report_type,
-    account_type, party_type, party, company, debit, credit,
-    debit_in_account_currency, credit_in_account_currency, voucher_type
-    """
-    gl = frappe.qb.DocType("GL Entry")
-    acc = frappe.qb.DocType("Account")
-    query = (
-        frappe.qb.from_(gl)
-        .join(acc).on(gl.account == acc.name)
-        .where(gl.is_cancelled == 0)
-        .where(gl.company == company)
-    )
-    ...
-```
+All tools filter `gle.is_cancelled == 0`, use `build_currency_response()`, declare doctypes `["GL Entry", "Account"]`.
 
-**Specific GL-based shortcuts:**
-- Cash & bank position: `root_type='Asset'` + `account_type` in ('Bank', 'Cash')
-- Bank liabilities: `root_type='Liability'` + `account_type='Bank'`
-- Accounts Payable: `account_type='Payable'`
-- Accounts Receivable: `account_type='Receivable'`
-
-### 6B.3 Enhanced CFO Dashboard with BI Cards
+### 6B.3 Enhanced CFO Dashboard with BI Cards ✅
 
 **Files:** `tools/finance/cfo.py` (updated)
 
-Add BI-style cards to the CFO dashboard response:
-```json
-{
-    "cards": [
-        {"label": "Revenue", "value": 1250000, "change": 12.5, "change_period": "YoY", "icon": "trending-up"},
-        {"label": "Net Profit", "value": 187500, "change": -3.2, "change_period": "YoY", "icon": "trending-down"},
-        {"label": "Cash Position", "value": 450000, "icon": "wallet"},
-        {"label": "AR Outstanding", "value": 320000, "change": 8.1, "change_period": "MoM", "icon": "alert"}
-    ]
-}
-```
+- `get_cfo_dashboard()` now computes YoY change for revenue and net profit by running prior-year queries
+- Returns `bi_cards` array at top level of response:
+  ```json
+  {
+      "bi_cards": [
+          {"label": "Revenue", "value": 1250000, "change_pct": 12.5, "change_period": "YoY", "trend": "up", "icon": "trending-up"},
+          {"label": "Net Profit", "value": 187500, "change_pct": -3.2, "change_period": "YoY", "trend": "down", "icon": "bar-chart-3"},
+          {"label": "Cash Position", "value": 450000, "trend": "up", "icon": "wallet"},
+          {"label": "AR Outstanding", "value": 320000, "trend": "flat", "icon": "arrow-up-right"},
+          {"label": "AP Outstanding", "value": 180000, "trend": "flat", "icon": "arrow-down-right"}
+      ],
+      ...
+  }
+  ```
 
-Frontend renders these as styled metric cards above the charts.
+### 6B.4 UI Refinements ✅
 
-### 6B.4 Deliverables
+**Sidebar header rearrangement:**
+- **Before:** `[Toggle] [Logo] [Settings]` (symmetric layout)
+- **After:** `[Logo (left)] ... [Settings] [Toggle (right)]` — logo anchored left, action buttons grouped right
 
-| Item | Files |
-|------|-------|
-| Multi-dimensional grouping | `tools/finance/analytics.py`, `data/grouping.py` |
-| GL Entry analytics | `tools/finance/gl_analytics.py` |
-| Enhanced CFO dashboard | Updated `tools/finance/cfo.py` |
-| Frontend rendering | Updated `ChatMessage.vue` (hierarchical tables, BI cards) |
+**Personalized greeting:**
+- **Before:** Centered app logo (orbital SVG) + "Hello, {name}!"
+- **After:** Centered **user avatar** (large, 96×96px rounded) with initials fallback + "Hello, {name}!" — more personal
+
+**Accounting Dimension auto-discovery:**
+- `get_all_dimensions()` in `data/grouping.py` merges built-in dimensions with accounting dimensions discovered via `get_accounting_dimensions()`
+- `_validate_dimension_on_doctype()` checks `frappe.get_meta().has_field()` before querying to ensure the field exists on the target doctype
+- Tool description tells the AI to use exact fieldnames for accounting dimensions and that they are auto-discovered
+
+**Query compatibility fix:**
+- Replaced `fn.Year()` (not available in frappe.qb) with `fn.DateFormat(date, "%Y")` for quarterly period expressions
+- Uses `fn.Quarter()` from frappe.qb instead of custom PyPika subclass
+
+### 6B.5 Token Optimization ✅
+
+- `token_optimizer.py` strips `hierarchical_table` and `bi_cards` from tool results in conversation history (frontend renders them; AI doesn't need them in context)
+
+### 6B.6 Deliverables ✅
+
+| Item | Files | Status |
+|------|-------|--------|
+| Grouping engine | `data/grouping.py` (new) | ✅ |
+| Stacked bar chart | Updated `data/charts.py` (`build_stacked_bar_chart`) | ✅ |
+| Multi-dimensional tool | `tools/finance/analytics.py` (new) | ✅ |
+| GL Entry analytics | `tools/finance/gl_analytics.py` (new, 3 tools) | ✅ |
+| CFO BI cards | Updated `tools/finance/cfo.py` (YoY queries + `bi_cards`) | ✅ |
+| Tool registration | Updated `tools/registry.py` (imports analytics + gl_analytics) | ✅ |
+| BI Cards component | `components/charts/BiCards.vue` (new) | ✅ |
+| Hierarchical table | `components/charts/HierarchicalTable.vue` (new) | ✅ |
+| ChatMessage integration | Updated `ChatMessage.vue` (renders bi_cards + hierarchical_table) | ✅ |
+| Sidebar header | Updated `Sidebar.vue` (logo left, settings+toggle right) | ✅ |
+| Greeting avatar | Updated `ChatView.vue` (user avatar replaces app logo) | ✅ |
+| Token optimization | Updated `token_optimizer.py` (strips hierarchical_table, bi_cards) | ✅ |
+
+**New dependencies:** None.
+
+---
+
+## Phase 6B+: Parent-Child Company Session Context, Fixes & Refinements ✅
+
+**Goal:** Implement session-level parent-child company logic, session variables for subsidiary inclusion and target currency, fix BI card display issues, fix duplicate table rendering, add suffix/partial matching for dimension resolution, rename hierarchical table first column to "Particular", and add `company_label` with subsidiary notation across all tool responses.
+
+### 6B+.1 Session Context Management ✅
+
+**New files:** `core/session_context.py`, `tools/session.py`
+**Modified:** `chatbot_conversation.json` (added `session_context` JSON field)
+
+**Architecture:**
+- `session_context` JSON field on Chatbot Conversation DocType stores per-conversation variables
+- Two session variables:
+  - `include_subsidiaries` (bool) — when True, all finance/analytics queries include child company data
+  - `target_currency` (str | None) — display currency override (via @Currency or explicit user request)
+- `get_session_context(conversation_id)` — reads from DB with defaults
+- `set_session_context(conversation_id, key, value)` — updates single key
+- `get_companies_for_query(company, conversation_id)` — returns `[parent, child1, child2, ...]` when subsidiaries enabled
+- `get_display_currency(company, conversation_id)` — returns target currency or company default
+- `build_company_label(company, conversation_id)` — returns `"Company Name"` or `"Company Name including its subsidiaries"`
+
+**Session tools (AI-callable):**
+- `set_include_subsidiaries(include)` — toggle subsidiary inclusion for the chat session
+- `set_target_currency(currency)` — set/reset display currency for the chat session
+- Both accessed via `frappe.flags.current_conversation_id` set in `chat.py` and `streaming.py`
+
+### 6B+.2 Parent-Child Company Logic in All Tools ✅
+
+**Modified:** `data/grouping.py`, `data/currency.py`, `api/chat.py`, `api/streaming.py`, and **all tool modules** (see below)
+
+**Infrastructure:**
+- `frappe.flags.current_conversation_id` set before tool execution in both chat and streaming paths
+- `build_currency_response()` enhanced:
+  - Adds `company_label` with subsidiary notation (uses `build_company_label()`)
+  - Overrides `currency` if `target_currency` set in session
+- New `build_company_context()` helper for non-monetary tools (counts, rates) — adds `company` + `company_label`
+- `_build_and_run_query()` in grouping engine supports list of companies via `.isin()` filter
+- `get_grouped_metric()` uses `get_companies_for_query()` to auto-include subsidiaries
+
+**Complete `get_company_filter` migration across all tools:**
+
+Every session-aware tool function replaced `get_default_company(company)` with `get_company_filter(company)` from `core/session_context.py`. This function returns either a single company string (normal) or a list of companies (when subsidiaries are enabled). All queries updated to handle both cases:
+- `frappe.qb` queries: `isinstance(company, list)` → `.where(dt.company.isin(company))` vs `.where(dt.company == company)`
+- `frappe.db.count` dict filters: `["in", company]` for lists
+- `_primary(company)` helper added to each module for functions that require a single company (e.g., `get_fiscal_year_dates()`, `build_currency_response()`, `build_company_context()`)
+- Files with many queries added `_apply_company_filter(query, doctype_ref, company)` helper to reduce repetition
+
+| Module | Functions migrated |
+|--------|-------------------|
+| `tools/selling.py` | `get_sales_summary`, `get_top_customers`, `get_sales_by_item`, `get_sales_trend`, `get_sales_order_status` |
+| `tools/buying.py` | `get_purchase_summary`, `get_top_suppliers`, `get_purchase_trend`, `get_purchase_orders_status` |
+| `tools/stock.py` | `get_low_stock_items`, `get_stock_movement`, `get_stock_ageing`, `get_warehouse_summary` |
+| `tools/account.py` | `get_profit_and_loss`, `get_balance_sheet` |
+| `tools/crm.py` | `get_lead_statistics`, `get_opportunity_summary`, `get_lead_conversion_rate`, `get_lead_source_analysis`, `get_sales_funnel`, `get_opportunity_by_stage` |
+| `tools/hrms.py` | `get_employee_count`, `get_attendance_summary`, `get_leave_balance`, `get_payroll_summary`, `get_department_wise_salary`, `get_employee_turnover` |
+| `tools/finance/budget.py` | `get_budget_vs_actual`, `get_budget_variance` |
+| `tools/finance/cash_flow.py` | `get_cash_flow_statement`, `get_cash_flow_trend`, `get_bank_balance` |
+| `tools/finance/payables.py` | `get_payable_aging`, `get_top_creditors` |
+| `tools/finance/receivables.py` | `get_receivable_aging`, `get_top_debtors` |
+| `tools/finance/ratios.py` | `_get_current_assets_liabilities`, `get_liquidity_ratios`, `get_profitability_ratios`, `get_efficiency_ratios` |
+| `tools/finance/working_capital.py` | `get_working_capital_summary`, `get_cash_conversion_cycle` |
+| `tools/finance/profitability.py` | `get_profitability_by_customer`, `get_profitability_by_item`, `get_profitability_by_territory` |
+| `tools/finance/gl_analytics.py` | `get_gl_summary`, `get_trial_balance`, `get_account_statement` |
+| `tools/finance/cfo.py` | `get_financial_overview`, `get_cfo_dashboard`, `get_monthly_comparison` |
+
+**Intentionally NOT migrated** (correct usage of `get_default_company`):
+- `tools/consolidation.py` — has its own cross-company consolidation logic
+- `tools/operations/search.py` — search doesn't need multi-company session awareness
+- `tools/session.py` — session management tools define the context, not consume it
+- `tools/finance/analytics.py` — `data/grouping.py` handles its own session context expansion internally
+
+### 6B+.3 Company Label in All Tool Responses ✅
+
+**Modified:** All tool modules — CRM, Stock, HRMS, Selling, Buying, Account, Finance
+
+- Tools using `build_currency_response()` automatically get `company_label` (already handled by updated function)
+- Tools that manually set `"company": company` converted to use `build_company_context()`:
+  - CRM: `get_lead_statistics`, `get_lead_conversion_rate`, `get_lead_source_analysis`, `get_sales_funnel`
+  - Stock: `get_low_stock_items`, `get_stock_movement`, `get_stock_ageing`
+  - HRMS: `get_employee_count`, `get_attendance_summary`, `get_leave_balance`, `get_employee_turnover`
+- System prompt updated: AI instructed to always mention company name using `company_label` field
+
+### 6B+.4 Currency Logic for Company Grouping ✅
+
+**Modified:** `core/prompts.py`
+
+- When data is grouped by company and no target currency is set, AI instructed to show each company's data in its own default currency
+- When target currency is set via session, all amounts shown in that currency
+- System prompt updated with session variable management instructions
+
+### 6B+.5 Dimension Name Resolution Enhancement ✅
+
+**Modified:** `data/grouping.py` — `resolve_dimension_name()`
+
+Added three new matching strategies (in priority order after existing exact/normalized/label match):
+1. **Suffix match:** `"vertical"` → matches `"business_vertical"` (checks `key.endswith(f"_{normalized}")`)
+2. **Label word match:** `"vertical"` → matches dimension with label containing "Vertical" as a word
+3. **Contains match:** `"vertical"` → matches any key containing "vertical" as substring
+All return a match only when exactly one candidate is found (avoids ambiguity).
+
+### 6B+.6 BI Cards Display Fix ✅
+
+**Modified:** `tools/finance/cfo.py`
+
+- Added `bi_cards` to `get_financial_overview()` result (was previously only in `get_cfo_dashboard()`)
+- Updated `get_cfo_dashboard()` description to explicitly mention BI cards and suggest it for dashboard/overview requests
+- Cards: Revenue, Gross Profit (with margin %), Cash Position, Receivables, Payables
+
+### 6B+.7 Duplicate Table Fix ✅
+
+**Modified:** `frontend/src/components/ChatMessage.vue`
+
+- When `hierarchicalTables` data is present, markdown tables are stripped from `renderedContent`
+- Regex: removes `|...|` table blocks from rendered content when HierarchicalTable component will render the same data
+- User sees only the compact, elegant HierarchicalTable component (after chart), not the AI's markdown table too
+
+### 6B+.8 Hierarchical Table First Column ✅
+
+**Modified:** `data/grouping.py`
+
+- First column header changed from dimension label (e.g. "Territory") to `"Particular"` across all hierarchical table outputs
+- Applied to both `get_grouped_metric()` and `_get_profit_grouped()` return headers
+
+### 6B+.9 Deliverables ✅
+
+| Item | Files | Status |
+|------|-------|--------|
+| Session context module | `core/session_context.py` (new) | ✅ |
+| Session tools | `tools/session.py` (new) | ✅ |
+| DocType update | Updated `chatbot_conversation.json` (`session_context` field) | ✅ |
+| Conversation context flag | Updated `api/chat.py`, `api/streaming.py` | ✅ |
+| Currency response enhancement | Updated `data/currency.py` (`build_currency_response`, `build_company_context`) | ✅ |
+| Multi-company grouping | Updated `data/grouping.py` (list company filter, session context) | ✅ |
+| Tool registration | Updated `tools/registry.py` (session tools import) | ✅ |
+| `get_company_filter` migration | All 15 tool modules (51+ functions) → `get_company_filter` + multi-company queries | ✅ |
+| CRM company labels | Updated `tools/crm.py` (6 tools → `get_company_filter` + `build_company_context`) | ✅ |
+| Stock company labels | Updated `tools/stock.py` (4 tools → `get_company_filter` + `build_company_context`) | ✅ |
+| HRMS company labels | Updated `tools/hrms.py` (6 tools → `get_company_filter` + `build_company_context`) | ✅ |
+| Finance tools migration | All 9 finance modules → `get_company_filter` + multi-company queries | ✅ |
+| Selling/Buying migration | Updated `tools/selling.py` (5 tools), `tools/buying.py` (4 tools) | ✅ |
+| Account migration | Updated `tools/account.py` (2 tools) | ✅ |
+| CFO BI cards fix | Updated `tools/finance/cfo.py` (bi_cards in financial_overview) | ✅ |
+| System prompt | Updated `core/prompts.py` (session vars, company label, currency) | ✅ |
+| Dimension resolution | Updated `data/grouping.py` (suffix/partial/contains matching) | ✅ |
+| Duplicate table fix | Updated `ChatMessage.vue` (strip markdown tables when hierarchical) | ✅ |
+| First column rename | Updated `data/grouping.py` (headers use "Particular") | ✅ |
 
 **New dependencies:** None.
 
@@ -1441,7 +1575,7 @@ ai_chatbot/automation/notifications/
 | **5B** | Enterprise Analytics | — | ✅ Done | Permissions, dimensions, CFO dashboard, consolidation, config, plugins | None |
 | **6** | Settings & Gemini | High | ✅ Done | Unified provider config, Gemini, token/cost tracking, file headers | None |
 | **6A** | UI Overhaul | High | ✅ Done | Claude-style sidebar, process indicators, greeting, search, dark mode | None |
-| **6B** | Multi-Dim Analytics | Medium | Planned | Hierarchical grouping, GL Entry finance, BI cards | None |
+| **6B** | Multi-Dim Analytics | Medium | ✅ Done | Hierarchical grouping, GL Entry finance, BI cards, sidebar/greeting refinements | None |
 | **6C** | Workspace & Help | Low | Planned | Frappe workspace, help button, language selector | None |
 | **7** | Agentic RAG | Medium | Planned | Vector search + multi-agent orchestration + memory | chromadb, pypdf, python-docx |
 | **8** | IDP | Medium | Planned | Document extraction, data comparison/reconciliation | Pillow, pytesseract (opt), openpyxl |
@@ -1631,7 +1765,8 @@ ai_chatbot/
 │   ├── queries.py
 │   ├── analytics.py
 │   ├── currency.py
-│   ├── charts.py                  # Phase 4 (ECharts builders)
+│   ├── charts.py                  # Phase 4, 6B (ECharts builders + stacked bar)
+│   ├── grouping.py                # Phase 6B (multi-dimensional grouping engine)
 │   ├── operations.py              # Phase 3
 │   └── validators.py              # Phase 3
 │
@@ -1667,7 +1802,9 @@ ai_chatbot/
 │   │   ├── receivables.py
 │   │   ├── payables.py
 │   │   ├── cash_flow.py
-│   │   └── cfo.py                 # Phase 5B (CFO composite reports)
+│   │   ├── cfo.py                 # Phase 5B, 6B (CFO composite reports + BI cards)
+│   │   ├── analytics.py           # Phase 6B (multi-dimensional summary tool)
+│   │   └── gl_analytics.py        # Phase 6B (GL Entry-based tools)
 │   └── predictive/                # Phase 8
 │       ├── demand_forecast.py
 │       ├── sales_forecast.py
@@ -1739,9 +1876,11 @@ frontend/src/
 │   ├── ChatMessage.vue            # Updated: 4 (charts), 5A (attachments, speaker button)
 │   ├── ChatInput.vue              # Updated: 5A (file upload, voice, @mentions, suggestions)
 │   ├── TypingIndicator.vue
-│   ├── charts/                    # Phase 4, 5A
+│   ├── charts/                    # Phase 4, 5A, 6B
 │   │   ├── EChartRenderer.vue
 │   │   ├── ChartMessage.vue       # Updated: 5A (multi-chart)
+│   │   ├── BiCards.vue            # Phase 6B (BI metric cards)
+│   │   ├── HierarchicalTable.vue  # Phase 6B (indented data table)
 │   │   └── DataTable.vue          # Phase 5A (styled tables)
 │   ├── documents/                 # Phase 6
 │   │   ├── DocumentUploader.vue

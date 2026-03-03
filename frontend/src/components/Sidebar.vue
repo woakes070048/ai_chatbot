@@ -34,23 +34,25 @@
     v-else
     class="w-72 bg-gray-50 dark:bg-gray-950 border-r border-gray-200 dark:border-gray-800 flex flex-col h-full"
   >
-    <!-- Header Row -->
+    <!-- Header Row: Logo (left) | Settings + Toggle (right) -->
     <div class="flex items-center justify-between px-3 py-3 border-b border-gray-200 dark:border-gray-800">
-      <button
-        @click="$emit('toggle-sidebar')"
-        class="p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors"
-        title="Collapse sidebar"
-      >
-        <PanelLeftClose :size="20" class="text-gray-600 dark:text-gray-400" />
-      </button>
       <img :src="logoSvg" alt="AI Chatbot" class="w-8 h-8" />
-      <button
-        @click="openSettings"
-        class="p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors"
-        title="Chatbot Settings"
-      >
-        <Settings :size="20" class="text-gray-600 dark:text-gray-400" />
-      </button>
+      <div class="flex items-center gap-1">
+        <button
+          @click="openSettings"
+          class="p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors"
+          title="Chatbot Settings"
+        >
+          <Settings :size="20" class="text-gray-600 dark:text-gray-400" />
+        </button>
+        <button
+          @click="$emit('toggle-sidebar')"
+          class="p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors"
+          title="Collapse sidebar"
+        >
+          <PanelLeftClose :size="20" class="text-gray-600 dark:text-gray-400" />
+        </button>
+      </div>
     </div>
 
     <!-- New Chat Button -->

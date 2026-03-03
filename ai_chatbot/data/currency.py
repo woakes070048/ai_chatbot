@@ -114,19 +114,67 @@ def format_currency(amount, currency=None, company=None):
 	return fmt_money(flt(amount), currency=currency)
 
 
-def build_currency_response(data, company):
-	"""Add standard currency and company fields to a tool response dict.
+def _add_company_label(data, company):
+	"""Add company_label with subsidiary notation to a response dict."""
+	conversation_id = getattr(frappe.flags, "current_conversation_id", None)
+	if conversation_id:
+		try:
+			from ai_chatbot.core.session_context import build_company_label
 
-	Every monetary tool response should call this to ensure consistent
-	multi-company/multi-currency metadata.
+			data["company_label"] = build_company_label(company, conversation_id)
+		except Exception:
+			data["company_label"] = company
+	else:
+		data["company_label"] = company
+
+
+def build_company_context(data, company):
+	"""Add company and company_label to a non-monetary tool response.
+
+	For tools that return counts/non-monetary data but should still include
+	company context with subsidiary notation.
 
 	Args:
 		data: Dict of tool response data.
 		company: Company name.
 
 	Returns:
-		Dict with company and currency fields added.
+		Dict with company and company_label fields added.
+	"""
+	data["company"] = company
+	_add_company_label(data, company)
+	return data
+
+
+def build_currency_response(data, company):
+	"""Add standard currency and company fields to a tool response dict.
+
+	Every monetary tool response should call this to ensure consistent
+	multi-company/multi-currency metadata. Includes subsidiary notation
+	and session-level target currency if set.
+
+	Args:
+		data: Dict of tool response data.
+		company: Company name.
+
+	Returns:
+		Dict with company, company_label, and currency fields added.
 	"""
 	data["company"] = company
 	data["currency"] = get_company_currency(company)
+
+	_add_company_label(data, company)
+
+	# Override currency if target_currency is set in session
+	conversation_id = getattr(frappe.flags, "current_conversation_id", None)
+	if conversation_id:
+		try:
+			from ai_chatbot.core.session_context import get_session_context
+
+			ctx = get_session_context(conversation_id)
+			if ctx.get("target_currency"):
+				data["currency"] = ctx["target_currency"]
+		except Exception:
+			pass
+
 	return data

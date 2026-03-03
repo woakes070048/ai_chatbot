@@ -98,12 +98,12 @@
 }
 
 .markdown-body table {
-  @apply w-full border-collapse mb-4;
+  @apply w-full border-collapse mb-4 text-xs;
 }
 
 .markdown-body th,
 .markdown-body td {
-  @apply border border-gray-300 px-4 py-2;
+  @apply border border-gray-300 px-2 py-1;
 }
 
 .markdown-body th {

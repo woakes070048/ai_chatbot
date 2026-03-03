@@ -9,7 +9,8 @@ import frappe
 from frappe.query_builder import functions as fn
 from frappe.utils import flt
 
-from ai_chatbot.core.config import get_default_company, get_fiscal_year_dates, get_top_n_limit
+from ai_chatbot.core.config import get_fiscal_year_dates, get_top_n_limit
+from ai_chatbot.core.session_context import get_company_filter
 from ai_chatbot.data.analytics import get_time_series
 from ai_chatbot.data.charts import build_bar_chart, build_line_chart
 from ai_chatbot.data.currency import build_currency_response
@@ -29,14 +30,18 @@ from ai_chatbot.tools.registry import register_tool
 )
 def get_purchase_analytics(from_date=None, to_date=None, company=None):
 	"""Get purchase analytics with multi-company and base currency support."""
-	company = get_default_company(company)
+	company = get_company_filter(company)
 
+	fy_company = company[0] if isinstance(company, list) else company
 	if not from_date or not to_date:
-		fy_from, fy_to = get_fiscal_year_dates(company)
+		fy_from, fy_to = get_fiscal_year_dates(fy_company)
 		from_date = from_date or fy_from
 		to_date = to_date or fy_to
 
-	list_filters = [["docstatus", "=", 1], ["company", "=", company]]
+	if isinstance(company, list):
+		list_filters = [["docstatus", "=", 1], ["company", "in", company]]
+	else:
+		list_filters = [["docstatus", "=", 1], ["company", "=", company]]
 	if from_date:
 		list_filters.append(["posting_date", ">=", from_date])
 	if to_date:
@@ -57,7 +62,7 @@ def get_purchase_analytics(from_date=None, to_date=None, company=None):
 		"average_order_value": total_spending / invoice_count if invoice_count else 0,
 		"period": {"from": from_date, "to": to_date},
 	}
-	return build_currency_response(result, company)
+	return build_currency_response(result, company[0] if isinstance(company, list) else company)
 
 
 @register_tool(
@@ -72,9 +77,12 @@ def get_purchase_analytics(from_date=None, to_date=None, company=None):
 )
 def get_supplier_performance(supplier=None, company=None):
 	"""Get supplier performance metrics with multi-company support."""
-	company = get_default_company(company)
+	company = get_company_filter(company)
 
-	filters = {"docstatus": 1, "company": company}
+	if isinstance(company, list):
+		filters = {"docstatus": 1, "company": ["in", company]}
+	else:
+		filters = {"docstatus": 1, "company": company}
 	if supplier:
 		filters["supplier"] = supplier
 
@@ -91,7 +99,7 @@ def get_supplier_performance(supplier=None, company=None):
 		"total_value": total_value,
 		"supplier": supplier,
 	}
-	return build_currency_response(result, company)
+	return build_currency_response(result, company[0] if isinstance(company, list) else company)
 
 
 @register_tool(
@@ -106,7 +114,7 @@ def get_supplier_performance(supplier=None, company=None):
 )
 def get_purchase_trend(months=12, company=None):
 	"""Monthly spending time series from Purchase Invoice."""
-	company = get_default_company(company)
+	company = get_company_filter(company)
 
 	data = get_time_series(
 		doctype="Purchase Invoice",
@@ -136,7 +144,7 @@ def get_purchase_trend(months=12, company=None):
 			series_name="Spending",
 		),
 	}
-	return build_currency_response(result, company)
+	return build_currency_response(result, company[0] if isinstance(company, list) else company)
 
 
 @register_tool(
@@ -154,17 +162,18 @@ def get_purchase_trend(months=12, company=None):
 def get_purchase_by_item_group(from_date=None, to_date=None, limit=10, company=None):
 	"""Purchases grouped by item_group from Purchase Invoice Item."""
 	limit = get_top_n_limit(limit)
-	company = get_default_company(company)
+	company = get_company_filter(company)
 
+	fy_company = company[0] if isinstance(company, list) else company
 	if not from_date or not to_date:
-		fy_from, fy_to = get_fiscal_year_dates(company)
+		fy_from, fy_to = get_fiscal_year_dates(fy_company)
 		from_date = from_date or fy_from
 		to_date = to_date or fy_to
 
 	pi = frappe.qb.DocType("Purchase Invoice")
 	pii = frappe.qb.DocType("Purchase Invoice Item")
 
-	rows = (
+	query = (
 		frappe.qb.from_(pii)
 		.join(pi)
 		.on(pii.parent == pi.name)
@@ -175,7 +184,15 @@ def get_purchase_by_item_group(from_date=None, to_date=None, limit=10, company=N
 			fn.Count("*").as_("line_count"),
 		)
 		.where(pi.docstatus == 1)
-		.where(pi.company == company)
+	)
+
+	if isinstance(company, list):
+		query = query.where(pi.company.isin(company))
+	else:
+		query = query.where(pi.company == company)
+
+	rows = (
+		query
 		.where(pi.posting_date >= from_date)
 		.where(pi.posting_date <= to_date)
 		.groupby(pii.item_group)
@@ -207,4 +224,4 @@ def get_purchase_by_item_group(from_date=None, to_date=None, limit=10, company=N
 			series_name="Purchases",
 		),
 	}
-	return build_currency_response(result, company)
+	return build_currency_response(result, company[0] if isinstance(company, list) else company)

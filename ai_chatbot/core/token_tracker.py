@@ -46,8 +46,8 @@ def track_token_usage(
 	model: str,
 	prompt_tokens: int,
 	completion_tokens: int,
-	user: str = None,
-	conversation_id: str = None,
+	user: str | None = None,
+	conversation_id: str | None = None,
 ):
 	"""Record token usage for cost tracking.
 

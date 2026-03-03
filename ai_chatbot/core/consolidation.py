@@ -64,7 +64,7 @@ def get_consolidated_data(tool_func, parent_company, **kwargs):
 	"""
 	target_currency = get_company_currency(parent_company)
 	children = get_child_companies(parent_company)
-	all_companies = [parent_company] + list(children)
+	all_companies = [parent_company, *list(children)]
 
 	results = []
 	for company in all_companies:

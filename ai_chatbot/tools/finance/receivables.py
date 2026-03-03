@@ -9,12 +9,18 @@ import frappe
 from frappe.query_builder import functions as fn
 from frappe.utils import date_diff, flt, nowdate
 
-from ai_chatbot.core.config import get_default_company, get_top_n_limit
-from ai_chatbot.core.dimensions import apply_dimension_filters
+from ai_chatbot.core.config import get_top_n_limit
 from ai_chatbot.core.constants import AGING_BUCKETS
+from ai_chatbot.core.dimensions import apply_dimension_filters
+from ai_chatbot.core.session_context import get_company_filter
 from ai_chatbot.data.charts import build_bar_chart, build_horizontal_bar
 from ai_chatbot.data.currency import build_currency_response
 from ai_chatbot.tools.registry import register_tool
+
+
+def _primary(company):
+	"""Get primary company name (first in list or string as-is)."""
+	return company[0] if isinstance(company, list) else company
 
 
 def _get_aging_bucket(days_overdue: int) -> str:
@@ -50,7 +56,7 @@ def _get_aging_bucket(days_overdue: int) -> str:
 )
 def get_receivable_aging(ageing_based_on="Due Date", customer=None, company=None, cost_center=None, department=None, project=None):
 	"""Get AR aging analysis from outstanding Sales Invoices."""
-	company = get_default_company(company)
+	company = get_company_filter(company)
 	today = nowdate()
 
 	si = frappe.qb.DocType("Sales Invoice")
@@ -67,9 +73,12 @@ def get_receivable_aging(ageing_based_on="Due Date", customer=None, company=None
 			si.posting_date,
 		)
 		.where(si.docstatus == 1)
-		.where(si.company == company)
 		.where(si.outstanding_amount > 0)
 	)
+	if isinstance(company, list):
+		query = query.where(si.company.isin(company))
+	else:
+		query = query.where(si.company == company)
 
 	if customer:
 		query = query.where(si.customer == customer)
@@ -116,7 +125,7 @@ def get_receivable_aging(ageing_based_on="Due Date", customer=None, company=None
 			series_name="Outstanding",
 		),
 	}
-	return build_currency_response(result, company)
+	return build_currency_response(result, _primary(company))
 
 
 @register_tool(
@@ -138,7 +147,7 @@ def get_receivable_aging(ageing_based_on="Due Date", customer=None, company=None
 def get_top_debtors(limit=10, company=None, cost_center=None, department=None, project=None):
 	"""Get top customers by outstanding receivable amount."""
 	limit = get_top_n_limit(limit)
-	company = get_default_company(company)
+	company = get_company_filter(company)
 
 	si = frappe.qb.DocType("Sales Invoice")
 
@@ -150,9 +159,12 @@ def get_top_debtors(limit=10, company=None, cost_center=None, department=None, p
 			fn.Count("*").as_("invoice_count"),
 		)
 		.where(si.docstatus == 1)
-		.where(si.company == company)
 		.where(si.outstanding_amount > 0)
 	)
+	if isinstance(company, list):
+		query = query.where(si.company.isin(company))
+	else:
+		query = query.where(si.company == company)
 	query = apply_dimension_filters(query, si, cost_center=cost_center, department=department, project=project)
 	debtors = (
 		query
@@ -186,4 +198,4 @@ def get_top_debtors(limit=10, company=None, cost_center=None, department=None, p
 			series_name="Outstanding",
 		),
 	}
-	return build_currency_response(result, company)
+	return build_currency_response(result, _primary(company))

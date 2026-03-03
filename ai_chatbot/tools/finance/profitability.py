@@ -9,11 +9,17 @@ import frappe
 from frappe.query_builder import functions as fn
 from frappe.utils import flt
 
-from ai_chatbot.core.config import get_default_company, get_fiscal_year_dates, get_top_n_limit
+from ai_chatbot.core.config import get_fiscal_year_dates, get_top_n_limit
+from ai_chatbot.core.dimensions import apply_dimension_filters
+from ai_chatbot.core.session_context import get_company_filter
 from ai_chatbot.data.charts import build_horizontal_bar, build_pie_chart
 from ai_chatbot.data.currency import build_currency_response
 from ai_chatbot.tools.registry import register_tool
-from ai_chatbot.core.dimensions import apply_dimension_filters
+
+
+def _primary(company):
+	"""Get primary company name (first in list or string as-is)."""
+	return company[0] if isinstance(company, list) else company
 
 
 def _get_profitability_data(group_field, from_date, to_date, company, limit=None, **dimensions):
@@ -50,12 +56,16 @@ def _get_profitability_data(group_field, from_date, to_date, company, limit=None
 			fn.Count(si.name).distinct().as_("invoice_count"),
 		)
 		.where(si.docstatus == 1)
-		.where(si.company == company)
 		.where(si.posting_date >= from_date)
 		.where(si.posting_date <= to_date)
 		.groupby(si[group_field])
 		.orderby(revenue_expr, order=frappe.qb.desc)
 	)
+
+	if isinstance(company, list):
+		query = query.where(si.company.isin(company))
+	else:
+		query = query.where(si.company == company)
 
 	query = apply_dimension_filters(query, si, **dimensions)
 
@@ -110,10 +120,10 @@ def _get_profitability_data(group_field, from_date, to_date, company, limit=None
 def get_profitability_by_customer(from_date=None, to_date=None, limit=10, company=None, cost_center=None, department=None, project=None):
 	"""Profitability analysis grouped by customer."""
 	limit = get_top_n_limit(limit)
-	company = get_default_company(company)
+	company = get_company_filter(company)
 
 	if not from_date or not to_date:
-		fy_from, fy_to = get_fiscal_year_dates(company)
+		fy_from, fy_to = get_fiscal_year_dates(_primary(company))
 		from_date = from_date or fy_from
 		to_date = to_date or fy_to
 
@@ -134,7 +144,7 @@ def get_profitability_by_customer(from_date=None, to_date=None, limit=10, compan
 			series_name="Profit Margin",
 		),
 	}
-	return build_currency_response(result, company)
+	return build_currency_response(result, _primary(company))
 
 
 @register_tool(
@@ -164,10 +174,10 @@ def get_profitability_by_customer(from_date=None, to_date=None, limit=10, compan
 def get_profitability_by_item(from_date=None, to_date=None, limit=10, company=None, cost_center=None, department=None, project=None):
 	"""Profitability analysis grouped by item_code."""
 	limit = get_top_n_limit(limit)
-	company = get_default_company(company)
+	company = get_company_filter(company)
 
 	if not from_date or not to_date:
-		fy_from, fy_to = get_fiscal_year_dates(company)
+		fy_from, fy_to = get_fiscal_year_dates(_primary(company))
 		from_date = from_date or fy_from
 		to_date = to_date or fy_to
 
@@ -190,10 +200,14 @@ def get_profitability_by_item(from_date=None, to_date=None, limit=10, company=No
 			fn.Sum(sii.stock_qty).as_("total_qty"),
 		)
 		.where(si.docstatus == 1)
-		.where(si.company == company)
 		.where(si.posting_date >= from_date)
 		.where(si.posting_date <= to_date)
 	)
+
+	if isinstance(company, list):
+		query = query.where(si.company.isin(company))
+	else:
+		query = query.where(si.company == company)
 	query = apply_dimension_filters(query, si, cost_center=cost_center, department=department, project=project)
 	rows = (
 		query
@@ -234,7 +248,7 @@ def get_profitability_by_item(from_date=None, to_date=None, limit=10, company=No
 			series_name="Profit Margin",
 		),
 	}
-	return build_currency_response(result, company)
+	return build_currency_response(result, _primary(company))
 
 
 @register_tool(
@@ -262,10 +276,10 @@ def get_profitability_by_item(from_date=None, to_date=None, limit=10, company=No
 )
 def get_profitability_by_territory(from_date=None, to_date=None, company=None, cost_center=None, department=None, project=None):
 	"""Profitability analysis grouped by territory."""
-	company = get_default_company(company)
+	company = get_company_filter(company)
 
 	if not from_date or not to_date:
-		fy_from, fy_to = get_fiscal_year_dates(company)
+		fy_from, fy_to = get_fiscal_year_dates(_primary(company))
 		from_date = from_date or fy_from
 		to_date = to_date or fy_to
 
@@ -282,4 +296,4 @@ def get_profitability_by_territory(from_date=None, to_date=None, company=None, c
 			data=pie_data,
 		),
 	}
-	return build_currency_response(result, company)
+	return build_currency_response(result, _primary(company))

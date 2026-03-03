@@ -12,10 +12,16 @@ import frappe
 from frappe.query_builder import functions as fn
 from frappe.utils import flt, get_first_day, get_last_day, nowdate
 
-from ai_chatbot.core.config import get_default_company, get_fiscal_year_dates, is_hrms_installed
+from ai_chatbot.core.config import get_fiscal_year_dates, is_hrms_installed
+from ai_chatbot.core.session_context import get_company_filter
 from ai_chatbot.data.charts import build_bar_chart, build_multi_series_chart, build_pie_chart
-from ai_chatbot.data.currency import build_currency_response
+from ai_chatbot.data.currency import build_company_context, build_currency_response
 from ai_chatbot.tools.registry import register_tool
+
+
+def _primary(company):
+	"""Get primary company name (first in list or string as-is)."""
+	return company[0] if isinstance(company, list) else company
 
 _HRMS_NOT_INSTALLED = {
 	"error": (
@@ -51,9 +57,10 @@ def get_employee_count(department=None, status="Active", designation=None, compa
 	if not is_hrms_installed():
 		return _HRMS_NOT_INSTALLED
 
-	company = get_default_company(company)
+	company = get_company_filter(company)
 
-	filters = {"company": company}
+	company_filter = {"company": ["in", company]} if isinstance(company, list) else {"company": company}
+	filters = {**company_filter}
 	if status:
 		filters["status"] = status
 	if department:
@@ -68,10 +75,13 @@ def get_employee_count(department=None, status="Active", designation=None, compa
 	dept_query = (
 		frappe.qb.from_(emp)
 		.select(emp.department, fn.Count("*").as_("count"))
-		.where(emp.company == company)
 		.groupby(emp.department)
 		.orderby(fn.Count("*"), order=frappe.qb.desc)
 	)
+	if isinstance(company, list):
+		dept_query = dept_query.where(emp.company.isin(company))
+	else:
+		dept_query = dept_query.where(emp.company == company)
 	if status:
 		dept_query = dept_query.where(emp.status == status)
 	if designation:
@@ -89,7 +99,6 @@ def get_employee_count(department=None, status="Active", designation=None, compa
 		"total_employees": total,
 		"status_filter": status or "All",
 		"departments": departments,
-		"company": company,
 	}
 
 	if pie_data:
@@ -98,7 +107,7 @@ def get_employee_count(department=None, status="Active", designation=None, compa
 			data=pie_data,
 		)
 
-	return result
+	return build_company_context(result, _primary(company))
 
 
 # ---------------------------------------------------------------------------
@@ -133,7 +142,7 @@ def get_attendance_summary(from_date=None, to_date=None, department=None, compan
 	if not is_hrms_installed():
 		return _HRMS_NOT_INSTALLED
 
-	company = get_default_company(company)
+	company = get_company_filter(company)
 
 	# Default to current month
 	if not from_date:
@@ -146,13 +155,17 @@ def get_attendance_summary(from_date=None, to_date=None, department=None, compan
 	query = (
 		frappe.qb.from_(att)
 		.select(att.status, fn.Count("*").as_("count"))
-		.where(att.company == company)
 		.where(att.docstatus == 1)
 		.where(att.attendance_date >= from_date)
 		.where(att.attendance_date <= to_date)
 		.groupby(att.status)
 		.orderby(fn.Count("*"), order=frappe.qb.desc)
 	)
+
+	if isinstance(company, list):
+		query = query.where(att.company.isin(company))
+	else:
+		query = query.where(att.company == company)
 
 	if department:
 		query = query.where(att.department == department)
@@ -174,7 +187,6 @@ def get_attendance_summary(from_date=None, to_date=None, department=None, compan
 		"status_breakdown": status_counts,
 		"attendance_rate": attendance_rate,
 		"period": {"from": from_date, "to": to_date},
-		"company": company,
 	}
 
 	if categories:
@@ -186,7 +198,7 @@ def get_attendance_summary(from_date=None, to_date=None, department=None, compan
 			series_name="Attendance",
 		)
 
-	return result
+	return build_company_context(result, _primary(company))
 
 
 # ---------------------------------------------------------------------------
@@ -220,16 +232,17 @@ def get_leave_balance(employee=None, leave_type=None, company=None):
 	if not is_hrms_installed():
 		return _HRMS_NOT_INSTALLED
 
-	company = get_default_company(company)
+	company = get_company_filter(company)
 	today = nowdate()
 
 	# Resolve employee name to ID if needed
 	if employee and not frappe.db.exists("Employee", employee):
-		resolved = frappe.db.get_value(
-			"Employee",
-			{"employee_name": ["like", f"%{employee}%"], "company": company},
-			"name",
-		)
+		resolve_filters = {"employee_name": ["like", f"%{employee}%"]}
+		if isinstance(company, list):
+			resolve_filters["company"] = ["in", company]
+		else:
+			resolve_filters["company"] = company
+		resolved = frappe.db.get_value("Employee", resolve_filters, "name")
 		if resolved:
 			employee = resolved
 
@@ -243,12 +256,16 @@ def get_leave_balance(employee=None, leave_type=None, company=None):
 			la.leave_type,
 			fn.Sum(la.total_leaves_allocated).as_("allocated"),
 		)
-		.where(la.company == company)
 		.where(la.docstatus == 1)
 		.where(la.from_date <= today)
 		.where(la.to_date >= today)
 		.groupby(la.employee, la.leave_type)
 	)
+
+	if isinstance(company, list):
+		alloc_query = alloc_query.where(la.company.isin(company))
+	else:
+		alloc_query = alloc_query.where(la.company == company)
 
 	if employee:
 		alloc_query = alloc_query.where(la.employee == employee)
@@ -258,7 +275,7 @@ def get_leave_balance(employee=None, leave_type=None, company=None):
 	allocations = alloc_query.run(as_dict=True)
 
 	# --- Consumed leaves (approved leave applications in current fiscal year) ---
-	fy_from, fy_to = get_fiscal_year_dates(company)
+	fy_from, fy_to = get_fiscal_year_dates(_primary(company))
 
 	lapp = frappe.qb.DocType("Leave Application")
 	consumed_query = (
@@ -268,13 +285,17 @@ def get_leave_balance(employee=None, leave_type=None, company=None):
 			lapp.leave_type,
 			fn.Sum(lapp.total_leave_days).as_("consumed"),
 		)
-		.where(lapp.company == company)
 		.where(lapp.status == "Approved")
 		.where(lapp.docstatus == 1)
 		.where(lapp.from_date >= fy_from)
 		.where(lapp.to_date <= fy_to)
 		.groupby(lapp.employee, lapp.leave_type)
 	)
+
+	if isinstance(company, list):
+		consumed_query = consumed_query.where(lapp.company.isin(company))
+	else:
+		consumed_query = consumed_query.where(lapp.company == company)
 
 	if employee:
 		consumed_query = consumed_query.where(lapp.employee == employee)
@@ -304,11 +325,10 @@ def get_leave_balance(employee=None, leave_type=None, company=None):
 			"balance": balance,
 		})
 
-	return {
+	return build_company_context({
 		"leave_balances": balances,
 		"total_entries": len(balances),
-		"company": company,
-	}
+	}, _primary(company))
 
 
 # ---------------------------------------------------------------------------
@@ -339,7 +359,7 @@ def get_payroll_summary(from_date=None, to_date=None, company=None):
 	if not is_hrms_installed():
 		return _HRMS_NOT_INSTALLED
 
-	company = get_default_company(company)
+	company = get_company_filter(company)
 
 	# Default to current month
 	if not from_date:
@@ -349,7 +369,7 @@ def get_payroll_summary(from_date=None, to_date=None, company=None):
 
 	ss = frappe.qb.DocType("Salary Slip")
 
-	rows = (
+	query = (
 		frappe.qb.from_(ss)
 		.select(
 			fn.Count("*").as_("slip_count"),
@@ -357,12 +377,15 @@ def get_payroll_summary(from_date=None, to_date=None, company=None):
 			fn.Sum(ss.base_total_deduction).as_("total_deductions"),
 			fn.Sum(ss.base_net_pay).as_("total_net"),
 		)
-		.where(ss.company == company)
 		.where(ss.docstatus == 1)
 		.where(ss.posting_date >= from_date)
 		.where(ss.posting_date <= to_date)
-		.run(as_dict=True)
 	)
+	if isinstance(company, list):
+		query = query.where(ss.company.isin(company))
+	else:
+		query = query.where(ss.company == company)
+	rows = query.run(as_dict=True)
 
 	row = rows[0] if rows else {}
 	slip_count = row.get("slip_count", 0) or 0
@@ -389,7 +412,7 @@ def get_payroll_summary(from_date=None, to_date=None, company=None):
 			series_name="Payroll",
 		)
 
-	return build_currency_response(result, company)
+	return build_currency_response(result, _primary(company))
 
 
 # ---------------------------------------------------------------------------
@@ -420,7 +443,7 @@ def get_department_wise_salary(from_date=None, to_date=None, company=None):
 	if not is_hrms_installed():
 		return _HRMS_NOT_INSTALLED
 
-	company = get_default_company(company)
+	company = get_company_filter(company)
 
 	# Default to current month
 	if not from_date:
@@ -430,7 +453,7 @@ def get_department_wise_salary(from_date=None, to_date=None, company=None):
 
 	ss = frappe.qb.DocType("Salary Slip")
 
-	rows = (
+	query = (
 		frappe.qb.from_(ss)
 		.select(
 			ss.department,
@@ -438,14 +461,17 @@ def get_department_wise_salary(from_date=None, to_date=None, company=None):
 			fn.Sum(ss.base_gross_pay).as_("total_gross"),
 			fn.Sum(ss.base_net_pay).as_("total_net"),
 		)
-		.where(ss.company == company)
 		.where(ss.docstatus == 1)
 		.where(ss.posting_date >= from_date)
 		.where(ss.posting_date <= to_date)
 		.groupby(ss.department)
 		.orderby(fn.Sum(ss.base_net_pay), order=frappe.qb.desc)
-		.run(as_dict=True)
 	)
+	if isinstance(company, list):
+		query = query.where(ss.company.isin(company))
+	else:
+		query = query.where(ss.company == company)
+	rows = query.run(as_dict=True)
 
 	departments = [
 		{
@@ -470,7 +496,7 @@ def get_department_wise_salary(from_date=None, to_date=None, company=None):
 			data=pie_data,
 		)
 
-	return build_currency_response(result, company)
+	return build_currency_response(result, _primary(company))
 
 
 # ---------------------------------------------------------------------------
@@ -501,50 +527,60 @@ def get_employee_turnover(from_date=None, to_date=None, company=None):
 	if not is_hrms_installed():
 		return _HRMS_NOT_INSTALLED
 
-	company = get_default_company(company)
+	company = get_company_filter(company)
 
 	if not from_date or not to_date:
-		fy_from, fy_to = get_fiscal_year_dates(company)
+		fy_from, fy_to = get_fiscal_year_dates(_primary(company))
 		from_date = from_date or fy_from
 		to_date = to_date or fy_to
 
 	emp = frappe.qb.DocType("Employee")
 
 	# New hires — employees who joined in the period
-	new_hires = (
+	hire_query = (
 		frappe.qb.from_(emp)
 		.select(fn.Count("*").as_("count"))
-		.where(emp.company == company)
 		.where(emp.date_of_joining >= from_date)
 		.where(emp.date_of_joining <= to_date)
-		.run(as_dict=True)
 	)
+	if isinstance(company, list):
+		hire_query = hire_query.where(emp.company.isin(company))
+	else:
+		hire_query = hire_query.where(emp.company == company)
+	new_hires = hire_query.run(as_dict=True)
 	joined = new_hires[0]["count"] if new_hires else 0
 
 	# Exits — employees who left in the period
-	exits = (
+	exit_query = (
 		frappe.qb.from_(emp)
 		.select(fn.Count("*").as_("count"))
-		.where(emp.company == company)
 		.where(emp.status == "Left")
 		.where(emp.relieving_date >= from_date)
 		.where(emp.relieving_date <= to_date)
-		.run(as_dict=True)
 	)
+	if isinstance(company, list):
+		exit_query = exit_query.where(emp.company.isin(company))
+	else:
+		exit_query = exit_query.where(emp.company == company)
+	exits = exit_query.run(as_dict=True)
 	left = exits[0]["count"] if exits else 0
 
 	# Total active employees (for rate calculation)
-	active = frappe.db.count("Employee", {"company": company, "status": "Active"})
+	active_filter = {"status": "Active"}
+	if isinstance(company, list):
+		active_filter["company"] = ["in", company]
+	else:
+		active_filter["company"] = company
+	active = frappe.db.count("Employee", active_filter)
 
 	turnover_rate = round(left / (active + left) * 100, 1) if (active + left) > 0 else 0
 
-	return {
+	return build_company_context({
 		"new_hires": joined,
 		"exits": left,
 		"active_employees": active,
 		"turnover_rate": turnover_rate,
 		"period": {"from": from_date, "to": to_date},
-		"company": company,
 		"echart_option": build_multi_series_chart(
 			title="Employee Turnover",
 			categories=["Period"],
@@ -555,4 +591,4 @@ def get_employee_turnover(from_date=None, to_date=None, company=None):
 			y_axis_name="Employees",
 			chart_type="bar",
 		),
-	}
+	}, _primary(company))

@@ -9,12 +9,17 @@ import frappe
 from frappe.query_builder import functions as fn
 from frappe.utils import flt
 
-from ai_chatbot.core.config import get_default_company, get_fiscal_year_dates
+from ai_chatbot.core.config import get_fiscal_year_dates
+from ai_chatbot.core.dimensions import apply_dimension_filters
+from ai_chatbot.core.session_context import get_company_filter
 from ai_chatbot.data.charts import build_multi_series_chart
 from ai_chatbot.data.currency import build_currency_response
 from ai_chatbot.tools.registry import register_tool
 
-from ai_chatbot.core.dimensions import apply_dimension_filters
+
+def _primary(company):
+	"""Get primary company name (first in list or string as-is)."""
+	return company[0] if isinstance(company, list) else company
 
 
 def _get_current_fiscal_year(company):
@@ -50,20 +55,20 @@ def _get_current_fiscal_year(company):
 )
 def get_budget_vs_actual(fiscal_year=None, cost_center=None, department=None, project=None, company=None):
 	"""Compare budget vs actual from Budget doctype and GL Entry."""
-	company = get_default_company(company)
+	company = get_company_filter(company)
 
 	if not fiscal_year:
-		fiscal_year = _get_current_fiscal_year(company)
+		fiscal_year = _get_current_fiscal_year(_primary(company))
 		if not fiscal_year:
 			result = {
 				"items": [],
 				"totals": {"budget": 0, "actual": 0, "variance": 0},
 				"message": "No fiscal year configured. Please specify a fiscal year.",
 			}
-			return build_currency_response(result, company)
+			return build_currency_response(result, _primary(company))
 
 	# Get fiscal year dates for GL query
-	fy_from, fy_to = get_fiscal_year_dates(company)
+	fy_from, fy_to = get_fiscal_year_dates(_primary(company))
 
 	# Get budget amounts from Budget Account child table
 	budget = frappe.qb.DocType("Budget")
@@ -78,10 +83,13 @@ def get_budget_vs_actual(fiscal_year=None, cost_center=None, department=None, pr
 			fn.Sum(budget_acct.budget_amount).as_("budget_amount"),
 		)
 		.where(budget.fiscal_year == fiscal_year)
-		.where(budget.company == company)
 		.where(budget.docstatus == 1)
 		.groupby(budget_acct.account)
 	)
+	if isinstance(company, list):
+		budget_query = budget_query.where(budget.company.isin(company))
+	else:
+		budget_query = budget_query.where(budget.company == company)
 
 	budget_query = apply_dimension_filters(budget_query, budget, cost_center=cost_center, department=department, project=project)
 
@@ -94,7 +102,7 @@ def get_budget_vs_actual(fiscal_year=None, cost_center=None, department=None, pr
 			"fiscal_year": fiscal_year,
 			"message": "No budgets found for this fiscal year.",
 		}
-		return build_currency_response(result, company)
+		return build_currency_response(result, _primary(company))
 
 	budget_accounts = [b.account for b in budget_data]
 	budget_map = {b.account: flt(b.budget_amount) for b in budget_data}
@@ -109,13 +117,16 @@ def get_budget_vs_actual(fiscal_year=None, cost_center=None, department=None, pr
 			fn.Sum(gle.debit).as_("total_debit"),
 			fn.Sum(gle.credit).as_("total_credit"),
 		)
-		.where(gle.company == company)
 		.where(gle.account.isin(budget_accounts))
 		.where(gle.posting_date >= fy_from)
 		.where(gle.posting_date <= fy_to)
 		.where(gle.is_cancelled == 0)
 		.groupby(gle.account)
 	)
+	if isinstance(company, list):
+		actual_query = actual_query.where(gle.company.isin(company))
+	else:
+		actual_query = actual_query.where(gle.company == company)
 
 	actual_query = apply_dimension_filters(actual_query, gle, cost_center=cost_center, department=department, project=project)
 
@@ -174,7 +185,7 @@ def get_budget_vs_actual(fiscal_year=None, cost_center=None, department=None, pr
 			chart_type="bar",
 		),
 	}
-	return build_currency_response(result, company)
+	return build_currency_response(result, _primary(company))
 
 
 @register_tool(
@@ -199,18 +210,18 @@ def get_budget_vs_actual(fiscal_year=None, cost_center=None, department=None, pr
 )
 def get_budget_variance(fiscal_year=None, account=None, cost_center=None, department=None, project=None, company=None):
 	"""Get monthly budget vs actual variance for specific accounts."""
-	company = get_default_company(company)
+	company = get_company_filter(company)
 
 	if not fiscal_year:
-		fiscal_year = _get_current_fiscal_year(company)
+		fiscal_year = _get_current_fiscal_year(_primary(company))
 		if not fiscal_year:
 			result = {
 				"monthly": [],
 				"message": "No fiscal year configured.",
 			}
-			return build_currency_response(result, company)
+			return build_currency_response(result, _primary(company))
 
-	fy_from, fy_to = get_fiscal_year_dates(company)
+	fy_from, fy_to = get_fiscal_year_dates(_primary(company))
 
 	# Get total budget for the account(s)
 	budget = frappe.qb.DocType("Budget")
@@ -225,10 +236,13 @@ def get_budget_variance(fiscal_year=None, account=None, cost_center=None, depart
 			fn.Sum(budget_acct.budget_amount).as_("budget_amount"),
 		)
 		.where(budget.fiscal_year == fiscal_year)
-		.where(budget.company == company)
 		.where(budget.docstatus == 1)
 		.groupby(budget_acct.account)
 	)
+	if isinstance(company, list):
+		budget_query = budget_query.where(budget.company.isin(company))
+	else:
+		budget_query = budget_query.where(budget.company == company)
 
 	if account:
 		budget_query = budget_query.where(budget_acct.account == account)
@@ -244,7 +258,7 @@ def get_budget_variance(fiscal_year=None, account=None, cost_center=None, depart
 			"account": account,
 			"message": "No budget data found.",
 		}
-		return build_currency_response(result, company)
+		return build_currency_response(result, _primary(company))
 
 	budget_accounts = [b.account for b in budget_data]
 	# Spread annual budget evenly across 12 months (simplified)
@@ -261,12 +275,15 @@ def get_budget_variance(fiscal_year=None, account=None, cost_center=None, depart
 			month_expr.as_("month"),
 			(fn.Sum(gle.debit) - fn.Sum(gle.credit)).as_("actual"),
 		)
-		.where(gle.company == company)
 		.where(gle.account.isin(budget_accounts))
 		.where(gle.posting_date >= fy_from)
 		.where(gle.posting_date <= fy_to)
 		.where(gle.is_cancelled == 0)
 	)
+	if isinstance(company, list):
+		actual_q = actual_q.where(gle.company.isin(company))
+	else:
+		actual_q = actual_q.where(gle.company == company)
 	actual_q = apply_dimension_filters(actual_q, gle, cost_center=cost_center, department=department, project=project)
 	actual_query = (
 		actual_q
@@ -306,11 +323,11 @@ def get_budget_variance(fiscal_year=None, account=None, cost_center=None, depart
 		"account": display_account,
 		"annual_budget": flt(total_annual_budget, 2),
 		"echart_option": build_multi_series_chart(
-			title=f"Budget vs Actual — Monthly",
+			title="Budget vs Actual — Monthly",
 			categories=categories,
 			series_list=series_list,
 			y_axis_name="Amount",
 			chart_type="line",
 		),
 	}
-	return build_currency_response(result, company)
+	return build_currency_response(result, _primary(company))

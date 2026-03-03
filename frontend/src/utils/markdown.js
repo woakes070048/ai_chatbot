@@ -46,5 +46,68 @@ export function renderMarkdown(content) {
     }
   )
 
+  // Auto-right-align numeric columns in tables
+  html = html.replace(/<table>([\s\S]*?)<\/table>/g, (_match, tableContent) => {
+    return `<table>${autoAlignTableColumns(tableContent)}</table>`
+  })
+
   return html
+}
+
+/**
+ * Detect numeric columns in an HTML table and apply right-alignment
+ * to both <th> and <td> cells in those columns.
+ * A column is considered numeric if all its <td> values are numbers
+ * (with optional commas, decimals, signs, currency symbols, %, or dashes).
+ */
+function autoAlignTableColumns(tableHtml) {
+  // Extract all rows of <td> values
+  const rows = []
+  const tdRowRegex = /<tr>([\s\S]*?)<\/tr>/g
+  let rowMatch
+  while ((rowMatch = tdRowRegex.exec(tableHtml)) !== null) {
+    const cells = []
+    const cellRegex = /<td[^>]*>([\s\S]*?)<\/td>/g
+    let cellMatch
+    while ((cellMatch = cellRegex.exec(rowMatch[1])) !== null) {
+      cells.push(cellMatch[1].trim())
+    }
+    if (cells.length > 0) rows.push(cells)
+  }
+
+  if (rows.length === 0) return tableHtml
+
+  // Determine which columns are numeric (skip first column — usually labels)
+  const numCols = rows[0].length
+  const numericPattern = /^[₹$€£¥]?\s*-?\s*[\d,]+\.?\d*\s*%?$|^—$|^-$/
+  const isNumeric = new Array(numCols).fill(false)
+  for (let col = 1; col < numCols; col++) {
+    const allNumeric = rows.every(row => {
+      const val = (row[col] || '').replace(/<[^>]*>/g, '').trim()
+      return val === '' || numericPattern.test(val)
+    })
+    if (allNumeric) isNumeric[col] = true
+  }
+
+  // Apply right-align style to numeric column headers and cells
+  let colIdx = 0
+  tableHtml = tableHtml.replace(/<th([^>]*)>/g, (m, attrs) => {
+    const idx = colIdx++
+    if (idx < numCols && isNumeric[idx]) {
+      return `<th${attrs} style="text-align:right">`
+    }
+    return m
+  })
+
+  colIdx = 0
+  tableHtml = tableHtml.replace(/<td([^>]*)>/g, (m, attrs) => {
+    const idx = colIdx % numCols
+    colIdx++
+    if (isNumeric[idx]) {
+      return `<td${attrs} style="text-align:right">`
+    }
+    return m
+  })
+
+  return tableHtml
 }

@@ -9,11 +9,17 @@ import frappe
 from frappe.query_builder import functions as fn
 from frappe.utils import date_diff, flt, nowdate
 
-from ai_chatbot.core.config import get_default_company, get_fiscal_year_dates, get_query_limit
+from ai_chatbot.core.config import get_fiscal_year_dates, get_query_limit
 from ai_chatbot.core.constants import AGING_BUCKETS
+from ai_chatbot.core.session_context import get_company_filter
 from ai_chatbot.data.charts import build_bar_chart, build_multi_series_chart
-from ai_chatbot.data.currency import build_currency_response
+from ai_chatbot.data.currency import build_company_context, build_currency_response
 from ai_chatbot.tools.registry import register_tool
+
+
+def _primary(company):
+	"""Get primary company name (first in list or string as-is)."""
+	return company[0] if isinstance(company, list) else company
 
 
 @register_tool(
@@ -28,7 +34,7 @@ from ai_chatbot.tools.registry import register_tool
 )
 def get_inventory_summary(warehouse=None, company=None):
 	"""Get inventory summary using frappe.qb — no raw SQL."""
-	company = get_default_company(company)
+	company = get_company_filter(company)
 
 	bin_table = frappe.qb.DocType("Bin")
 	wh_table = frappe.qb.DocType("Warehouse")
@@ -42,8 +48,12 @@ def get_inventory_summary(warehouse=None, company=None):
 			fn.Sum(bin_table.actual_qty).as_("total_qty"),
 			fn.Sum(bin_table.stock_value).as_("total_value"),
 		)
-		.where(wh_table.company == company)
 	)
+
+	if isinstance(company, list):
+		query = query.where(wh_table.company.isin(company))
+	else:
+		query = query.where(wh_table.company == company)
 
 	if warehouse:
 		query = query.where(bin_table.warehouse == warehouse)
@@ -57,7 +67,7 @@ def get_inventory_summary(warehouse=None, company=None):
 		"total_value": flt(stock.total_value or 0),
 		"warehouse": warehouse,
 	}
-	return build_currency_response(data, company)
+	return build_currency_response(data, _primary(company))
 
 
 @register_tool(
@@ -73,7 +83,7 @@ def get_inventory_summary(warehouse=None, company=None):
 def get_low_stock_items(limit=50, company=None):
 	"""Get low stock items using frappe.qb — no raw SQL."""
 	limit = get_query_limit(limit)
-	company = get_default_company(company)
+	company = get_company_filter(company)
 
 	bin_table = frappe.qb.DocType("Bin")
 	item_table = frappe.qb.DocType("Item")
@@ -97,7 +107,15 @@ def get_low_stock_items(limit=50, company=None):
 			bin_table.actual_qty,
 			reorder_level.as_("reorder_level"),
 		)
-		.where(wh_table.company == company)
+	)
+
+	if isinstance(company, list):
+		query = query.where(wh_table.company.isin(company))
+	else:
+		query = query.where(wh_table.company == company)
+
+	query = (
+		query
 		.where(bin_table.actual_qty < reorder_level)
 		.orderby(bin_table.actual_qty)
 		.limit(limit)
@@ -105,11 +123,10 @@ def get_low_stock_items(limit=50, company=None):
 
 	items = query.run(as_dict=True)
 
-	return {
+	return build_company_context({
 		"low_stock_items": items,
 		"count": len(items),
-		"company": company,
-	}
+	}, _primary(company))
 
 
 @register_tool(
@@ -127,10 +144,10 @@ def get_low_stock_items(limit=50, company=None):
 )
 def get_stock_movement(item_code=None, warehouse=None, from_date=None, to_date=None, company=None):
 	"""Get stock in/out movement from Stock Ledger Entry."""
-	company = get_default_company(company)
+	company = get_company_filter(company)
 
 	if not from_date or not to_date:
-		fy_from, fy_to = get_fiscal_year_dates(company)
+		fy_from, fy_to = get_fiscal_year_dates(_primary(company))
 		from_date = from_date or fy_from
 		to_date = to_date or fy_to
 
@@ -161,13 +178,17 @@ def get_stock_movement(item_code=None, warehouse=None, from_date=None, to_date=N
 				).as_("stock_out"),
 			)
 			.where(sle.is_cancelled == 0)
-			.where(wh_table.company == company)
 			.where(sle.item_code == item_code)
 			.where(sle.posting_date >= from_date)
 			.where(sle.posting_date <= to_date)
-			.groupby(month_expr)
-			.orderby(month_expr)
 		)
+
+		if isinstance(company, list):
+			query = query.where(wh_table.company.isin(company))
+		else:
+			query = query.where(wh_table.company == company)
+
+		query = query.groupby(month_expr).orderby(month_expr)
 
 		if warehouse:
 			query = query.where(sle.warehouse == warehouse)
@@ -224,9 +245,17 @@ def get_stock_movement(item_code=None, warehouse=None, from_date=None, to_date=N
 				).as_("stock_out"),
 			)
 			.where(sle.is_cancelled == 0)
-			.where(wh_table.company == company)
 			.where(sle.posting_date >= from_date)
 			.where(sle.posting_date <= to_date)
+		)
+
+		if isinstance(company, list):
+			query = query.where(wh_table.company.isin(company))
+		else:
+			query = query.where(wh_table.company == company)
+
+		query = (
+			query
 			.groupby(sle.item_code)
 			.orderby(fn.Sum(fn.Abs(sle.actual_qty)), order=frappe.qb.desc)
 			.limit(get_query_limit())
@@ -258,8 +287,7 @@ def get_stock_movement(item_code=None, warehouse=None, from_date=None, to_date=N
 			"period": {"from": from_date, "to": to_date},
 		}
 
-	result["company"] = company
-	return result
+	return build_company_context(result, _primary(company))
 
 
 @register_tool(
@@ -274,7 +302,7 @@ def get_stock_movement(item_code=None, warehouse=None, from_date=None, to_date=N
 )
 def get_stock_ageing(warehouse=None, company=None):
 	"""Stock age analysis — oldest receipt date per item with positive balance."""
-	company = get_default_company(company)
+	company = get_company_filter(company)
 	today = nowdate()
 
 	bin_table = frappe.qb.DocType("Bin")
@@ -287,9 +315,12 @@ def get_stock_ageing(warehouse=None, company=None):
 		.join(wh_table)
 		.on(bin_table.warehouse == wh_table.name)
 		.select(bin_table.item_code, bin_table.warehouse, bin_table.actual_qty)
-		.where(wh_table.company == company)
 		.where(bin_table.actual_qty > 0)
 	)
+	if isinstance(company, list):
+		bin_query = bin_query.where(wh_table.company.isin(company))
+	else:
+		bin_query = bin_query.where(wh_table.company == company)
 
 	if warehouse:
 		bin_query = bin_query.where(bin_table.warehouse == warehouse)
@@ -297,12 +328,10 @@ def get_stock_ageing(warehouse=None, company=None):
 	bins = bin_query.limit(100).run(as_dict=True)
 
 	if not bins:
-		result = {
+		return build_company_context({
 			"items": [],
 			"aging_summary": {b["label"]: {"count": 0, "total_qty": 0} for b in AGING_BUCKETS},
-			"company": company,
-		}
-		return result
+		}, _primary(company))
 
 	# For each item+warehouse, find the oldest positive SLE (first receipt)
 	item_ages = []
@@ -354,7 +383,6 @@ def get_stock_ageing(warehouse=None, company=None):
 		"items": sorted(item_ages, key=lambda x: x["age_days"], reverse=True)[:20],
 		"aging_summary": aging_summary,
 		"total_items": len(item_ages),
-		"company": company,
 		"echart_option": build_bar_chart(
 			title="Stock Aging by Quantity",
 			categories=categories,
@@ -363,4 +391,4 @@ def get_stock_ageing(warehouse=None, company=None):
 			series_name="Stock Qty",
 		),
 	}
-	return result
+	return build_company_context(result, _primary(company))

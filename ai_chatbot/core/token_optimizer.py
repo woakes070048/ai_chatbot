@@ -58,8 +58,10 @@ def compress_tool_result(result: dict, max_rows: int = 20) -> dict:
 
 	compressed = dict(result)
 
-	# Remove echart_option — frontend renders charts from it, AI doesn't need it
+	# Remove frontend-only rendering data — AI doesn't need these
 	compressed.pop("echart_option", None)
+	compressed.pop("hierarchical_table", None)
+	compressed.pop("bi_cards", None)
 
 	# Truncate large data arrays
 	if isinstance(compressed.get("data"), list) and len(compressed["data"]) > max_rows:

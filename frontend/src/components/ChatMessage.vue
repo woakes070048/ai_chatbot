@@ -63,12 +63,28 @@
               class="markdown-body prose prose-sm max-w-none"
             ></div>
 
+            <!-- BI Cards from tool results -->
+            <BiCards
+              v-for="(bi, idx) in biCardsData"
+              :key="'bi-' + idx"
+              :cards="bi.cards"
+              :currency="bi.currency"
+            />
+
             <!-- Charts from tool results -->
             <ChartMessage
               v-for="(chart, idx) in chartData"
               :key="'chart-' + idx"
               :echart-option="chart.echart_option"
               :raw-data="chart.data"
+            />
+
+            <!-- Hierarchical Tables from tool results -->
+            <HierarchicalTable
+              v-for="(table, idx) in hierarchicalTables"
+              :key="'htable-' + idx"
+              :headers="table.headers"
+              :rows="table.rows"
             />
 
             <!-- Read-Only Tool Calls Display -->
@@ -142,6 +158,8 @@ import { Wrench, PenSquare, Volume2, VolumeX, FileText } from 'lucide-vue-next'
 import { renderMarkdown } from '../utils/markdown'
 import { useVoiceOutput } from '../composables/useVoiceOutput'
 import ChartMessage from './charts/ChartMessage.vue'
+import BiCards from './charts/BiCards.vue'
+import HierarchicalTable from './charts/HierarchicalTable.vue'
 import logoSvg from '../assets/logo.svg'
 
 const voiceOutput = useVoiceOutput()
@@ -208,6 +226,12 @@ const renderedContent = computed(() => {
       // Strip HTML <img> tags
       content = content.replace(/<img\s[^>]*>/gi, '')
 
+      // Strip markdown tables when HierarchicalTable component renders the data
+      // (avoids duplicate table display — the component version is more compact and elegant)
+      if (hierarchicalTables.value.length > 0) {
+        content = content.replace(/\n*\|[^\n]+\|\n\|[-:| ]+\|\n(\|[^\n]+\|\n?)*/g, '')
+      }
+
       return renderMarkdown(content)
     } catch (error) {
       console.error('Markdown rendering error:', error)
@@ -239,6 +263,49 @@ const chartData = computed(() => {
       echart_option: r.data.echart_option,
       data: r.data,
     }))
+})
+
+// Extract BI cards from tool_results
+const biCardsData = computed(() => {
+  if (!props.message.tool_results) return []
+
+  let results = props.message.tool_results
+  if (typeof results === 'string') {
+    try {
+      results = JSON.parse(results)
+    } catch {
+      return []
+    }
+  }
+
+  if (!Array.isArray(results)) results = [results]
+
+  return results
+    .filter(r => r && r.success !== false && r.data?.bi_cards?.length > 0)
+    .map(r => ({
+      cards: r.data.bi_cards,
+      currency: r.data.currency || '',
+    }))
+})
+
+// Extract hierarchical tables from tool_results
+const hierarchicalTables = computed(() => {
+  if (!props.message.tool_results) return []
+
+  let results = props.message.tool_results
+  if (typeof results === 'string') {
+    try {
+      results = JSON.parse(results)
+    } catch {
+      return []
+    }
+  }
+
+  if (!Array.isArray(results)) results = [results]
+
+  return results
+    .filter(r => r && r.success !== false && r.data?.hierarchical_table?.headers?.length > 0)
+    .map(r => r.data.hierarchical_table)
 })
 
 // Check if tool_calls is valid and has items

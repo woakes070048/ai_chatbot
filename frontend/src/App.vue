@@ -235,12 +235,14 @@ function handleVisibilityChange() {
   border-collapse: collapse;
   width: 100%;
   margin: 1rem 0;
+  font-size: 0.75rem;
+  line-height: 1rem;
 }
 
 .markdown-body table th,
 .markdown-body table td {
   border: 1px solid #d1d5db;
-  padding: 0.5rem 1rem;
+  padding: 0.25rem 0.5rem;
 }
 
 .markdown-body table th {

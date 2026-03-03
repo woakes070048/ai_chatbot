@@ -194,6 +194,54 @@ def build_pie_chart(title: str, data: list[dict]) -> dict:
 	}
 
 
+def build_stacked_bar_chart(
+	title: str,
+	categories: list[str],
+	series_list: list[dict],
+	y_axis_name: str = "",
+) -> dict:
+	"""Build a stacked bar chart.
+
+	Args:
+		title: Chart title text.
+		categories: X-axis labels (e.g. period labels).
+		series_list: List of dicts with "name" and "data" keys.
+			Each series becomes a stacked layer.
+		y_axis_name: Y-axis label.
+
+	Returns:
+		Complete ECharts option dict.
+	"""
+	series = []
+	for i, s in enumerate(series_list):
+		series.append({
+			"name": s["name"],
+			"type": "bar",
+			"stack": "total",
+			"data": s["data"],
+			"itemStyle": {"color": CHART_COLORS[i % len(CHART_COLORS)]},
+			"emphasis": {"focus": "series"},
+		})
+
+	return {
+		"color": CHART_COLORS,
+		"title": {"text": title, "left": "center", "textStyle": {"fontSize": 14}},
+		"tooltip": {
+			"trigger": "axis",
+			"axisPointer": {"type": "shadow"},
+		},
+		"legend": {"bottom": 0, "data": [s["name"] for s in series_list]},
+		"grid": {"left": "15%", "right": "5%", "bottom": "15%", "top": "22%"},
+		"xAxis": {
+			"type": "category",
+			"data": categories,
+			"axisLabel": {"rotate": 30 if len(categories) > 6 else 0, "fontSize": 11},
+		},
+		"yAxis": {"type": "value", "name": y_axis_name, "nameGap": 10},
+		"series": series,
+	}
+
+
 def build_horizontal_bar(
 	title: str,
 	categories: list[str],

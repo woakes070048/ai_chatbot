@@ -9,13 +9,18 @@ import frappe
 from frappe.query_builder import functions as fn
 from frappe.utils import date_diff, flt, nowdate
 
-from ai_chatbot.core.config import get_default_company, get_top_n_limit
+from ai_chatbot.core.config import get_top_n_limit
 from ai_chatbot.core.constants import AGING_BUCKETS
+from ai_chatbot.core.dimensions import apply_dimension_filters
+from ai_chatbot.core.session_context import get_company_filter
 from ai_chatbot.data.charts import build_bar_chart, build_horizontal_bar
 from ai_chatbot.data.currency import build_currency_response
 from ai_chatbot.tools.registry import register_tool
 
-from ai_chatbot.core.dimensions import apply_dimension_filters
+
+def _primary(company):
+	"""Get primary company name (first in list or string as-is)."""
+	return company[0] if isinstance(company, list) else company
 
 
 def _get_aging_bucket(days_overdue: int) -> str:
@@ -51,7 +56,7 @@ def _get_aging_bucket(days_overdue: int) -> str:
 )
 def get_payable_aging(ageing_based_on="Due Date", supplier=None, company=None, cost_center=None, department=None, project=None):
 	"""Get AP aging analysis from outstanding Purchase Invoices."""
-	company = get_default_company(company)
+	company = get_company_filter(company)
 	today = nowdate()
 
 	pi = frappe.qb.DocType("Purchase Invoice")
@@ -68,9 +73,12 @@ def get_payable_aging(ageing_based_on="Due Date", supplier=None, company=None, c
 			pi.posting_date,
 		)
 		.where(pi.docstatus == 1)
-		.where(pi.company == company)
 		.where(pi.outstanding_amount > 0)
 	)
+	if isinstance(company, list):
+		query = query.where(pi.company.isin(company))
+	else:
+		query = query.where(pi.company == company)
 
 	if supplier:
 		query = query.where(pi.supplier == supplier)
@@ -117,7 +125,7 @@ def get_payable_aging(ageing_based_on="Due Date", supplier=None, company=None, c
 			series_name="Outstanding",
 		),
 	}
-	return build_currency_response(result, company)
+	return build_currency_response(result, _primary(company))
 
 
 @register_tool(
@@ -139,7 +147,7 @@ def get_payable_aging(ageing_based_on="Due Date", supplier=None, company=None, c
 def get_top_creditors(limit=10, company=None, cost_center=None, department=None, project=None):
 	"""Get top suppliers by outstanding payable amount."""
 	limit = get_top_n_limit(limit)
-	company = get_default_company(company)
+	company = get_company_filter(company)
 
 	pi = frappe.qb.DocType("Purchase Invoice")
 
@@ -151,9 +159,12 @@ def get_top_creditors(limit=10, company=None, cost_center=None, department=None,
 			fn.Count("*").as_("invoice_count"),
 		)
 		.where(pi.docstatus == 1)
-		.where(pi.company == company)
 		.where(pi.outstanding_amount > 0)
 	)
+	if isinstance(company, list):
+		query = query.where(pi.company.isin(company))
+	else:
+		query = query.where(pi.company == company)
 	query = apply_dimension_filters(query, pi, cost_center=cost_center, department=department, project=project)
 	creditors = (
 		query
@@ -187,4 +198,4 @@ def get_top_creditors(limit=10, company=None, cost_center=None, department=None,
 			series_name="Outstanding",
 		),
 	}
-	return build_currency_response(result, company)
+	return build_currency_response(result, _primary(company))

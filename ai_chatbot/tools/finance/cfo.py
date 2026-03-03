@@ -7,20 +7,34 @@ Composite analysis tools that aggregate data from existing finance tools for AI 
 
 import frappe
 from frappe.query_builder import functions as fn
-from frappe.utils import add_months, flt, get_first_day, get_last_day, nowdate
+from frappe.utils import add_months, add_years, flt, get_first_day, get_last_day, nowdate
 
-from ai_chatbot.core.config import get_default_company, get_fiscal_year_dates
+from ai_chatbot.core.config import get_fiscal_year_dates
+from ai_chatbot.core.session_context import get_company_filter
 from ai_chatbot.data.charts import build_bar_chart, build_multi_series_chart
 from ai_chatbot.data.currency import build_currency_response
 from ai_chatbot.tools.registry import register_tool
+
+
+def _primary(company):
+	"""Get primary company name (first in list or string as-is)."""
+	return company[0] if isinstance(company, list) else company
+
+
+def _apply_company_filter(query, doctype_ref, company):
+	"""Apply single or multi-company filter to a query."""
+	if isinstance(company, list):
+		return query.where(doctype_ref.company.isin(company))
+	return query.where(doctype_ref.company == company)
 
 
 @register_tool(
 	name="get_financial_overview",
 	category="finance",
 	description=(
-		"Get a high-level financial overview with key KPIs: revenue, COGS, gross profit, "
-		"net profit, cash position, accounts receivable, and accounts payable"
+		"Get a high-level financial overview with key KPIs and BI metric cards: revenue, COGS, "
+		"gross profit, net profit, cash position, accounts receivable, and accounts payable. "
+		"Prefer get_cfo_dashboard for comprehensive CFO-level analysis."
 	),
 	parameters={
 		"from_date": {
@@ -40,87 +54,105 @@ from ai_chatbot.tools.registry import register_tool
 )
 def get_financial_overview(from_date=None, to_date=None, company=None):
 	"""High-level financial KPIs aggregated from multiple sources."""
-	company = get_default_company(company)
+	company = get_company_filter(company)
 
 	if not from_date or not to_date:
-		fy_from, fy_to = get_fiscal_year_dates(company)
+		fy_from, fy_to = get_fiscal_year_dates(_primary(company))
 		from_date = from_date or fy_from
 		to_date = to_date or fy_to
 
 	# Revenue from Sales Invoices
 	si = frappe.qb.DocType("Sales Invoice")
-	rev_result = (
+	rev_query = (
 		frappe.qb.from_(si)
 		.select(fn.Sum(si.base_grand_total).as_("total"))
 		.where(si.docstatus == 1)
-		.where(si.company == company)
 		.where(si.posting_date >= from_date)
 		.where(si.posting_date <= to_date)
-		.run(as_dict=True)
 	)
+	if isinstance(company, list):
+		rev_query = rev_query.where(si.company.isin(company))
+	else:
+		rev_query = rev_query.where(si.company == company)
+	rev_result = rev_query.run(as_dict=True)
 	revenue = flt(rev_result[0].total) if rev_result else 0
 
 	# COGS from Purchase Invoices
 	pi = frappe.qb.DocType("Purchase Invoice")
-	cogs_result = (
+	cogs_query = (
 		frappe.qb.from_(pi)
 		.select(fn.Sum(pi.base_grand_total).as_("total"))
 		.where(pi.docstatus == 1)
-		.where(pi.company == company)
 		.where(pi.posting_date >= from_date)
 		.where(pi.posting_date <= to_date)
-		.run(as_dict=True)
 	)
+	if isinstance(company, list):
+		cogs_query = cogs_query.where(pi.company.isin(company))
+	else:
+		cogs_query = cogs_query.where(pi.company == company)
+	cogs_result = cogs_query.run(as_dict=True)
 	cogs = flt(cogs_result[0].total) if cogs_result else 0
 
 	gross_profit = revenue - cogs
 	gross_margin_pct = flt((gross_profit / revenue) * 100, 1) if revenue else 0
 
 	# Accounts Receivable (outstanding)
-	recv_result = (
+	recv_query = (
 		frappe.qb.from_(si)
 		.select(fn.Sum(si.outstanding_amount).as_("total"))
 		.where(si.docstatus == 1)
-		.where(si.company == company)
 		.where(si.outstanding_amount > 0)
-		.run(as_dict=True)
 	)
+	if isinstance(company, list):
+		recv_query = recv_query.where(si.company.isin(company))
+	else:
+		recv_query = recv_query.where(si.company == company)
+	recv_result = recv_query.run(as_dict=True)
 	receivables = flt(recv_result[0].total) if recv_result else 0
 
 	# Accounts Payable (outstanding)
-	pay_result = (
+	pay_query = (
 		frappe.qb.from_(pi)
 		.select(fn.Sum(pi.outstanding_amount).as_("total"))
 		.where(pi.docstatus == 1)
-		.where(pi.company == company)
 		.where(pi.outstanding_amount > 0)
-		.run(as_dict=True)
 	)
+	if isinstance(company, list):
+		pay_query = pay_query.where(pi.company.isin(company))
+	else:
+		pay_query = pay_query.where(pi.company == company)
+	pay_result = pay_query.run(as_dict=True)
 	payables = flt(pay_result[0].total) if pay_result else 0
 
 	# Cash position from bank/cash GL accounts
 	acc = frappe.qb.DocType("Account")
 	gle = frappe.qb.DocType("GL Entry")
-	cash_accounts = (
+	cash_acc_query = (
 		frappe.qb.from_(acc)
 		.select(acc.name)
-		.where(acc.company == company)
 		.where(acc.account_type.isin(["Bank", "Cash"]))
 		.where(acc.is_group == 0)
-		.run(as_list=True)
 	)
+	if isinstance(company, list):
+		cash_acc_query = cash_acc_query.where(acc.company.isin(company))
+	else:
+		cash_acc_query = cash_acc_query.where(acc.company == company)
+	cash_accounts = cash_acc_query.run(as_list=True)
 	cash_account_names = [a[0] for a in cash_accounts] if cash_accounts else []
 
 	cash_position = 0
 	if cash_account_names:
-		cash_result = (
+		cash_query = (
 			frappe.qb.from_(gle)
 			.select((fn.Sum(gle.debit) - fn.Sum(gle.credit)).as_("balance"))
-			.where(gle.company == company)
 			.where(gle.account.isin(cash_account_names))
 			.where(gle.is_cancelled == 0)
-			.run(as_dict=True)
 		)
+		if isinstance(company, list):
+			cash_query = cash_query.where(gle.company.isin(company))
+		else:
+			cash_query = cash_query.where(gle.company == company)
+		cash_result = cash_query.run(as_dict=True)
 		cash_position = flt(cash_result[0].balance) if cash_result else 0
 
 	# Build chart — KPI bar chart
@@ -134,7 +166,52 @@ def get_financial_overview(from_date=None, to_date=None, company=None):
 		flt(payables, 2),
 	]
 
+	# BI cards for visual display
+	bi_cards = [
+		{
+			"label": "Revenue",
+			"value": flt(revenue, 2),
+			"change_pct": None,
+			"change_period": None,
+			"trend": "up" if revenue > 0 else "flat",
+			"icon": "trending-up",
+		},
+		{
+			"label": "Gross Profit",
+			"value": flt(gross_profit, 2),
+			"change_pct": gross_margin_pct,
+			"change_period": "Margin %",
+			"trend": "up" if gross_profit > 0 else "down",
+			"icon": "bar-chart-3",
+		},
+		{
+			"label": "Cash Position",
+			"value": flt(cash_position, 2),
+			"change_pct": None,
+			"change_period": None,
+			"trend": "up" if cash_position > 0 else "down",
+			"icon": "wallet",
+		},
+		{
+			"label": "Receivables",
+			"value": flt(receivables, 2),
+			"change_pct": None,
+			"change_period": None,
+			"trend": "flat",
+			"icon": "arrow-up-right",
+		},
+		{
+			"label": "Payables",
+			"value": flt(payables, 2),
+			"change_pct": None,
+			"change_period": None,
+			"trend": "flat",
+			"icon": "arrow-down-right",
+		},
+	]
+
 	result = {
+		"bi_cards": bi_cards,
 		"revenue": flt(revenue, 2),
 		"cogs": flt(cogs, 2),
 		"gross_profit": flt(gross_profit, 2),
@@ -152,16 +229,18 @@ def get_financial_overview(from_date=None, to_date=None, company=None):
 			series_name="Amount",
 		),
 	}
-	return build_currency_response(result, company)
+	return build_currency_response(result, _primary(company))
 
 
 @register_tool(
 	name="get_cfo_dashboard",
 	category="finance",
 	description=(
-		"Get a comprehensive CFO dashboard with financial highlights, KPIs (margins, ratios, "
-		"efficiency metrics), cash flow summary, receivables/payables aging, and budget variance. "
-		"This is the most comprehensive financial reporting tool available."
+		"Get a comprehensive CFO dashboard with BI metric cards (Revenue, Net Profit, Cash, AR, AP "
+		"with YoY comparisons), financial highlights, KPIs (margins, ratios, efficiency metrics), "
+		"cash flow summary, receivables/payables aging, and budget variance. "
+		"Use this tool when user asks for 'CFO dashboard', 'financial overview', 'financial dashboard', "
+		"'show CFO dashboard', or any comprehensive financial summary request."
 	),
 	parameters={
 		"from_date": {
@@ -181,10 +260,10 @@ def get_financial_overview(from_date=None, to_date=None, company=None):
 )
 def get_cfo_dashboard(from_date=None, to_date=None, company=None):
 	"""Comprehensive CFO dashboard aggregating data from multiple finance tools."""
-	company = get_default_company(company)
+	company = get_company_filter(company)
 
 	if not from_date or not to_date:
-		fy_from, fy_to = get_fiscal_year_dates(company)
+		fy_from, fy_to = get_fiscal_year_dates(_primary(company))
 		from_date = from_date or fy_from
 		to_date = to_date or fy_to
 
@@ -196,137 +275,137 @@ def get_cfo_dashboard(from_date=None, to_date=None, company=None):
 	si = frappe.qb.DocType("Sales Invoice")
 	pi = frappe.qb.DocType("Purchase Invoice")
 
-	rev_result = (
+	rev_query = (
 		frappe.qb.from_(si)
 		.select(
 			fn.Sum(si.base_grand_total).as_("revenue"),
 			fn.Count("*").as_("invoice_count"),
 		)
 		.where(si.docstatus == 1)
-		.where(si.company == company)
 		.where(si.posting_date >= from_date)
 		.where(si.posting_date <= to_date)
-		.run(as_dict=True)
 	)
+	rev_query = _apply_company_filter(rev_query, si, company)
+	rev_result = rev_query.run(as_dict=True)
 	revenue = flt(rev_result[0].revenue) if rev_result else 0
 	invoice_count = rev_result[0].invoice_count if rev_result else 0
 
-	cogs_result = (
+	cogs_query = (
 		frappe.qb.from_(pi)
 		.select(fn.Sum(pi.base_grand_total).as_("cogs"))
 		.where(pi.docstatus == 1)
-		.where(pi.company == company)
 		.where(pi.posting_date >= from_date)
 		.where(pi.posting_date <= to_date)
-		.run(as_dict=True)
 	)
+	cogs_query = _apply_company_filter(cogs_query, pi, company)
+	cogs_result = cogs_query.run(as_dict=True)
 	cogs = flt(cogs_result[0].cogs) if cogs_result else 0
 
 	gross_profit = revenue - cogs
 	net_profit = gross_profit  # simplified — expenses beyond COGS not tracked separately
 
 	# --- Receivables ---
-	recv_result = (
+	recv_query = (
 		frappe.qb.from_(si)
 		.select(fn.Sum(si.outstanding_amount).as_("total"))
 		.where(si.docstatus == 1)
-		.where(si.company == company)
 		.where(si.outstanding_amount > 0)
-		.run(as_dict=True)
 	)
+	recv_query = _apply_company_filter(recv_query, si, company)
+	recv_result = recv_query.run(as_dict=True)
 	total_receivables = flt(recv_result[0].total) if recv_result else 0
 
 	# --- Payables ---
-	pay_result = (
+	pay_query = (
 		frappe.qb.from_(pi)
 		.select(fn.Sum(pi.outstanding_amount).as_("total"))
 		.where(pi.docstatus == 1)
-		.where(pi.company == company)
 		.where(pi.outstanding_amount > 0)
-		.run(as_dict=True)
 	)
+	pay_query = _apply_company_filter(pay_query, pi, company)
+	pay_result = pay_query.run(as_dict=True)
 	total_payables = flt(pay_result[0].total) if pay_result else 0
 
 	# --- Inventory ---
 	bin_table = frappe.qb.DocType("Bin")
 	wh_table = frappe.qb.DocType("Warehouse")
-	inv_result = (
+	inv_query = (
 		frappe.qb.from_(bin_table)
 		.join(wh_table)
 		.on(bin_table.warehouse == wh_table.name)
 		.select(fn.Sum(bin_table.stock_value).as_("total"))
-		.where(wh_table.company == company)
-		.run(as_dict=True)
 	)
+	inv_query = _apply_company_filter(inv_query, wh_table, company)
+	inv_result = inv_query.run(as_dict=True)
 	inventory = flt(inv_result[0].total) if inv_result else 0
 
 	# --- Cash Position ---
 	acc = frappe.qb.DocType("Account")
 	gle = frappe.qb.DocType("GL Entry")
-	cash_accounts = (
+	cash_acc_query = (
 		frappe.qb.from_(acc)
 		.select(acc.name)
-		.where(acc.company == company)
 		.where(acc.account_type.isin(["Bank", "Cash"]))
 		.where(acc.is_group == 0)
-		.run(as_list=True)
 	)
+	cash_acc_query = _apply_company_filter(cash_acc_query, acc, company)
+	cash_accounts = cash_acc_query.run(as_list=True)
 	cash_account_names = [a[0] for a in cash_accounts] if cash_accounts else []
 
 	cash_position = 0
 	if cash_account_names:
-		cash_result = (
+		cash_query = (
 			frappe.qb.from_(gle)
 			.select((fn.Sum(gle.debit) - fn.Sum(gle.credit)).as_("balance"))
-			.where(gle.company == company)
 			.where(gle.account.isin(cash_account_names))
 			.where(gle.is_cancelled == 0)
-			.run(as_dict=True)
 		)
+		cash_query = _apply_company_filter(cash_query, gle, company)
+		cash_result = cash_query.run(as_dict=True)
 		cash_position = flt(cash_result[0].balance) if cash_result else 0
 
 	# --- Total Assets for ROA ---
-	asset_result = (
+	asset_query = (
 		frappe.qb.from_(gle)
 		.join(acc)
 		.on(gle.account == acc.name)
 		.select((fn.Sum(gle.debit) - fn.Sum(gle.credit)).as_("total_assets"))
-		.where(gle.company == company)
 		.where(acc.root_type == "Asset")
 		.where(gle.is_cancelled == 0)
-		.run(as_dict=True)
 	)
+	asset_query = _apply_company_filter(asset_query, gle, company)
+	asset_result = asset_query.run(as_dict=True)
 	total_assets = flt(asset_result[0].total_assets) if asset_result else 0
 
 	# --- Cash Flow Summary (Payment Entry) ---
 	pe = frappe.qb.DocType("Payment Entry")
 
-	cf_inflow = (
+	cf_in_query = (
 		frappe.qb.from_(pe)
 		.select(fn.Sum(pe.base_paid_amount).as_("total"))
 		.where(pe.docstatus == 1)
-		.where(pe.company == company)
 		.where(pe.payment_type == "Receive")
 		.where(pe.posting_date >= from_date)
 		.where(pe.posting_date <= to_date)
-		.run(as_dict=True)
 	)
+	cf_in_query = _apply_company_filter(cf_in_query, pe, company)
+	cf_inflow = cf_in_query.run(as_dict=True)
 	cash_inflow = flt(cf_inflow[0].total) if cf_inflow else 0
 
-	cf_outflow = (
+	cf_out_query = (
 		frappe.qb.from_(pe)
 		.select(fn.Sum(pe.base_paid_amount).as_("total"))
 		.where(pe.docstatus == 1)
-		.where(pe.company == company)
 		.where(pe.payment_type == "Pay")
 		.where(pe.posting_date >= from_date)
 		.where(pe.posting_date <= to_date)
-		.run(as_dict=True)
 	)
+	cf_out_query = _apply_company_filter(cf_out_query, pe, company)
+	cf_outflow = cf_out_query.run(as_dict=True)
 	cash_outflow = flt(cf_outflow[0].total) if cf_outflow else 0
 
 	# --- Budget Summary ---
-	budget_summary = _get_budget_summary(company)
+	budget_summary = _get_budget_summary(_primary(company))
 
 	# --- Calculate KPIs ---
 	gross_margin_pct = flt((gross_profit / revenue) * 100, 1) if revenue else 0
@@ -352,7 +431,86 @@ def get_cfo_dashboard(from_date=None, to_date=None, company=None):
 	kpi_categories = ["Gross Margin %", "Net Margin %", "ROA %", "Current Ratio", "Quick Ratio"]
 	kpi_values = [gross_margin_pct, net_margin_pct, roa_pct, current_ratio, quick_ratio]
 
+	# --- YoY Comparison for BI Cards ---
+	prior_from = str(add_years(from_date, -1))
+	prior_to = str(add_years(to_date, -1))
+
+	prev_rev_query = (
+		frappe.qb.from_(si)
+		.select(fn.Sum(si.base_grand_total).as_("revenue"))
+		.where(si.docstatus == 1)
+		.where(si.posting_date >= prior_from)
+		.where(si.posting_date <= prior_to)
+	)
+	prev_rev_query = _apply_company_filter(prev_rev_query, si, company)
+	prev_rev_result = prev_rev_query.run(as_dict=True)
+	prev_revenue = flt(prev_rev_result[0].revenue) if prev_rev_result else 0
+
+	prev_cogs_query = (
+		frappe.qb.from_(pi)
+		.select(fn.Sum(pi.base_grand_total).as_("cogs"))
+		.where(pi.docstatus == 1)
+		.where(pi.posting_date >= prior_from)
+		.where(pi.posting_date <= prior_to)
+	)
+	prev_cogs_query = _apply_company_filter(prev_cogs_query, pi, company)
+	prev_cogs_result = prev_cogs_query.run(as_dict=True)
+	prev_cogs = flt(prev_cogs_result[0].cogs) if prev_cogs_result else 0
+	prev_net_profit = prev_revenue - prev_cogs
+
+	rev_yoy = flt(((revenue - prev_revenue) / prev_revenue) * 100, 1) if prev_revenue else None
+	profit_yoy = flt(((net_profit - prev_net_profit) / abs(prev_net_profit)) * 100, 1) if prev_net_profit else None
+
+	def _trend(change_pct):
+		if change_pct is None:
+			return "flat"
+		return "up" if change_pct > 0 else ("down" if change_pct < 0 else "flat")
+
+	bi_cards = [
+		{
+			"label": "Revenue",
+			"value": flt(revenue, 2),
+			"change_pct": rev_yoy,
+			"change_period": "YoY",
+			"trend": _trend(rev_yoy),
+			"icon": "trending-up",
+		},
+		{
+			"label": "Net Profit",
+			"value": flt(net_profit, 2),
+			"change_pct": profit_yoy,
+			"change_period": "YoY",
+			"trend": _trend(profit_yoy),
+			"icon": "bar-chart-3",
+		},
+		{
+			"label": "Cash Position",
+			"value": flt(cash_position, 2),
+			"change_pct": None,
+			"change_period": None,
+			"trend": "up" if cash_position > 0 else "down",
+			"icon": "wallet",
+		},
+		{
+			"label": "AR Outstanding",
+			"value": flt(total_receivables, 2),
+			"change_pct": None,
+			"change_period": None,
+			"trend": "flat",
+			"icon": "arrow-up-right",
+		},
+		{
+			"label": "AP Outstanding",
+			"value": flt(total_payables, 2),
+			"change_pct": None,
+			"change_period": None,
+			"trend": "flat",
+			"icon": "arrow-down-right",
+		},
+	]
+
 	result = {
+		"bi_cards": bi_cards,
 		"financial_highlights": {
 			"revenue": flt(revenue, 2),
 			"cogs": flt(cogs, 2),
@@ -409,7 +567,7 @@ def get_cfo_dashboard(from_date=None, to_date=None, company=None):
 			series_name="KPI",
 		),
 	}
-	return build_currency_response(result, company)
+	return build_currency_response(result, _primary(company))
 
 
 def _get_budget_summary(company):
@@ -504,7 +662,7 @@ def _get_budget_summary(company):
 )
 def get_monthly_comparison(months=6, company=None):
 	"""Month-over-month revenue, expenses, and net profit comparison."""
-	company = get_default_company(company)
+	company = get_company_filter(company)
 	months = min(months or 6, 12)
 
 	si = frappe.qb.DocType("Sales Invoice")
@@ -515,7 +673,7 @@ def get_monthly_comparison(months=6, company=None):
 
 	# Monthly revenue
 	si_month = fn.DateFormat(si.posting_date, "%Y-%m")
-	rev_data = (
+	rev_query = (
 		frappe.qb.from_(si)
 		.select(
 			si_month.as_("month"),
@@ -523,30 +681,30 @@ def get_monthly_comparison(months=6, company=None):
 			fn.Count("*").as_("invoice_count"),
 		)
 		.where(si.docstatus == 1)
-		.where(si.company == company)
 		.where(si.posting_date >= start_date)
 		.where(si.posting_date <= end_date)
 		.groupby(si_month)
 		.orderby(si_month)
-		.run(as_dict=True)
 	)
+	rev_query = _apply_company_filter(rev_query, si, company)
+	rev_data = rev_query.run(as_dict=True)
 
 	# Monthly expenses
 	pi_month = fn.DateFormat(pi.posting_date, "%Y-%m")
-	exp_data = (
+	exp_query = (
 		frappe.qb.from_(pi)
 		.select(
 			pi_month.as_("month"),
 			fn.Sum(pi.base_grand_total).as_("expenses"),
 		)
 		.where(pi.docstatus == 1)
-		.where(pi.company == company)
 		.where(pi.posting_date >= start_date)
 		.where(pi.posting_date <= end_date)
 		.groupby(pi_month)
 		.orderby(pi_month)
-		.run(as_dict=True)
 	)
+	exp_query = _apply_company_filter(exp_query, pi, company)
+	exp_data = exp_query.run(as_dict=True)
 
 	rev_map = {r.month: {"revenue": flt(r.revenue), "count": r.invoice_count} for r in rev_data}
 	exp_map = {e.month: flt(e.expenses) for e in exp_data}
@@ -606,4 +764,4 @@ def get_monthly_comparison(months=6, company=None):
 			chart_type="line",
 		),
 	}
-	return build_currency_response(result, company)
+	return build_currency_response(result, _primary(company))

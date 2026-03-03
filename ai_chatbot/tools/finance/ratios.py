@@ -9,79 +9,101 @@ import frappe
 from frappe.query_builder import functions as fn
 from frappe.utils import date_diff, flt, nowdate
 
-from ai_chatbot.core.config import get_default_company, get_fiscal_year_dates
-from ai_chatbot.data.currency import build_currency_response
+from ai_chatbot.core.config import get_fiscal_year_dates
 from ai_chatbot.core.dimensions import apply_dimension_filters
+from ai_chatbot.core.session_context import get_company_filter
+from ai_chatbot.data.currency import build_currency_response
 from ai_chatbot.tools.registry import register_tool
+
+
+def _primary(company):
+	"""Get primary company name (first in list or string as-is)."""
+	return company[0] if isinstance(company, list) else company
+
+
+def _apply_company_filter(query, doctype_ref, company):
+	"""Apply company filter supporting both single string and list."""
+	if isinstance(company, list):
+		return query.where(doctype_ref.company.isin(company))
+	return query.where(doctype_ref.company == company)
 
 
 def _get_current_assets_liabilities(company):
 	"""Get current assets and liabilities components for ratio calculations.
+
+	Args:
+		company: Single company string or list of company strings.
 
 	Returns:
 		Dict with receivables, inventory, payables, cash_balance.
 	"""
 	# Receivables
 	si = frappe.qb.DocType("Sales Invoice")
-	recv_result = (
+	recv_q = (
 		frappe.qb.from_(si)
 		.select(fn.Sum(si.outstanding_amount).as_("total"))
 		.where(si.docstatus == 1)
-		.where(si.company == company)
 		.where(si.outstanding_amount > 0)
-		.run(as_dict=True)
 	)
+	recv_q = _apply_company_filter(recv_q, si, company)
+	recv_result = recv_q.run(as_dict=True)
 	receivables = flt(recv_result[0].total) if recv_result else 0
 
 	# Payables
 	pi = frappe.qb.DocType("Purchase Invoice")
-	pay_result = (
+	pay_q = (
 		frappe.qb.from_(pi)
 		.select(fn.Sum(pi.outstanding_amount).as_("total"))
 		.where(pi.docstatus == 1)
-		.where(pi.company == company)
 		.where(pi.outstanding_amount > 0)
-		.run(as_dict=True)
 	)
+	pay_q = _apply_company_filter(pay_q, pi, company)
+	pay_result = pay_q.run(as_dict=True)
 	payables = flt(pay_result[0].total) if pay_result else 0
 
 	# Inventory
 	bin_table = frappe.qb.DocType("Bin")
 	wh_table = frappe.qb.DocType("Warehouse")
-	inv_result = (
+	inv_q = (
 		frappe.qb.from_(bin_table)
 		.join(wh_table)
 		.on(bin_table.warehouse == wh_table.name)
 		.select(fn.Sum(bin_table.stock_value).as_("total"))
-		.where(wh_table.company == company)
-		.run(as_dict=True)
 	)
+	if isinstance(company, list):
+		inv_q = inv_q.where(wh_table.company.isin(company))
+	else:
+		inv_q = inv_q.where(wh_table.company == company)
+	inv_result = inv_q.run(as_dict=True)
 	inventory = flt(inv_result[0].total) if inv_result else 0
 
 	# Cash/Bank balances
 	acc = frappe.qb.DocType("Account")
 	gle = frappe.qb.DocType("GL Entry")
 
-	cash_accounts = (
+	acc_q = (
 		frappe.qb.from_(acc)
 		.select(acc.name)
-		.where(acc.company == company)
 		.where(acc.account_type.isin(["Bank", "Cash"]))
 		.where(acc.is_group == 0)
-		.run(as_list=True)
 	)
+	if isinstance(company, list):
+		acc_q = acc_q.where(acc.company.isin(company))
+	else:
+		acc_q = acc_q.where(acc.company == company)
+	cash_accounts = acc_q.run(as_list=True)
 	cash_account_names = [a[0] for a in cash_accounts] if cash_accounts else []
 
 	cash_balance = 0
 	if cash_account_names:
-		cash_result = (
+		cash_q = (
 			frappe.qb.from_(gle)
 			.select((fn.Sum(gle.debit) - fn.Sum(gle.credit)).as_("balance"))
-			.where(gle.company == company)
 			.where(gle.account.isin(cash_account_names))
 			.where(gle.is_cancelled == 0)
-			.run(as_dict=True)
 		)
+		cash_q = _apply_company_filter(cash_q, gle, company)
+		cash_result = cash_q.run(as_dict=True)
 		cash_balance = flt(cash_result[0].balance) if cash_result else 0
 
 	return {
@@ -108,7 +130,7 @@ def get_liquidity_ratios(company=None):
 	"""Current Ratio = Current Assets / Current Liabilities.
 	Quick Ratio = (Current Assets - Inventory) / Current Liabilities.
 	"""
-	company = get_default_company(company)
+	company = get_company_filter(company)
 	components = _get_current_assets_liabilities(company)
 
 	current_assets = (
@@ -135,7 +157,7 @@ def get_liquidity_ratios(company=None):
 		},
 		"as_of": nowdate(),
 	}
-	return build_currency_response(result, company)
+	return build_currency_response(result, _primary(company))
 
 
 @register_tool(
@@ -163,10 +185,10 @@ def get_liquidity_ratios(company=None):
 )
 def get_profitability_ratios(from_date=None, to_date=None, company=None, cost_center=None, department=None, project=None):
 	"""Gross Margin, Net Margin, ROA."""
-	company = get_default_company(company)
+	company = get_company_filter(company)
 
 	if not from_date or not to_date:
-		fy_from, fy_to = get_fiscal_year_dates(company)
+		fy_from, fy_to = get_fiscal_year_dates(_primary(company))
 		from_date = from_date or fy_from
 		to_date = to_date or fy_to
 
@@ -176,10 +198,10 @@ def get_profitability_ratios(from_date=None, to_date=None, company=None, cost_ce
 		frappe.qb.from_(si)
 		.select(fn.Sum(si.base_grand_total).as_("total"))
 		.where(si.docstatus == 1)
-		.where(si.company == company)
 		.where(si.posting_date >= from_date)
 		.where(si.posting_date <= to_date)
 	)
+	rev_q = _apply_company_filter(rev_q, si, company)
 	rev_q = apply_dimension_filters(rev_q, si, cost_center=cost_center, department=department, project=project)
 	rev_result = rev_q.run(as_dict=True)
 	revenue = flt(rev_result[0].total) if rev_result else 0
@@ -190,10 +212,10 @@ def get_profitability_ratios(from_date=None, to_date=None, company=None, cost_ce
 		frappe.qb.from_(pi)
 		.select(fn.Sum(pi.base_grand_total).as_("total"))
 		.where(pi.docstatus == 1)
-		.where(pi.company == company)
 		.where(pi.posting_date >= from_date)
 		.where(pi.posting_date <= to_date)
 	)
+	cogs_q = _apply_company_filter(cogs_q, pi, company)
 	cogs_q = apply_dimension_filters(cogs_q, pi, cost_center=cost_center, department=department, project=project)
 	cogs_result = cogs_q.run(as_dict=True)
 	cogs = flt(cogs_result[0].total) if cogs_result else 0
@@ -208,16 +230,16 @@ def get_profitability_ratios(from_date=None, to_date=None, company=None, cost_ce
 	gle = frappe.qb.DocType("GL Entry")
 	acc = frappe.qb.DocType("Account")
 
-	asset_result = (
+	asset_q = (
 		frappe.qb.from_(gle)
 		.join(acc)
 		.on(gle.account == acc.name)
 		.select((fn.Sum(gle.debit) - fn.Sum(gle.credit)).as_("total_assets"))
-		.where(gle.company == company)
 		.where(acc.root_type == "Asset")
 		.where(gle.is_cancelled == 0)
-		.run(as_dict=True)
 	)
+	asset_q = _apply_company_filter(asset_q, gle, company)
+	asset_result = asset_q.run(as_dict=True)
 	total_assets = flt(asset_result[0].total_assets) if asset_result else 0
 
 	roa_pct = flt((net_profit / total_assets) * 100, 1) if total_assets else 0
@@ -233,7 +255,7 @@ def get_profitability_ratios(from_date=None, to_date=None, company=None, cost_ce
 		"total_assets": flt(total_assets, 2),
 		"period": {"from": from_date, "to": to_date},
 	}
-	return build_currency_response(result, company)
+	return build_currency_response(result, _primary(company))
 
 
 @register_tool(
@@ -261,10 +283,10 @@ def get_profitability_ratios(from_date=None, to_date=None, company=None, cost_ce
 )
 def get_efficiency_ratios(from_date=None, to_date=None, company=None, cost_center=None, department=None, project=None):
 	"""Inventory Turnover, Receivable Days (DSO), Payable Days (DPO)."""
-	company = get_default_company(company)
+	company = get_company_filter(company)
 
 	if not from_date or not to_date:
-		fy_from, fy_to = get_fiscal_year_dates(company)
+		fy_from, fy_to = get_fiscal_year_dates(_primary(company))
 		from_date = from_date or fy_from
 		to_date = to_date or fy_to
 
@@ -276,10 +298,10 @@ def get_efficiency_ratios(from_date=None, to_date=None, company=None, cost_cente
 		frappe.qb.from_(si)
 		.select(fn.Sum(si.base_grand_total).as_("total"))
 		.where(si.docstatus == 1)
-		.where(si.company == company)
 		.where(si.posting_date >= from_date)
 		.where(si.posting_date <= to_date)
 	)
+	rev_q = _apply_company_filter(rev_q, si, company)
 	rev_q = apply_dimension_filters(rev_q, si, cost_center=cost_center, department=department, project=project)
 	rev_result = rev_q.run(as_dict=True)
 	revenue = flt(rev_result[0].total) if rev_result else 0
@@ -290,10 +312,10 @@ def get_efficiency_ratios(from_date=None, to_date=None, company=None, cost_cente
 		frappe.qb.from_(pi)
 		.select(fn.Sum(pi.base_grand_total).as_("total"))
 		.where(pi.docstatus == 1)
-		.where(pi.company == company)
 		.where(pi.posting_date >= from_date)
 		.where(pi.posting_date <= to_date)
 	)
+	cogs_q = _apply_company_filter(cogs_q, pi, company)
 	cogs_q = apply_dimension_filters(cogs_q, pi, cost_center=cost_center, department=department, project=project)
 	cogs_result = cogs_q.run(as_dict=True)
 	cogs = flt(cogs_result[0].total) if cogs_result else 0
@@ -303,9 +325,9 @@ def get_efficiency_ratios(from_date=None, to_date=None, company=None, cost_cente
 		frappe.qb.from_(si)
 		.select(fn.Sum(si.outstanding_amount).as_("total"))
 		.where(si.docstatus == 1)
-		.where(si.company == company)
 		.where(si.outstanding_amount > 0)
 	)
+	recv_q = _apply_company_filter(recv_q, si, company)
 	recv_q = apply_dimension_filters(recv_q, si, cost_center=cost_center, department=department, project=project)
 	recv_result = recv_q.run(as_dict=True)
 	avg_receivables = flt(recv_result[0].total) if recv_result else 0
@@ -313,14 +335,17 @@ def get_efficiency_ratios(from_date=None, to_date=None, company=None, cost_cente
 	# Average inventory
 	bin_table = frappe.qb.DocType("Bin")
 	wh_table = frappe.qb.DocType("Warehouse")
-	inv_result = (
+	inv_q = (
 		frappe.qb.from_(bin_table)
 		.join(wh_table)
 		.on(bin_table.warehouse == wh_table.name)
 		.select(fn.Sum(bin_table.stock_value).as_("total"))
-		.where(wh_table.company == company)
-		.run(as_dict=True)
 	)
+	if isinstance(company, list):
+		inv_q = inv_q.where(wh_table.company.isin(company))
+	else:
+		inv_q = inv_q.where(wh_table.company == company)
+	inv_result = inv_q.run(as_dict=True)
 	avg_inventory = flt(inv_result[0].total) if inv_result else 0
 
 	# Average payables
@@ -328,9 +353,9 @@ def get_efficiency_ratios(from_date=None, to_date=None, company=None, cost_cente
 		frappe.qb.from_(pi)
 		.select(fn.Sum(pi.outstanding_amount).as_("total"))
 		.where(pi.docstatus == 1)
-		.where(pi.company == company)
 		.where(pi.outstanding_amount > 0)
 	)
+	pay_q = _apply_company_filter(pay_q, pi, company)
 	pay_q = apply_dimension_filters(pay_q, pi, cost_center=cost_center, department=department, project=project)
 	pay_result = pay_q.run(as_dict=True)
 	avg_payables = flt(pay_result[0].total) if pay_result else 0
@@ -358,4 +383,4 @@ def get_efficiency_ratios(from_date=None, to_date=None, company=None, cost_cente
 			"avg_payables": flt(avg_payables, 2),
 		},
 	}
-	return build_currency_response(result, company)
+	return build_currency_response(result, _primary(company))

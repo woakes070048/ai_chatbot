@@ -18,7 +18,7 @@ from ai_chatbot.core.config import (
 from ai_chatbot.core.constants import TOOL_CATEGORIES
 
 
-def build_system_prompt():
+def build_system_prompt(conversation_id: str | None = None):
 	"""Build the system prompt with dynamic context.
 
 	Includes:
@@ -28,10 +28,14 @@ def build_system_prompt():
 	- Enabled tool categories
 	- Accounting dimension filtering context
 	- Multi-company consolidation context (if parent company)
+	- Current session state (include_subsidiaries, target_currency)
 	- Write operation confirmation rules (if enabled)
 	- Response language (configurable)
 	- Custom system prompt and instructions (configurable)
 	- Response format guidelines
+
+	Args:
+		conversation_id: Optional conversation ID to read session context.
 
 	Returns:
 		str: The complete system prompt.
@@ -70,7 +74,7 @@ def build_system_prompt():
 	except Exception:
 		parts.append(f"\n## Current Context\n- **Today**: {nowdate()}")
 
-	# --- Multi-Company Consolidation Context ---
+	# --- Multi-Company / Session Context ---
 	if company:
 		try:
 			from ai_chatbot.core.consolidation import get_child_companies, is_parent_company
@@ -81,19 +85,41 @@ def build_system_prompt():
 					child_list = ", ".join(children[:10])
 					suffix = f" (and {len(children) - 10} more)" if len(children) > 10 else ""
 					parent_currency = get_company_currency(company)
+
+					# Read current session state
+					session_state = ""
+					if conversation_id:
+						from ai_chatbot.core.session_context import get_session_context
+
+						ctx = get_session_context(conversation_id)
+						inc_subs = ctx.get("include_subsidiaries", False)
+						tgt_curr = ctx.get("target_currency")
+						session_state = (
+							f"\n- **Current session state:**\n"
+							f"  - `include_subsidiaries`: **{'ON' if inc_subs else 'OFF'}**\n"
+							f"  - `target_currency`: **{tgt_curr or 'not set (using company default)'}**"
+						)
+
 					parts.append(
 						f"\n## Multi-Company Context\n"
-						f'- Your company "{company}" is a parent company with subsidiaries: '
-						f"{child_list}{suffix}\n"
-						f"- When the user asks for consolidated/group/total data across companies, "
-						f"ask them:\n"
-						f"  1. Whether to include child companies in the report\n"
-						f"  2. Which currency to display results in "
-						f"(default: {parent_currency})\n"
-						f"- After the user confirms, use the `get_consolidated_report` tool with "
-						f"the appropriate tool name and parameters.\n"
-						f"- When filtering by a specific subsidiary, pass that company name "
-						f"explicitly to the individual tool instead."
+						f'- "{company}" has subsidiaries: {child_list}{suffix}\n'
+						f"- Currency: {parent_currency}"
+						f"{session_state}\n"
+						f"- When `include_subsidiaries` is ON, all tools automatically aggregate "
+						f"data across parent + child companies. Use `company_label` from tool "
+						f"responses when reporting.\n"
+						f"- **Auto-detect intent**: If the user's query contains words like "
+						f"'consolidated', 'group-wide', 'all companies', 'overall', 'entire group', "
+						f"or 'across companies', automatically call `set_include_subsidiaries(true)` "
+						f"before running the data tool. Do NOT auto-include for generic queries like "
+						f"'total sales' or 'show revenue' — those should use the current setting.\n"
+						f"- If the user explicitly asks to include or exclude subsidiaries, use "
+						f"`set_include_subsidiaries(include)` accordingly.\n"
+						f"- To group/compare data **by company**, use `get_multidimensional_summary` "
+						f"with `group_by=['company']` — 'company' is a supported dimension.\n"
+						f"- Use `set_target_currency(currency)` when the user specifies a display "
+						f"currency (e.g. 'show in USD', @Currency). Pass empty string to reset.\n"
+						f"- Session settings persist for the entire conversation."
 					)
 		except Exception:
 			pass
@@ -112,7 +138,11 @@ def build_system_prompt():
 		"\n## Company Context Guidelines\n"
 		"- Do NOT ask the user for a company name — omit the `company` parameter and the "
 		"server will use their default company automatically.\n"
-		"- Only pass `company` when the user explicitly names a different company."
+		"- When the user explicitly names a company (e.g. 'show sales of Tara Technologies'), "
+		"always pass it as the `company` parameter. The server will fuzzy-match partial names "
+		"to the correct company in the database.\n"
+		"- Always mention the company name in your response. Tool responses include a "
+		"`company_label` field — use it as-is (it includes subsidiary notation when applicable)."
 	)
 
 	# --- Currency Guidelines ---
@@ -120,7 +150,10 @@ def build_system_prompt():
 		"\n## Currency Guidelines\n"
 		"- Always include the currency symbol or code when presenting monetary values.\n"
 		"- Use the company's default currency for aggregated amounts.\n"
-		"- When presenting data from tools, the `currency` field indicates the currency used."
+		"- When presenting data from tools, the `currency` field indicates the currency used.\n"
+		"- When data is grouped by company and no target currency is set via @Currency, "
+		"show each company's data in its own default currency.\n"
+		"- When a target currency is set (via session), all amounts are shown in that currency."
 	)
 
 	# --- Financial Analysis Behaviour ---

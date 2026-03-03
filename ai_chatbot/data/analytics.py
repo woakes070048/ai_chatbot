@@ -22,17 +22,18 @@ def get_sum(doctype, field, filters=None, company=None):
 		doctype: Frappe doctype name.
 		field: Field name to sum.
 		filters: Dict of additional filters.
-		company: Company name.
+		company: Company name or list of company names.
 
 	Returns:
 		float — the sum value.
 	"""
-	company = get_default_company(company)
+	if not company:
+		company = get_default_company(company)
 	table = frappe.qb.DocType(doctype)
 	query = frappe.qb.from_(table).select(fn.Sum(table[field]).as_("total"))
 
 	if _has_field(doctype, "company"):
-		query = query.where(table.company == company)
+		query = _apply_company_filter(query, table, company)
 
 	query = _apply_filters(query, table, doctype, filters)
 	result = query.run(as_dict=True)
@@ -49,14 +50,15 @@ def get_grouped_sum(
 		sum_field: Field to SUM.
 		group_field: Field to GROUP BY.
 		filters: Dict of additional filters.
-		company: Company name.
+		company: Company name or list of company names.
 		order_by_sum: If True, order by sum descending.
 		limit: Max number of groups.
 
 	Returns:
 		List of dicts with group_field and total.
 	"""
-	company = get_default_company(company)
+	if not company:
+		company = get_default_company(company)
 	table = frappe.qb.DocType(doctype)
 	total = fn.Sum(table[sum_field]).as_("total")
 	count = fn.Count("*").as_("count")
@@ -64,7 +66,7 @@ def get_grouped_sum(
 	query = frappe.qb.from_(table).select(table[group_field], total, count).groupby(table[group_field])
 
 	if _has_field(doctype, "company"):
-		query = query.where(table.company == company)
+		query = _apply_company_filter(query, table, company)
 
 	query = _apply_filters(query, table, doctype, filters)
 
@@ -85,13 +87,14 @@ def get_time_series(doctype, value_field, date_field, filters=None, company=None
 		value_field: Field to SUM per month.
 		date_field: Date field for bucketing.
 		filters: Dict of additional filters.
-		company: Company name.
+		company: Company name or list of company names.
 		months: Number of months to look back from today.
 
 	Returns:
 		List of dicts with month (YYYY-MM), total, and count.
 	"""
-	company = get_default_company(company)
+	if not company:
+		company = get_default_company(company)
 	table = frappe.qb.DocType(doctype)
 
 	start_date = get_first_day(add_months(nowdate(), -months + 1))
@@ -114,7 +117,7 @@ def get_time_series(doctype, value_field, date_field, filters=None, company=None
 	)
 
 	if _has_field(doctype, "company"):
-		query = query.where(table.company == company)
+		query = _apply_company_filter(query, table, company)
 
 	query = _apply_filters(query, table, doctype, filters)
 
@@ -131,6 +134,26 @@ def get_base_amount_field(doctype):
 		Field name string (e.g. "base_grand_total").
 	"""
 	return BASE_AMOUNT_FIELDS.get(doctype, "base_grand_total")
+
+
+def _apply_company_filter(query, table, company):
+	"""Apply company filter supporting both single string and list of companies.
+
+	Args:
+		query: frappe.qb query.
+		table: PyPika table reference.
+		company: Single company string or list of company strings.
+
+	Returns:
+		Modified query with company filter applied.
+	"""
+	if isinstance(company, (list, tuple)) and len(company) > 1:
+		query = query.where(table.company.isin(company))
+	elif isinstance(company, (list, tuple)):
+		query = query.where(table.company == company[0])
+	else:
+		query = query.where(table.company == company)
+	return query
 
 
 def _has_field(doctype, fieldname):

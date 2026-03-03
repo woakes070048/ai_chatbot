@@ -216,25 +216,32 @@ def _ensure_tools_loaded():
 	if is_erpnext_installed():
 		import ai_chatbot.tools.account
 		import ai_chatbot.tools.buying
+
+		# Phase 5B: Multi-company consolidation tool
+		import ai_chatbot.tools.consolidation
 		import ai_chatbot.tools.crm
-		import ai_chatbot.tools.operations.create
-		import ai_chatbot.tools.operations.search
-		import ai_chatbot.tools.operations.update
-		import ai_chatbot.tools.selling
-		import ai_chatbot.tools.stock
+
+		# Phase 6B: Multi-dimensional analytics & GL-based finance
+		import ai_chatbot.tools.finance.analytics
 
 		# Phase 4: Finance tools
 		import ai_chatbot.tools.finance.budget
 		import ai_chatbot.tools.finance.cash_flow
+		import ai_chatbot.tools.finance.cfo
+		import ai_chatbot.tools.finance.gl_analytics
 		import ai_chatbot.tools.finance.payables
 		import ai_chatbot.tools.finance.profitability
 		import ai_chatbot.tools.finance.ratios
 		import ai_chatbot.tools.finance.receivables
-		import ai_chatbot.tools.finance.cfo
 		import ai_chatbot.tools.finance.working_capital
+		import ai_chatbot.tools.operations.create
+		import ai_chatbot.tools.operations.search
+		import ai_chatbot.tools.operations.update
+		import ai_chatbot.tools.selling
 
-		# Phase 5B: Multi-company consolidation tool
-		import ai_chatbot.tools.consolidation
+		# Session context management tools
+		import ai_chatbot.tools.session
+		import ai_chatbot.tools.stock
 
 	# Phase 5: HRMS tools (only if HRMS app is installed)
 	if is_hrms_installed():
