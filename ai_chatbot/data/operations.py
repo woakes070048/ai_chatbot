@@ -43,6 +43,10 @@ def create_document(doctype, values, company=None):
 	doc = frappe.new_doc(doctype)
 	doc.update(values)
 	doc.insert()
+
+	# Preserve text fields that ERPNext hooks may overwrite during insert
+	_preserve_text_fields(doc, values)
+
 	frappe.db.commit()
 
 	return {
@@ -111,6 +115,27 @@ def _build_doc_url(doctype, name):
 
 	slug = frappe.scrub(doctype).replace("_", "-")
 	return f"{get_url()}/app/{slug}/{name}"
+
+
+def _preserve_text_fields(doc, original_values):
+	"""Re-apply text field values if ERPNext hooks cleared them during insert.
+
+	Some ERPNext DocTypes auto-populate terms (from templates) or remarks
+	during validation. This ensures extracted values are not lost.
+
+	Args:
+		doc: The inserted Frappe document.
+		original_values: The original values dict passed to create_document.
+	"""
+	_TEXT_FIELDS = ("terms", "remarks")
+	needs_save = False
+	for field in _TEXT_FIELDS:
+		original = original_values.get(field)
+		if original and not doc.get(field):
+			doc.set(field, original)
+			needs_save = True
+	if needs_save:
+		doc.save()
 
 
 def _doctype_has_field(doctype, fieldname):

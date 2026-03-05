@@ -20,6 +20,56 @@ DEFAULT_MODELS = {
 	"Gemini": "gemini-2.5-flash",
 }
 
+# User-friendly error messages for common API errors
+RATE_LIMIT_MESSAGE = (
+	"The AI service is temporarily unavailable due to rate limiting. "
+	"This usually means too many requests were sent in a short period. "
+	"Please wait a moment and try again."
+)
+
+QUOTA_EXCEEDED_MESSAGE = (
+	"Your AI API quota has been exceeded. Please check your API plan "
+	"and billing details with your AI provider, or try again later."
+)
+
+AUTH_ERROR_MESSAGE = (
+	"Authentication failed with the AI provider. Please check that your API key is valid in Chatbot Settings."
+)
+
+
+def classify_api_error(error: requests.exceptions.RequestException) -> str:
+	"""Classify an API error and return a user-friendly message.
+
+	Detects rate limit (429), authentication (401/403), and quota errors
+	and returns a clear message. Falls back to the original error string
+	for other error types.
+	"""
+	status_code = None
+	response_body = ""
+
+	if hasattr(error, "response") and error.response is not None:
+		status_code = error.response.status_code
+		try:
+			response_body = error.response.text or ""
+		except Exception:
+			pass
+
+	body_lower = response_body.lower()
+
+	# Billing / credit / quota issues — Anthropic returns 400, OpenAI returns 429
+	if "credit balance" in body_lower or "billing" in body_lower or "purchase credits" in body_lower:
+		return QUOTA_EXCEEDED_MESSAGE
+
+	if status_code == 429:
+		if "quota" in body_lower or "exceeded" in body_lower:
+			return QUOTA_EXCEEDED_MESSAGE
+		return RATE_LIMIT_MESSAGE
+
+	if status_code in (401, 403):
+		return AUTH_ERROR_MESSAGE
+
+	return str(error)
+
 
 class AIProvider:
 	"""Base class for AI providers"""
@@ -94,7 +144,7 @@ class OpenAIProvider(AIProvider):
 
 		except requests.exceptions.RequestException as e:
 			frappe.log_error(f"OpenAI API Error: {e!s}", "AI Chatbot")
-			frappe.throw(f"OpenAI API Error: {e!s}")
+			frappe.throw(f"OpenAI API Error: {classify_api_error(e)}")
 
 	def chat_completion_stream(self, messages, tools=None):
 		"""Yield structured streaming events from OpenAI.
@@ -195,7 +245,7 @@ class OpenAIProvider(AIProvider):
 
 		except requests.exceptions.RequestException as e:
 			frappe.log_error(f"OpenAI Streaming Error: {e!s}", "AI Chatbot")
-			yield {"type": "error", "content": str(e)}
+			yield {"type": "error", "content": classify_api_error(e)}
 
 
 class GeminiProvider(OpenAIProvider):
@@ -277,7 +327,7 @@ class ClaudeProvider(AIProvider):
 
 		except requests.exceptions.RequestException as e:
 			frappe.log_error(f"Claude API Error: {e!s}", "AI Chatbot")
-			frappe.throw(f"Claude API Error: {e!s}")
+			frappe.throw(f"Claude API Error: {classify_api_error(e)}")
 
 	def chat_completion_stream(self, messages, tools=None):
 		"""Yield structured streaming events from Claude.
@@ -389,7 +439,7 @@ class ClaudeProvider(AIProvider):
 
 		except requests.exceptions.RequestException as e:
 			frappe.log_error(f"Claude Streaming Error: {e!s}", "AI Chatbot")
-			yield {"type": "error", "content": str(e)}
+			yield {"type": "error", "content": classify_api_error(e)}
 
 	def _convert_messages_to_claude(self, messages):
 		"""Convert OpenAI message format to Claude format"""
@@ -448,14 +498,16 @@ class ClaudeProvider(AIProvider):
 							data_url = part["image_url"]["url"]
 							header, b64_data = data_url.split(",", 1)
 							media_type = header.split(":")[1].split(";")[0]
-							claude_content.append({
-								"type": "image",
-								"source": {
-									"type": "base64",
-									"media_type": media_type,
-									"data": b64_data,
-								},
-							})
+							claude_content.append(
+								{
+									"type": "image",
+									"source": {
+										"type": "base64",
+										"media_type": media_type,
+										"data": b64_data,
+									},
+								}
+							)
 					claude_messages.append({"role": "user", "content": claude_content})
 				else:
 					claude_messages.append({"role": msg["role"], "content": content})

@@ -447,18 +447,31 @@ def _get_conversation_history(conversation_id: str) -> list[dict]:
 
 	history = []
 	for msg in messages:
-		# Check if user message has image attachments — build vision content
+		# Check if user message has attachments — build appropriate content
 		if msg.role == "user" and msg.attachments:
 			try:
 				atts = json.loads(msg.attachments) if isinstance(msg.attachments, str) else msg.attachments
 			except (json.JSONDecodeError, TypeError):
 				atts = None
 
-			if atts and any(a.get("is_image") for a in atts):
-				from ai_chatbot.api.files import build_vision_content
+			if atts:
+				has_images = any(a.get("is_image") for a in atts)
+				if has_images:
+					# Image attachments: use multimodal Vision content
+					from ai_chatbot.api.files import build_vision_content
 
-				content = build_vision_content(msg.content or "", atts)
-				history.append({"role": msg.role, "content": content})
+					content = build_vision_content(msg.content or "", atts)
+					history.append({"role": msg.role, "content": content})
+				else:
+					# Non-image attachments (PDF, Excel, etc.): append file refs
+					# so the LLM knows the file_url for IDP tools
+					text = msg.content or ""
+					for att in atts:
+						file_url = att.get("file_url", "")
+						file_name = att.get("file_name", "unknown")
+						mime_type = att.get("mime_type", "")
+						text += f"\n[Attached file: {file_name} ({mime_type}), file_url: {file_url}]"
+					history.append({"role": msg.role, "content": text})
 				continue
 
 		message_dict = {"role": msg.role, "content": msg.content}

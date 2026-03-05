@@ -4,25 +4,30 @@
 import frappe
 from frappe.model.document import Document
 
+# Maximum safe value for Int fields — prevents orjson "Integer exceeds 64-bit range"
+# errors when serializing the response. MariaDB BIGINT max is 2^63-1.
+_MAX_INT = 2**63 - 1
+
 
 class ChatbotSettings(Document):
 	"""Chatbot Settings DocType Controller"""
 
 	def validate(self):
-		"""Validate settings before save"""
-		# Validate OpenAI settings
-		if self.openai_enabled and not self.openai_api_key:
-			frappe.throw("OpenAI API Key is required when OpenAI is enabled")
+		"""Validate settings before save."""
+		self._clamp_int_fields()
 
-		# Validate Claude settings
-		if self.claude_enabled and not self.claude_api_key:
-			frappe.throw("Claude API Key is required when Claude is enabled")
+	def _clamp_int_fields(self):
+		"""Clamp all Int fields to safe 64-bit range.
 
-		# At least one provider must be enabled
-		if not self.openai_enabled and not self.claude_enabled:
-			frappe.throw("At least one AI provider must be enabled")
+		Frappe's cint() can produce arbitrarily large Python ints from
+		user input. orjson (used for JSON responses) rejects integers
+		outside the signed 64-bit range, causing a TypeError on save.
+		"""
+		for df in self.meta.get("fields", {"fieldtype": "Int"}):
+			value = self.get(df.fieldname)
+			if isinstance(value, int) and abs(value) > _MAX_INT:
+				self.set(df.fieldname, _MAX_INT if value > 0 else -_MAX_INT)
 
 	def on_update(self):
-		"""Called after document is saved"""
-		# Clear cache when settings are updated
+		"""Called after document is saved."""
 		frappe.cache().delete_value("ai_chatbot_settings")

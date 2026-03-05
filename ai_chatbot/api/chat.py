@@ -72,7 +72,16 @@ def get_conversation_messages(conversation_id: str) -> dict:
 		messages = frappe.get_all(
 			"Chatbot Message",
 			filters={"conversation": conversation_id},
-			fields=["name", "role", "content", "timestamp", "tokens_used", "tool_calls", "tool_results", "attachments"],
+			fields=[
+				"name",
+				"role",
+				"content",
+				"timestamp",
+				"tokens_used",
+				"tool_calls",
+				"tool_results",
+				"attachments",
+			],
 			order_by="timestamp asc",
 		)
 
@@ -126,7 +135,9 @@ def get_conversation_messages(conversation_id: str) -> dict:
 
 
 @frappe.whitelist()
-def send_message(conversation_id: str, message: str, stream: bool = False, attachments: str | None = None) -> dict:
+def send_message(
+	conversation_id: str, message: str, stream: bool = False, attachments: str | None = None
+) -> dict:
 	"""Send a message and get AI response.
 
 	When stream=True, delegates to the streaming API which delivers tokens
@@ -204,18 +215,31 @@ def get_conversation_history(conversation_id: str) -> list[dict]:
 
 	history = []
 	for msg in messages:
-		# Check if user message has image attachments — build vision content
+		# Check if user message has attachments — build appropriate content
 		if msg.role == "user" and msg.attachments:
 			try:
 				atts = json.loads(msg.attachments) if isinstance(msg.attachments, str) else msg.attachments
 			except (json.JSONDecodeError, TypeError):
 				atts = None
 
-			if atts and any(a.get("is_image") for a in atts):
-				from ai_chatbot.api.files import build_vision_content
+			if atts:
+				has_images = any(a.get("is_image") for a in atts)
+				if has_images:
+					# Image attachments: use multimodal Vision content
+					from ai_chatbot.api.files import build_vision_content
 
-				content = build_vision_content(msg.content or "", atts)
-				history.append({"role": msg.role, "content": content})
+					content = build_vision_content(msg.content or "", atts)
+					history.append({"role": msg.role, "content": content})
+				else:
+					# Non-image attachments (PDF, Excel, etc.): append file refs
+					# so the LLM knows the file_url for IDP tools
+					text = msg.content or ""
+					for att in atts:
+						file_url = att.get("file_url", "")
+						file_name = att.get("file_name", "unknown")
+						mime_type = att.get("mime_type", "")
+						text += f"\n[Attached file: {file_name} ({mime_type}), file_url: {file_url}]"
+					history.append({"role": msg.role, "content": text})
 				continue
 
 		message_dict = {"role": msg.role, "content": msg.content}
@@ -280,7 +304,9 @@ def generate_ai_response(conversation, provider, history, tools) -> dict:
 		for _round in range(max_tool_rounds):
 			response = provider.chat_completion(history, tools=tools, stream=False)
 
-			round_content, tool_calls, round_prompt, round_completion = _extract_response(ai_provider, response)
+			round_content, tool_calls, round_prompt, round_completion = _extract_response(
+				ai_provider, response
+			)
 			content = round_content
 			prompt_tokens += round_prompt
 			completion_tokens += round_completion
@@ -465,8 +491,17 @@ def get_settings() -> dict:
 		# Language options from the Select field
 		lang_options = (getattr(settings, "response_language", "") or "").strip()
 		available_languages = [
-			"", "English", "Hindi", "Spanish", "French", "German",
-			"Portuguese", "Arabic", "Chinese", "Japanese", "Korean",
+			"",
+			"English",
+			"Hindi",
+			"Spanish",
+			"French",
+			"German",
+			"Portuguese",
+			"Arabic",
+			"Chinese",
+			"Japanese",
+			"Korean",
 		]
 
 		return {
@@ -542,7 +577,15 @@ def search_conversations(query: str, limit: int = 20) -> dict:
 			content_matches = frappe.get_all(
 				"Chatbot Conversation",
 				filters={"user": user, "name": ["in", message_conv_names]},
-				fields=["name", "title", "ai_provider", "status", "created_at", "updated_at", "message_count"],
+				fields=[
+					"name",
+					"title",
+					"ai_provider",
+					"status",
+					"created_at",
+					"updated_at",
+					"message_count",
+				],
 				order_by="updated_at desc",
 				limit=limit,
 			)
@@ -750,11 +793,13 @@ def _get_accounting_dimensions(company: str | None = None, search_term: str = ""
 			except Exception:
 				values = []
 
-			results.append({
-				"label": label,
-				"description": f"{doc_type} ({len(values)} values)",
-				"values": values,
-			})
+			results.append(
+				{
+					"label": label,
+					"description": f"{doc_type} ({len(values)} values)",
+					"values": values,
+				}
+			)
 		return results
 	except Exception as e:
 		frappe.log_error(f"Error fetching accounting dimensions: {e}")

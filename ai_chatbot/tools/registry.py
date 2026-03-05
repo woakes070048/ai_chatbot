@@ -234,6 +234,9 @@ def _ensure_tools_loaded():
 		import ai_chatbot.tools.finance.ratios
 		import ai_chatbot.tools.finance.receivables
 		import ai_chatbot.tools.finance.working_capital
+
+		# Phase 7: Intelligent Document Processing tools
+		import ai_chatbot.tools.idp
 		import ai_chatbot.tools.operations.create
 		import ai_chatbot.tools.operations.search
 		import ai_chatbot.tools.operations.update

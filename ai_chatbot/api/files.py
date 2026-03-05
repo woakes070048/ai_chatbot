@@ -64,8 +64,7 @@ def upload_chat_file(conversation_id: str) -> dict:
 		mime_type = uploaded_file.content_type or mimetypes.guess_type(uploaded_file.filename)[0]
 		if mime_type not in ALLOWED_MIME_TYPES:
 			frappe.throw(
-				f"File type '{mime_type}' is not allowed. "
-				"Allowed: images, PDF, text, CSV, XLSX, DOCX"
+				f"File type '{mime_type}' is not allowed. Allowed: images, PDF, text, CSV, XLSX, DOCX"
 			)
 
 		# Read content and validate size
@@ -114,7 +113,9 @@ def get_file_base64(file_url: str) -> tuple[str, str]:
 
 	Used by the AI provider integration to build vision messages.
 	"""
-	file_doc = frappe.get_doc("File", {"file_url": file_url})
+	from ai_chatbot.idp.extractors.base import _get_file_doc
+
+	file_doc = _get_file_doc(file_url)
 	file_path = file_doc.get_full_path()
 
 	with open(file_path, "rb") as f:
@@ -142,7 +143,7 @@ def build_vision_content(message_text: str, attachments: list[dict] | str) -> li
 	if isinstance(attachments, str):
 		try:
 			attachments = json.loads(attachments)
-		except (json.JSONDecodeError, TypeError):
+		except json.JSONDecodeError, TypeError:
 			return [{"type": "text", "text": message_text}]
 
 	if not attachments:
@@ -161,21 +162,39 @@ def build_vision_content(message_text: str, attachments: list[dict] | str) -> li
 					b64_data, mime_type = get_file_base64(att["file_url"])
 				except Exception:
 					# If we can't read the file, skip it
-					parts.append({
-						"type": "text",
-						"text": f"[Attached image: {att.get('file_name', 'unknown')} — could not load]",
-					})
+					parts.append(
+						{
+							"type": "text",
+							"text": f"[Attached image: {att.get('file_name', 'unknown')} — could not load]",
+						}
+					)
 					continue
 
-			parts.append({
-				"type": "image_url",
-				"image_url": {"url": f"data:{mime_type};base64,{b64_data}"},
-			})
+			parts.append(
+				{
+					"type": "image_url",
+					"image_url": {"url": f"data:{mime_type};base64,{b64_data}"},
+				}
+			)
+			# Include file_url so the LLM can pass it to tools (e.g. IDP extraction)
+			file_url = att.get("file_url", "")
+			file_name = att.get("file_name", "unknown")
+			if file_url:
+				parts.append(
+					{
+						"type": "text",
+						"text": f"[Image file_url: {file_url}, file_name: {file_name}]",
+					}
+				)
 		else:
-			# Non-image: add file reference as text context
-			parts.append({
-				"type": "text",
-				"text": f"[Attached file: {att.get('file_name', 'unknown')} ({mime_type})]",
-			})
+			# Non-image: add file reference with file_url so LLM can pass it to tools (e.g. IDP)
+			file_url = att.get("file_url", "")
+			file_name = att.get("file_name", "unknown")
+			parts.append(
+				{
+					"type": "text",
+					"text": (f"[Attached file: {file_name} ({mime_type}), file_url: {file_url}]"),
+				}
+			)
 
 	return parts

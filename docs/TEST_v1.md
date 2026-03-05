@@ -3114,3 +3114,536 @@ bench --site <SITE> execute "frappe.get_all('Number Card', filters={'module': 'C
    ```
 2. Check that `session_context` field on `Chatbot Conversation` DocType exists and is writable.
 3. Verify `get_conversation_messages()` returns `session_context` in its response.
+
+---
+
+## Phase 7: Intelligent Document Processing (IDP)
+
+Phase 7 adds LLM-powered document extraction — upload a PDF, image, Excel, or Word file and the AI extracts structured data, maps it to an ERPNext DocType schema, and optionally creates the record.
+
+### Prerequisites
+
+```bash
+# 1. Install IDP optional dependencies
+cd apps/ai_chatbot
+pip install ".[idp]"
+# This installs: pypdf>=4.0, openpyxl>=3.1, python-docx>=1.1
+
+# 2. Run migrations (adds enable_idp_tools field to Chatbot Settings)
+bench --site <SITE> migrate
+
+# 3. Clear cache
+bench --site <SITE> clear-cache
+
+# 4. Rebuild frontend
+cd apps/ai_chatbot/frontend && npm run build
+
+# 5. Restart bench
+bench restart
+```
+
+### 7.1 Enable IDP in Chatbot Settings
+
+#### 7.1.1 Enable IDP Tools
+
+1. Go to **Chatbot Settings** (`/app/chatbot-settings`).
+2. Switch to the **Tools** tab.
+3. Find the **Document Processing (IDP)** section.
+4. Check **Enable IDP Tools**.
+5. Save.
+6. **Expected**: The setting saves without errors.
+
+#### 7.1.2 Verify IDP Tools Are Registered
+
+1. Open a terminal and run:
+   ```bash
+   bench --site <SITE> execute "from ai_chatbot.tools.registry import get_all_tools_schema; tools = get_all_tools_schema(); idp_tools = [t['function']['name'] for t in tools if 'document' in t['function']['name'].lower() or 'extract' in t['function']['name'].lower()]; print(idp_tools)"
+   ```
+2. **Expected**: Output includes `['extract_document_data', 'create_from_extracted_data', 'compare_document_with_record']`.
+
+#### 7.1.3 Verify Optional Dependencies Installed
+
+1. Run:
+   ```bash
+   bench --site <SITE> execute "import pypdf; print('pypdf', pypdf.__version__)"
+   bench --site <SITE> execute "import openpyxl; print('openpyxl', openpyxl.__version__)"
+   bench --site <SITE> execute "import docx; print('python-docx OK')"
+   ```
+2. **Expected**: All three commands print version info without ImportError.
+
+---
+
+### 7.2 Extract Data from a PDF Invoice
+
+This is the primary use case — extracting structured data from a PDF invoice and mapping it to the Sales Invoice DocType.
+
+#### 7.2.1 Prepare a Test PDF
+
+1. Create or obtain a sample PDF invoice containing:
+   - Customer name
+   - Invoice date and due date
+   - Line items with item codes/descriptions, quantities, and rates
+   - A total amount
+   - A currency symbol (e.g., $, €, ₹)
+2. The invoice can be in **any language** — the LLM handles multi-language documents.
+
+#### 7.2.2 Upload and Extract via Chat
+
+1. Open the chatbot at `/ai-chatbot`.
+2. Start a new conversation.
+3. Upload the PDF using the file attachment button (📎).
+4. Send a message:
+   > "Extract data from this invoice and map it to a Sales Invoice."
+5. **Expected**:
+   - The AI calls the `extract_document_data` tool with the file URL and `target_doctype: "Sales Invoice"`.
+   - After processing, the AI presents the extracted fields:
+     - **Header fields**: customer, posting_date (YYYY-MM-DD format), due_date, currency, grand_total
+     - **Items table**: item_code, qty, rate, description for each line item
+     - **Validation results**: any errors or warnings
+     - **Unmapped fields**: source fields that couldn't be mapped
+   - Dates are in YYYY-MM-DD format.
+   - Numbers are clean (no currency symbols or commas, e.g., `1234.56` not `$1,234.56`).
+   - The AI asks for confirmation before creating any record.
+
+#### 7.2.3 Verify Extraction Quality
+
+1. Compare the extracted fields against the original PDF:
+   - Customer name should match (or be fuzzy-resolved to an existing Customer record).
+   - Dates should be correctly parsed to YYYY-MM-DD.
+   - Amounts should be clean numbers.
+   - Each line item should have qty, rate, and description.
+2. Check the `unmapped_fields` list — these are source fields the LLM couldn't map to ERPNext fields.
+3. Check the `warnings` list — these are non-blocking issues (e.g., "Could not find Customer matching 'XYZ Corp'").
+4. **Expected**: The extraction is accurate for well-formatted invoices. Minor discrepancies are acceptable for handwritten or poorly scanned documents.
+
+---
+
+### 7.3 Extract Data from an Image
+
+Tests the Vision API path — when an image is uploaded, it's sent as base64 to the LLM's Vision endpoint.
+
+#### 7.3.1 Upload an Image of an Invoice
+
+1. Take a photo or screenshot of a paper invoice (PNG, JPG, or WEBP).
+2. Open the chatbot and upload the image.
+3. Send:
+   > "Extract the data from this invoice image as a Purchase Invoice."
+4. **Expected**:
+   - The AI uses the Vision API to read the image.
+   - Extracted fields are presented in the same format as PDF extraction.
+   - The AI maps header info (supplier, posting_date, due_date) and line items (item_code, qty, rate).
+
+#### 7.3.2 Multi-Language Image
+
+1. Upload an invoice image in a non-English language (e.g., Spanish, Hindi, Arabic, Japanese).
+2. Send:
+   > "Extract this invoice data and map it to a Sales Invoice."
+3. **Expected**: The LLM uses semantic reasoning to identify fields regardless of language. Field names in the document (e.g., "Fecha" for date, "Cantidad" for quantity) are mapped to their English ERPNext equivalents.
+
+#### 7.3.3 Scanned PDF Fallback
+
+1. Upload a scanned PDF (a PDF where the text is embedded as an image, not selectable text).
+2. Send:
+   > "Extract data from this scanned invoice."
+3. **Expected**: The system detects that pypdf extracted no text and falls back to the Vision API path (base64 image). Extraction proceeds as for a regular image.
+
+---
+
+### 7.4 Extract Data from Excel and CSV
+
+#### 7.4.1 Excel File (XLSX)
+
+1. Prepare an Excel file (`.xlsx`) with invoice-like data:
+   - A header section with customer name, date, and totals
+   - A table of line items with columns: Item, Qty, Rate, Amount
+2. Upload the file and send:
+   > "Extract data from this Excel file as a Sales Order."
+3. **Expected**:
+   - openpyxl parses the Excel file into tabular text.
+   - The LLM maps the columns to ERPNext Sales Order fields.
+   - Items are extracted into the child table.
+
+#### 7.4.2 CSV File
+
+1. Prepare a CSV file with similar data.
+2. Upload and send:
+   > "Extract this CSV data as a Purchase Order."
+3. **Expected**: Same as Excel — the CSV is parsed and the LLM maps fields semantically.
+
+---
+
+### 7.5 Extract Data from Word Documents
+
+#### 7.5.1 DOCX File
+
+1. Prepare a Word document (`.docx`) containing a quotation or invoice with paragraphs and a table of items.
+2. Upload and send:
+   > "Extract data from this Word document as a Quotation."
+3. **Expected**: python-docx extracts paragraphs and tables. The LLM maps the content to Quotation fields.
+
+---
+
+### 7.6 Create ERPNext Record from Extracted Data
+
+This tests the two-step confirmation pattern: extract → confirm → create.
+
+#### 7.6.1 Prerequisites
+
+1. Ensure **Enable Write Operations** is checked in Chatbot Settings (Tools tab → Data Operations section).
+2. Ensure the target customer/supplier exists in ERPNext (or the fuzzy resolver can find a match).
+
+#### 7.6.2 Full Extraction-to-Creation Flow
+
+1. Upload a PDF invoice and send:
+   > "Extract this invoice and create a Sales Invoice from it."
+2. **Expected** — Step 1 (Extraction):
+   - The AI extracts the data and presents it for review.
+   - The AI asks: "The extracted data looks correct. Shall I create the Sales Invoice?"
+3. Confirm by replying:
+   > "Yes, create it."
+4. **Expected** — Step 2 (Creation):
+   - The AI calls `create_from_extracted_data` with the extracted JSON.
+   - The document is created in ERPNext as a Draft.
+   - The AI responds with the new document name and a link (e.g., "Created Sales Invoice `ACC-SINV-2026-00001`").
+
+#### 7.6.3 Verify Created Record
+
+1. Open the created record in ERPNext (click the link or navigate to `/app/sales-invoice/<name>`).
+2. Verify:
+   - Header fields (customer, posting_date, due_date, currency) match the extracted data.
+   - Items table rows match (item_code, qty, rate, description).
+   - The document is in Draft status (docstatus = 0).
+3. **Expected**: All extracted fields are correctly populated in the ERPNext record.
+
+#### 7.6.4 Write Operations Disabled
+
+1. Uncheck **Enable Write Operations** in Chatbot Settings. Save.
+2. Upload a document and ask the AI to extract and create a record.
+3. **Expected**: Extraction succeeds, but when the AI attempts to create the record, it receives an error: "Write operations are disabled in Chatbot Settings."
+
+---
+
+### 7.7 Compare Document with Existing Record
+
+This tests the reconciliation use case — comparing an uploaded document against an existing ERPNext record.
+
+#### 7.7.1 Create a Reference Record
+
+1. Create a Sales Order in ERPNext with known values:
+   - Customer: an existing customer
+   - A few items with specific quantities and rates
+   - Note the Sales Order name (e.g., `SAL-ORD-2026-00001`).
+
+#### 7.7.2 Upload a Matching Document
+
+1. Prepare or generate a PDF/image that matches the Sales Order (same customer, same items, same amounts).
+2. Upload and send:
+   > "Compare this document with Sales Order SAL-ORD-2026-00001."
+3. **Expected**:
+   - The AI calls `compare_document_with_record`.
+   - The comparison report shows:
+     - **Matches**: Fields that are identical.
+     - **Discrepancies**: Fields that differ (with extracted vs existing values).
+     - **Missing in document**: Fields present in the record but not in the uploaded document.
+     - **Missing in record**: Fields in the document but not in the record.
+     - **Items comparison**: Per-item matching by item_code or position.
+     - **Summary**: e.g., "5 of 7 header fields match. 2 discrepancies found."
+
+#### 7.7.3 Upload a Document with Differences
+
+1. Modify the document (change a quantity, a rate, or a date) so it differs from the Sales Order.
+2. Upload and compare again.
+3. **Expected**: The comparison report highlights the specific discrepancies:
+   - e.g., "Field 'qty' — extracted: 15, existing: 10"
+   - e.g., "Field 'posting_date' — extracted: 2026-02-01, existing: 2026-01-15"
+
+#### 7.7.4 Compare Against Non-Existent Record
+
+1. Send:
+   > "Compare this document with Sales Order DOES-NOT-EXIST."
+2. **Expected**: The AI reports an error: "Sales Order 'DOES-NOT-EXIST' does not exist."
+
+---
+
+### 7.8 Validation and Error Handling
+
+#### 7.8.1 Missing Required Fields
+
+1. Upload a minimal document that is missing key fields (e.g., an image with only item descriptions but no customer name or dates).
+2. Send:
+   > "Extract data from this as a Sales Invoice."
+3. **Expected**: Extraction succeeds but the validation section shows errors:
+   - "Required field 'Customer' (customer) is missing"
+   - "Required field 'Posting Date' (posting_date) is missing"
+4. The AI should present these errors and NOT attempt to create a record.
+
+#### 7.8.2 Unresolved Link Fields
+
+1. Upload a document with a customer name that does NOT exist in ERPNext (e.g., "Nonexistent Corp Ltd").
+2. Extract as Sales Invoice.
+3. **Expected**: The warnings list includes: "Could not find Customer matching 'Nonexistent Corp Ltd' for field 'Customer'. You may need to create it first or correct the name."
+
+#### 7.8.3 Link Field Fuzzy Resolution
+
+1. Create a Customer in ERPNext named "Acme International Trading Co." (with `customer_name` = "Acme International Trading Co.").
+2. Upload an invoice with customer listed as "Acme International" or "Acme Intl Trading".
+3. Extract as Sales Invoice.
+4. **Expected**: The fuzzy resolver matches via LIKE search on `customer_name` and resolves to the existing Customer. The `resolved_links` section shows: `{"customer": "CUST-00001"}` (or whatever the Customer `name` is).
+
+#### 7.8.4 Business Rule Validation
+
+1. Upload a document where the posting date is AFTER the due date (e.g., posting: 2026-03-15, due: 2026-03-01).
+2. Extract.
+3. **Expected**: Warnings include: "Posting date (2026-03-15) is after due date (2026-03-01)."
+
+#### 7.8.5 Invalid File Type
+
+1. Upload a file type that is not supported (e.g., a `.zip` or `.mp4`).
+2. Ask the AI to extract data.
+3. **Expected**: An error is returned indicating the file type is not supported for IDP extraction.
+
+---
+
+### 7.9 Supported DocTypes
+
+The IDP system supports these ERPNext DocTypes. Verify extraction works for at least 2-3 of them:
+
+| DocType | Test Prompt |
+|---------|-------------|
+| Sales Invoice | "Extract this invoice as a Sales Invoice" |
+| Purchase Invoice | "Extract this vendor invoice as a Purchase Invoice" |
+| Quotation | "Extract this quote as a Quotation" |
+| Sales Order | "Extract this order as a Sales Order" |
+| Purchase Order | "Extract this PO as a Purchase Order" |
+| Delivery Note | "Extract this delivery note as a Delivery Note" |
+| Purchase Receipt | "Extract this receipt as a Purchase Receipt" |
+
+---
+
+### 7.10 Console Verification
+
+#### 7.10.1 Verify IDP Module Structure
+
+```bash
+# Check all IDP files exist
+ls -la apps/ai_chatbot/ai_chatbot/idp/
+ls -la apps/ai_chatbot/ai_chatbot/idp/extractors/
+ls -la apps/ai_chatbot/ai_chatbot/tools/idp.py
+```
+
+**Expected**: Files present:
+- `idp/__init__.py`, `schema.py`, `mapper.py`, `validators.py`, `comparison.py`
+- `idp/extractors/__init__.py`, `base.py`, `pdf_extractor.py`, `excel_extractor.py`, `docx_extractor.py`, `image_extractor.py`
+- `tools/idp.py`
+
+#### 7.10.2 Verify Schema Discovery
+
+```bash
+bench --site <SITE> execute "from ai_chatbot.idp.schema import get_doctype_schema; import json; s = get_doctype_schema('Sales Invoice'); print(json.dumps({'doctype': s['doctype'], 'field_count': len(s['fields']), 'child_tables': list(s['child_tables'].keys())}, indent=2))"
+```
+
+**Expected**: Output shows the Sales Invoice schema with fields and child tables (e.g., `"items"`).
+
+#### 7.10.3 Verify Schema Prompt Generation
+
+```bash
+bench --site <SITE> execute "from ai_chatbot.idp.schema import build_schema_prompt; print(build_schema_prompt('Sales Invoice')[:500])"
+```
+
+**Expected**: A human-readable description of the Sales Invoice fields with labels, types, and requirements.
+
+#### 7.10.4 Verify Content Extraction (PDF)
+
+```bash
+# Upload a test PDF to the site first, then:
+bench --site <SITE> execute "from ai_chatbot.idp.extractors.base import extract_content; r = extract_content('/private/files/test-invoice.pdf'); print(r['content_type'], len(r.get('text', '')))"
+```
+
+**Expected**: `text <character_count>` — confirming PDF text was extracted.
+
+#### 7.10.5 Check IDP Settings Field
+
+```bash
+bench --site <SITE> execute "s = frappe.get_single('Chatbot Settings'); print('enable_idp_tools:', s.enable_idp_tools)"
+```
+
+**Expected**: `enable_idp_tools: 1` (if enabled).
+
+---
+
+### Troubleshooting Phase 7
+
+#### IDP tools not appearing in tool list
+
+1. Verify `enable_idp_tools` is checked in Chatbot Settings.
+2. Ensure the import exists in `registry.py`:
+   ```bash
+   grep -n "idp" apps/ai_chatbot/ai_chatbot/tools/registry.py
+   ```
+3. Check that the `"idp"` category is in `TOOL_CATEGORIES`:
+   ```bash
+   bench --site <SITE> execute "from ai_chatbot.core.constants import TOOL_CATEGORIES; print(TOOL_CATEGORIES)"
+   ```
+4. Expected output includes `'idp': 'enable_idp_tools'`.
+
+#### ImportError for pypdf / openpyxl / python-docx
+
+1. Install the optional dependencies:
+   ```bash
+   cd apps/ai_chatbot && pip install ".[idp]"
+   ```
+2. If using a virtual environment, ensure you're in the correct env:
+   ```bash
+   which python
+   # Should be: /path/to/frappe-bench/env/bin/python
+   ```
+
+#### Extraction returns empty or incorrect data
+
+1. Check that the AI provider API key is valid and the model supports tool calling.
+2. For image-based extraction, ensure the model supports Vision (GPT-4o, Claude Sonnet/Opus, Gemini).
+3. Check the Error Log in ERPNext (`/app/error-log`) for "AI Chatbot IDP" entries.
+4. Verify the extracted content is not empty:
+   ```bash
+   bench --site <SITE> execute "from ai_chatbot.idp.extractors.base import extract_content; r = extract_content('/private/files/<YOUR_FILE>'); print(r['content_type'], len(r.get('text', '') or r.get('base64', '')))"
+   ```
+
+#### "Write operations are disabled" when creating records
+
+1. Go to Chatbot Settings → Tools tab → Data Operations section.
+2. Check **Enable Write Operations**.
+3. Save and retry.
+
+#### Link field resolution not finding matches
+
+1. Ensure the referenced customer/supplier/item exists in ERPNext.
+2. The fuzzy resolver searches by: exact `name` → exact display name → LIKE display name → LIKE name.
+3. If the customer naming series uses IDs (e.g., `CUST-00001`), the document's customer name (e.g., "Acme Corp") resolves via the `customer_name` field.
+4. For company-scoped DocTypes, ensure the correct company is set.
+
+---
+
+### 7.11 Pre-Extraction User Preferences
+
+Tests that the LLM asks for missing preferences before extraction.
+
+#### 7.11.1 All Preferences Missing
+
+1. Upload a document (PDF or image).
+2. Send:
+   > "Extract data from this invoice and map it to a Purchase Invoice."
+3. **Expected**: The AI asks for ALL four preferences in a single message:
+   - Output Language (default: English)
+   - Is Stock Item? (yes/no)
+   - Is Fixed Asset? (yes/no)
+   - Item Group
+4. Reply with your choices (e.g., "English, stock items, not fixed assets, Item Group: Consumable").
+5. **Expected**: The AI proceeds to call `extract_document_data`.
+
+#### 7.11.2 Partial Preferences in Initial Message
+
+1. Upload a document.
+2. Send:
+   > "Extract data from this invoice and map it to a Purchase Invoice. Items are stock items, Item Group: Consumable."
+3. **Expected**: The AI asks ONLY for the missing preferences:
+   - Output Language
+   - Is Fixed Asset?
+4. It does NOT re-ask about Stock Item or Item Group (already provided).
+
+#### 7.11.3 All Preferences in Initial Message
+
+1. Upload a document.
+2. Send:
+   > "Extract data from this invoice in English and map it to a Purchase Invoice. Items are stock items, not fixed assets, Item Group: Consumable."
+3. **Expected**: The AI proceeds directly to extraction without asking any questions.
+
+#### 7.11.4 Language Specified Inline
+
+1. Upload a document.
+2. Send:
+   > "Extract this invoice in Spanish as a Sales Invoice."
+3. **Expected**: The AI recognizes "in Spanish" as the output language and asks only for Is Stock Item, Is Fixed Asset, and Item Group.
+
+---
+
+### 7.12 Output Language Translation
+
+Tests that extracted data is translated to the specified output language.
+
+#### 7.12.1 Non-English Document with English Output
+
+1. Upload an invoice in a non-English language (e.g., Polish, Spanish, Arabic).
+2. When asked for preferences, specify "English" as output language.
+3. **Expected**: All extracted text values (item descriptions, terms, remarks, party names) are translated to English. Numbers, dates, currency codes, and proper nouns remain unchanged.
+
+#### 7.12.2 Default Language is English
+
+1. Upload a non-English invoice.
+2. When asked for output language, reply "skip" or "use defaults".
+3. **Expected**: The AI uses English as the default output language.
+
+---
+
+### 7.13 Image Attachments with file_url
+
+Tests that image attachments pass the file_url to the LLM so it can call IDP tools.
+
+#### 7.13.1 Image File with Spaces in Filename
+
+1. Upload an image file with spaces in the filename (e.g., "WhatsApp Image 2025-03-13 at 11.47.07_21b1bac3.jpg").
+2. Send:
+   > "Extract data from this image and map it to a Purchase Invoice. Items are stock items, Item Group: Consumable."
+3. **Expected**:
+   - The AI asks for missing preferences (Output Language, Is Fixed Asset).
+   - After providing preferences, the AI calls `extract_document_data` with the correct `file_url` (e.g., `/private/files/WhatsApp Image 2025-03-13 at 11.47.07_21b1bac3.jpg`).
+   - Extraction succeeds and the AI presents extracted fields.
+
+#### 7.13.2 Image File without Spaces
+
+1. Upload an image file without spaces in the filename (e.g., "invoice.jpg").
+2. Send:
+   > "Extract data from this image and map it to a Sales Invoice."
+3. **Expected**: Same flow — preferences asked, extraction succeeds.
+
+#### 7.13.3 Verify LLM Receives file_url
+
+If extraction fails with a "file not found" error, check the Error Log (`/app/error-log`) for "AI Chatbot - Tool Execution" entries. The `file_url` in the arguments should match the actual uploaded file URL, not a guessed path like `/private/files/image.jpg`.
+
+---
+
+### 7.14 Auto-Create Missing Masters
+
+Tests that the system can auto-create missing Customer, Supplier, Item, and UOM records.
+
+#### 7.14.1 Missing Customer/Supplier
+
+1. Upload an invoice with a customer/supplier name that does NOT exist in ERPNext.
+2. Extract and confirm creation.
+3. **Expected**: The AI reports missing masters and asks:
+   - "Should I create the missing Customer/Supplier?"
+   - "For Items: Is Stock Item? Is Fixed Asset? Item Group?"
+4. Confirm. The AI calls `create_from_extracted_data` with `create_missing_masters='true'` and `item_defaults_json`.
+5. **Expected**: Masters are auto-created and the document is saved successfully.
+
+#### 7.14.2 Missing Items
+
+1. Upload an invoice with item codes that don't exist in ERPNext.
+2. Follow the flow — confirm auto-creation with item defaults.
+3. **Expected**: Items are created with the specified `is_stock_item`, `is_fixed_asset`, and `item_group`. The document is created with the new items.
+
+---
+
+### 7.15 Terms and Remarks Saving
+
+#### 7.15.1 Invoice with Terms and Conditions
+
+1. Upload an invoice that contains terms and conditions text.
+2. Extract and create as a Sales Invoice or Purchase Invoice.
+3. Open the created record in ERPNext.
+4. **Expected**: The `terms` field (Text Editor) contains the extracted terms text. The `tc_name` (Link to Terms and Conditions template) is NOT set (unless it matches an actual template).
+
+#### 7.15.2 Invoice with Remarks/Notes
+
+1. Upload an invoice that contains remarks, notes, or bank details.
+2. Extract and create.
+3. **Expected**: The `remarks` field contains the extracted remarks text.

@@ -29,6 +29,7 @@ TOOL_CATEGORIES = {
 	"inventory": "enable_inventory_tools",
 	"hrms": "enable_hrms_tools",
 	"operations": "enable_write_operations",
+	"idp": "enable_idp_tools",
 }
 
 # Base amount fields for multi-currency support

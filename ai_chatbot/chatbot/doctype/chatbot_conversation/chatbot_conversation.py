@@ -27,16 +27,9 @@ class ChatbotConversation(Document):
 
 	def validate(self):
 		"""Validate document before save"""
-		# Validate AI provider
-		if self.ai_provider not in ["OpenAI", "Claude"]:
-			frappe.throw("Invalid AI provider. Must be 'OpenAI' or 'Claude'")
-
-		# Check if provider is enabled in settings
-		settings = frappe.get_single("Chatbot Settings")
-		if self.ai_provider == "OpenAI" and not settings.openai_enabled:
-			frappe.throw("OpenAI is not enabled in AI Chatbot Settings")
-		elif self.ai_provider == "Claude" and not settings.claude_enabled:
-			frappe.throw("Claude is not enabled in AI Chatbot Settings")
+		valid_providers = ("OpenAI", "Claude", "Gemini")
+		if self.ai_provider not in valid_providers:
+			frappe.throw(f"Invalid AI provider. Must be one of: {', '.join(valid_providers)}")
 
 	def on_trash(self):
 		"""Called when document is deleted"""

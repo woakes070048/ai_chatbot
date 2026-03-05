@@ -138,6 +138,26 @@
               <TypingIndicator :process-step="processStep" />
             </div>
           </div>
+
+          <!-- Error message display -->
+          <div v-if="displayError" class="flex justify-start">
+            <div class="max-w-[85%] lg:max-w-5xl rounded-2xl px-6 py-4 shadow-sm bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
+              <div class="flex items-start gap-3">
+                <div class="flex-shrink-0 w-10 h-10 rounded-full bg-red-100 dark:bg-red-800/40 flex items-center justify-center">
+                  <svg class="w-5 h-5 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                  </svg>
+                </div>
+                <div class="flex-1">
+                  <p class="text-sm font-medium text-red-800 dark:text-red-300">{{ displayError }}</p>
+                  <button
+                    class="mt-2 text-xs text-red-600 dark:text-red-400 hover:underline"
+                    @click="dismissError"
+                  >Dismiss</button>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- Input Area (bottom-pinned) -->
@@ -187,6 +207,13 @@ const sidebarCollapsed = ref(localStorage.getItem('ai_chatbot_sidebar') === 'col
 const toggleSidebar = () => {
   sidebarCollapsed.value = !sidebarCollapsed.value
   localStorage.setItem('ai_chatbot_sidebar', sidebarCollapsed.value ? 'collapsed' : 'expanded')
+}
+
+// Error display state
+const displayError = ref(null)
+
+const dismissError = () => {
+  displayError.value = null
 }
 
 // Search state
@@ -371,6 +398,9 @@ const handleSendMessage = async (payload) => {
 
   if (!currentConversation.value || (!message.trim() && attachments.length === 0)) return
 
+  // Clear any previous error
+  displayError.value = null
+
   // Track whether this was a voice message (for auto-speak)
   lastMessageWasVoice.value = voiceInput
 
@@ -428,6 +458,7 @@ const handleSendMessage = async (payload) => {
       if (!response.success) {
         stopListening()
         console.error('Streaming request failed:', response.error)
+        displayError.value = response.error || 'Failed to send message. Please try again.'
         isLoading.value = false
         return
       }
@@ -457,6 +488,8 @@ const handleSendMessage = async (payload) => {
           setTimeout(() => speakResponse(assistantContent), 100)
           lastMessageWasVoice.value = false
         }
+      } else {
+        displayError.value = response.error || 'Failed to get a response. Please try again.'
       }
 
       isLoading.value = false
@@ -465,6 +498,7 @@ const handleSendMessage = async (payload) => {
     }
   } catch (error) {
     console.error('Error sending message:', error)
+    displayError.value = error?.message || 'An unexpected error occurred. Please try again.'
     isLoading.value = false
     stopListening()
   }
@@ -567,11 +601,13 @@ watch(messages, () => {
   nextTick(() => scrollToBottom())
 }, { deep: true })
 
-// Handle stream errors
+// Handle stream errors — display in chat UI
 watch(streamError, (error) => {
   if (error) {
     console.error('Stream error:', error)
     isLoading.value = false
+    displayError.value = error
+    nextTick(() => scrollToBottom(true))
   }
 })
 </script>

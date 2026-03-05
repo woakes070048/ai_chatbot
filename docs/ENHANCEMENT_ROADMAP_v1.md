@@ -1181,11 +1181,273 @@ Create a workspace similar to CRM's pattern — a landing page with:
 
 ---
 
-## Phase 7: Agentic RAG — Vector Search + Multi-Agent Orchestration
+## Phase 7: Intelligent Document Processing (IDP) ✅
 
-**Goal:** Implement a full Agentic RAG system — combining vector-based document retrieval with multi-agent orchestration, planning, and iterative refinement.
+**Goal:** Extract structured data from uploaded documents (invoices, POs, receipts, quotations) using LLM Vision/text extraction and ERPNext schema discovery. Map non-uniform, multi-language source data to ERPNext DocType schemas with semantic reasoning. Create records and compare documents against existing ERPNext records.
 
-### 7.1 RAG Foundation (`ai_chatbot/ai/rag/`)
+### 7.1 Core Challenge
+
+- Source data is non-uniform — inconsistent headers, varying formats, different languages
+- LLM performs semantic reasoning to identify which source values map to which ERPNext fields
+- Schema mapping resolves naming discrepancies between source document fields and ERPNext DocType structure
+- All dates normalized to YYYY-MM-DD, all numbers stripped of currency symbols/commas
+- Currency identified from document; `conversion_rate` defaults to 1.0 if not specified
+
+### 7.2 File Upload Infrastructure (Completed in Phase 5A)
+
+File upload and Vision API support was implemented in Phase 5A:
+- `api/files.py` — upload endpoint, base64 encoding, vision content builder
+- Frontend: file picker + drag-and-drop in ChatInput (accept PDF, images, Excel, CSV, DOCX, TXT)
+- Frappe File DocType storage with `is_private=True`
+- Image attachments sent to LLM Vision API (OpenAI, Claude & Gemini)
+
+**Phase 7 extends this with:**
+- PDF text extraction for prompt context (pypdf)
+- Excel/CSV tabular data extraction (openpyxl + stdlib csv)
+- DOCX text extraction (python-docx)
+- Scanned PDF fallback to Vision API via base64
+
+### 7.3 Content Extractors (`ai_chatbot/idp/extractors/`)
+
+```
+ai_chatbot/idp/extractors/
+├── __init__.py
+├── base.py              # Unified extraction factory — dispatches by MIME type
+├── pdf_extractor.py     # pypdf text extraction (falls back to base64 for scanned PDFs)
+├── excel_extractor.py   # openpyxl (XLSX) + csv (CSV) tabular extraction
+└── docx_extractor.py    # python-docx paragraph + table extraction
+```
+
+**base.py — `extract_content(file_url)`:**
+- Reads file from Frappe File DocType
+- Detects MIME type and dispatches to the appropriate extractor
+- Returns unified format: `{content_type: "text"|"image", text/base64, mime_type, file_name}`
+- Scanned PDFs (no selectable text) automatically fall back to base64 image for Vision API
+
+### 7.4 ERPNext Schema Discovery (`ai_chatbot/idp/schema.py`)
+
+```python
+get_doctype_schema(doctype)   # → {doctype, fields: [...], child_tables: {...}}
+build_schema_prompt(doctype)  # → human-readable schema description for LLM
+```
+
+- Uses `frappe.get_meta(doctype)` for dynamic field discovery
+- Discovers child tables (e.g., Sales Invoice Item) and their field schemas
+- Filters to extractable field types (Data, Link, Date, Currency, Float, Int, Select, Table, etc.)
+- Identifies Link field targets for fuzzy resolution
+- Generates structured text description for the LLM extraction prompt
+
+### 7.5 LLM Semantic Mapper (`ai_chatbot/idp/mapper.py`)
+
+The core of the IDP system. The LLM does all semantic reasoning.
+
+**`extract_and_map(file_url, target_doctype, company)`:**
+
+1. Extract raw content from the file (text or base64 image)
+2. Build target DocType schema description via `build_schema_prompt()`
+3. Construct structured extraction prompt with:
+   - The raw document content (embedded text or Vision API image)
+   - The target ERPNext schema (fields, types, constraints, Link targets)
+   - Normalization rules (dates → YYYY-MM-DD, numbers → clean floats)
+   - Multi-language handling ("identify fields by semantic meaning, not header text")
+   - Required JSON output format with `header`, `items`, and `unmapped_fields`
+4. Send to configured AI provider via `get_ai_provider().chat_completion()`
+5. Parse JSON response (handles markdown fences, explanatory text)
+6. Normalize values: date parsing (12+ formats), number cleaning, type coercion
+
+**Extraction prompt strategy:**
+- System prompt: "You are an expert data extraction specialist for ERPNext ERP systems"
+- User prompt includes full schema with field labels, types, and constraints
+- Explicit rules for multi-language support, date normalization, number stripping
+- Instruction to return `null` for unidentifiable fields (never guess)
+- `unmapped_fields` array for source fields that couldn't be mapped
+
+### 7.6 Post-Extraction Validators (`ai_chatbot/idp/validators.py`)
+
+**`validate_extraction(extracted_data, target_doctype, company)`:**
+
+Three levels of validation:
+
+1. **Schema validation** — required fields present, correct types
+2. **Link field resolution** — fuzzy matching of customer/supplier/item names:
+   - Exact match on `name` → direct resolve
+   - Exact match on display field (customer_name, supplier_name, item_name) → resolve
+   - LIKE match on display field → resolve if unique
+   - Company-scoped searches for DocTypes with company fields
+   - Known display-name fields for 10+ DocTypes (Customer, Supplier, Item, Employee, etc.)
+3. **Business rules** — posting_date ≤ due_date, qty > 0, rate ≥ 0, items present for transaction docs
+
+### 7.7 Document Comparison (`ai_chatbot/idp/comparison.py`)
+
+**`compare_with_record(extracted_data, doctype, docname)`:**
+
+- Field-by-field comparison with type-aware matching:
+  - Dates: compare via `getdate()` (handles format differences)
+  - Currency/Float: compare with `flt(val, 2)` precision
+  - Strings: case-insensitive, whitespace-trimmed
+- Item-level comparison:
+  - Match by `item_code` (preferred) or by position (fallback)
+  - Per-row field comparison with individual diff reporting
+  - Reports extra items in document and extra items in record
+- Output: matches, discrepancies, missing_in_document, missing_in_record, items_comparison, summary
+
+### 7.8 IDP Tools (`ai_chatbot/tools/idp.py`)
+
+Three tools registered with `@register_tool` in the `idp` category:
+
+**Tool 1: `extract_document_data`**
+- Extracts structured data from uploaded file and maps to ERPNext schema
+- Runs full pipeline: content extraction → LLM mapping → validation → link resolution
+- Returns extracted data for user review (never creates a record directly)
+- Supported DocTypes: Sales Invoice, Purchase Invoice, Quotation, Sales Order, Purchase Order, Delivery Note, Purchase Receipt
+
+**Tool 2: `create_from_extracted_data`**
+- Creates ERPNext record from previously extracted data
+- Requires user confirmation (two-step pattern from Phase 3)
+- Re-validates before creation
+- Uses existing `create_document()` from `data/operations.py`
+- Requires both `enable_idp_tools` AND `enable_write_operations`
+
+**Tool 3: `compare_document_with_record`**
+- Extracts data from uploaded document, then compares with existing ERPNext record
+- Returns field-by-field discrepancy report with match/mismatch indicators
+- Use case: vendor invoice vs Purchase Order, client PO vs Sales Order
+
+### 7.9 Settings & Integration
+
+**Chatbot Settings:**
+- New field: `enable_idp_tools` (Check) — in Tools tab, default: 0
+- New section: "Document Processing (IDP)" between ERPNext Tools and Data Operations
+
+**System Prompt** (`core/prompts.py`):
+- New section added when IDP tools are enabled
+- Describes the extract → review → confirm → create workflow
+- Lists supported document formats and multi-language capability
+
+**Tool Registry** (`tools/registry.py`):
+- `import ai_chatbot.tools.idp` added in `_ensure_tools_loaded()`
+- IDP tools loaded alongside ERPNext tools (conditional on ERPNext installation)
+
+**Constants** (`core/constants.py`):
+- `"idp": "enable_idp_tools"` added to `TOOL_CATEGORIES`
+
+### 7.10 Deliverables
+
+| Item | Files | Status |
+|------|-------|--------|
+| Content extractors | `idp/extractors/base.py`, `pdf_extractor.py`, `excel_extractor.py`, `docx_extractor.py` | ✅ |
+| Schema discovery | `idp/schema.py` | ✅ |
+| LLM semantic mapper | `idp/mapper.py` | ✅ |
+| Post-extraction validators | `idp/validators.py` | ✅ |
+| Document comparison | `idp/comparison.py` | ✅ |
+| IDP tools | `tools/idp.py` (3 tools: extract, create, compare) | ✅ |
+| Settings integration | Updated `chatbot_settings.json`, `constants.py`, `prompts.py`, `registry.py` | ✅ |
+
+**New dependencies (optional extras):**
+- `pypdf>=4.0` — PDF text extraction
+- `openpyxl>=3.1` — Excel parsing
+- `python-docx>=1.1` — DOCX text extraction
+- Install via: `pip install ai_chatbot[idp]`
+
+### 7.11 Post-Release Bug Fixes
+
+#### 7.11.1 Pre-Extraction User Preferences (prompts.py)
+
+The IDP workflow prompt was restructured so the LLM asks for **all missing preferences** before calling `extract_document_data`:
+
+- **Output Language** (default: English) — document can be in any language; extracted values are translated
+- **Is Stock Item?** (yes/no)
+- **Is Fixed Asset?** (yes/no)
+- **Item Group** — ERPNext Item Group name
+
+Each preference is a separate mandatory block with explicit skip-conditions. If the user provides some preferences in their message (e.g., "stock items, Item Group: Consumable"), the LLM asks only for the missing ones (e.g., Output Language, Is Fixed Asset).
+
+**Files changed:** `core/prompts.py`
+
+#### 7.11.2 Output Language Translation (mapper.py, tools/idp.py)
+
+Added `output_language` parameter through the entire extraction pipeline:
+
+- `extract_document_data` tool accepts `output_language` (default: `"English"`)
+- Passed through `extract_and_map()` → `_build_extraction_messages()` → `_build_system_prompt()`
+- System prompt instructs the LLM to translate text values (item descriptions, terms, remarks, party names) to the target language while preserving numbers, dates, currency codes, and proper nouns
+
+**Files changed:** `tools/idp.py`, `idp/mapper.py`
+
+#### 7.11.3 Item Description Extraction (mapper.py)
+
+Strengthened extraction rules for item fields:
+
+- `description` must be COMPLETE, VERBATIM, UNTRUNCATED — at least as long as `item_name`
+- `item_name`: short product name (max ~140 characters)
+- `item_code`: product/part code or first 100 chars of description
+- Single-column invoices: full text → `description`, first 100 chars → `item_code`/`item_name`
+
+**Files changed:** `idp/mapper.py`
+
+#### 7.11.4 Terms & Remarks Saving (mapper.py, data/operations.py)
+
+Fixed three issues preventing terms and remarks from being saved:
+
+1. **Prompt clarification:** Explicit "use `terms` NOT `tc_name`" and "use `remarks` NOT `bank_details`" instructions with a "Fields to EXCLUDE" section
+2. **Field alias normalization:** Added `_FIELD_ALIASES` dict (`terms_and_conditions` → `terms`, `bank_details` → `remarks`, `contact_person` → `contact_display`) applied post-extraction. Detects when `tc_name` contains free text (>50 chars) and moves it to `terms`
+3. **Post-insert preservation:** Added `_preserve_text_fields()` helper in `operations.py` that re-applies `terms` and `remarks` after `doc.insert()` if ERPNext hooks cleared them
+
+**Files changed:** `idp/mapper.py`, `data/operations.py`
+
+#### 7.11.5 Auto-Create Missing Masters (tools/idp.py)
+
+Added `create_missing_masters` and `item_defaults_json` parameters to `create_from_extracted_data` tool:
+
+- When missing Items/Customer/Supplier are detected, the LLM asks the user for confirmation and item properties (Is Stock Item?, Is Fixed Asset?, Item Group?)
+- `_auto_create_missing_masters()` creates minimal records with user-specified defaults
+- `_find_missing_masters()` checks by both `name` and display name fields
+- UOM auto-creation included
+
+**Files changed:** `tools/idp.py`
+
+#### 7.11.6 Image Attachments Missing file_url for LLM (api/files.py)
+
+**Bug:** When an image was uploaded (especially with spaces in filename), the LLM could see the image visually (via base64 Vision API) but never received the `file_url`. When calling `extract_document_data`, the LLM guessed wrong file paths (e.g., `/private/files/image.jpg`).
+
+**Root cause:** `build_vision_content()` embedded images as base64 for the Vision API but did not include the `file_url` as a text part. Non-image files already had this (line 467-473 in `streaming.py`), but images did not.
+
+**Fix:** After adding the base64 image content part, now also appends a text part: `[Image file_url: /private/files/..., file_name: ...]` so the LLM knows the exact file path.
+
+**Files changed:** `api/files.py`
+
+#### 7.11.7 Robust File Lookup for URL Encoding (idp/extractors/base.py, api/files.py)
+
+**Bug:** File lookups via `frappe.get_doc("File", {"file_url": file_url})` could fail when the URL had encoding mismatches (spaces vs `%20`).
+
+**Fix:** Added `_get_file_doc()` helper in `base.py` that tries multiple URL variants:
+1. Original URL as passed
+2. URL-decoded variant (converts `%20` → spaces)
+3. URL-re-encoded variant (converts spaces → `%20`, filename portion only)
+4. Filename-only fallback (`file_name` field match)
+5. Strips domain prefix if LLM passes a full URL
+
+`get_file_base64()` in `api/files.py` also updated to use `_get_file_doc()`.
+
+**Files changed:** `idp/extractors/base.py`, `api/files.py`
+
+#### 7.11.8 Claude API Billing Error Detection (utils/ai_providers.py)
+
+**Bug:** Anthropic returns HTTP 400 (not 429) for billing/credit issues. The error classifier only checked 429 for quota errors.
+
+**Fix:** `classify_api_error()` now checks the response body for billing-related keywords (`credit balance`, `billing`, `purchase credits`) on 400 responses and returns a user-friendly quota exceeded message.
+
+**Files changed:** `utils/ai_providers.py`
+
+---
+
+## Phase 8: Agentic RAG — Vector Search + Multi-Agent Orchestration
+
+**Goal:** Implement vector-based document retrieval with multi-agent orchestration, planning, and iterative refinement. Builds on Phase 7's document extraction by adding persistent knowledge indexing and intelligent query routing.
+
+> **Note:** Per the architectural review (see Q&A section below), this phase may be simplified to focus on multi-agent orchestration (planner + analyst agents) without the RAG/vector store components, unless a clear document search use case emerges.
+
+### 8.1 RAG Foundation (`ai_chatbot/ai/rag/`)
 
 ```
 ai_chatbot/ai/rag/
@@ -1196,28 +1458,7 @@ ai_chatbot/ai/rag/
 └── retriever.py       # Query → retrieve → rank → return
 ```
 
-**embeddings.py:**
-- `generate_embedding(text)` — uses OpenAI `text-embedding-3-small` or local model
-- Batch embedding support for document indexing
-
-**vector_store.py:**
-- ChromaDB as the default vector store (runs locally, no external service needed)
-- `add_documents(chunks, embeddings, metadata)` — index documents
-- `search(query_embedding, n_results=5, filters=None)` — similarity search
-- `delete_documents(source_id)` — remove indexed documents
-- Collection per company (multi-company isolation): `knowledge_{company_slug}`
-
-**chunker.py:**
-- `chunk_text(text, chunk_size=500, overlap=50)` — simple text chunking
-- `chunk_document(file_path)` — PDF, DOCX, TXT extraction + chunking
-- Metadata preservation (source document, page number, section)
-
-**retriever.py:**
-- `retrieve_context(query, company=None, n_results=5)` — embed query → search → return ranked chunks
-- `evaluate_relevance(query, chunks)` — scores retrieved chunks for relevance (used by agents)
-- `requery(original_query, feedback)` — refine search terms based on agent feedback
-
-### 7.2 Agent Framework (`ai_chatbot/ai/agents/`)
+### 8.2 Agent Framework (`ai_chatbot/ai/agents/`)
 
 ```
 ai_chatbot/ai/agents/
@@ -1229,32 +1470,7 @@ ai_chatbot/ai/agents/
 └── document_agent.py      # Document retrieval and synthesis
 ```
 
-**orchestrator.py:**
-- Classifies incoming query: simple (generative) vs. data (tool-based) vs. knowledge (RAG) vs. complex (multi-step)
-- Routes to appropriate agent or combination
-- Manages agent execution loop with max iterations
-- Combines tool results with RAG context when both are needed
-
-**planner_agent.py:**
-- Breaks complex queries into sub-tasks
-- Example: "Compare Q3 vs Q4 sales and check if we're on track for budget" →
-  1. Get Q3 sales (tool call)
-  2. Get Q4 sales (tool call)
-  3. Get budget for current year (tool call)
-  4. Synthesize comparison (generation)
-
-**analyst_agent.py:**
-- Specialized for data queries
-- Can chain multiple tool calls
-- Evaluates whether results are sufficient or needs more data
-
-**document_agent.py:**
-- Retrieves from vector store via `retriever.py`
-- Evaluates relevance of retrieved chunks
-- Can re-query with refined search terms if initial results are poor
-- Synthesizes answers from multiple document sources
-
-### 7.3 Memory System (`ai_chatbot/ai/memory/`)
+### 8.3 Memory System (`ai_chatbot/ai/memory/`)
 
 ```
 ai_chatbot/ai/memory/
@@ -1264,37 +1480,13 @@ ai_chatbot/ai/memory/
 └── memory_manager.py         # Manages context window allocation
 ```
 
-**memory_manager.py:**
-- Allocates token budget across: system prompt, memory, RAG context, conversation history, tool results
-- Prunes oldest messages when context limit approached
-- Prioritizes recent and relevant context
-
-### 7.4 Knowledge Base DocType & Indexing
+### 8.4 Knowledge Base DocType & Indexing
 
 **Chatbot Knowledge Base** (new DocType):
 - Fields: `title`, `source_type` (File/ERPNext Record/URL), `source_reference`, `company`, `status` (Indexed/Pending/Failed), `chunk_count`, `last_indexed`
 - Tracks what has been indexed into the vector store
 
-**Indexing pipeline:**
-- **Manual:** Upload PDF/DOCX via a "Knowledge Base" page in the frontend
-- **Automatic:** Index key ERPNext records (Items, Customers, Suppliers, policies) via scheduled task
-- **Incremental:** Only re-index documents that have changed since last indexing
-
-### 7.5 Frontend
-
-```
-frontend/src/
-├── pages/
-│   └── KnowledgeBaseView.vue   # Document upload and management
-├── components/
-│   ├── chat/
-│   │   └── AgentThinking.vue   # Shows agent reasoning steps
-│   └── documents/
-│       ├── DocumentUploader.vue # File upload with drag-and-drop
-│       └── DocumentList.vue     # List of indexed documents
-```
-
-### 7.6 Deliverables
+### 8.5 Deliverables
 
 | Item | Files |
 |------|-------|
@@ -1302,130 +1494,10 @@ frontend/src/
 | Agent framework | `ai/agents/base_agent.py`, `orchestrator.py`, `planner_agent.py`, `analyst_agent.py`, `document_agent.py` |
 | Memory system | `ai/memory/conversation_memory.py`, `knowledge_memory.py`, `memory_manager.py` |
 | Knowledge Base DocType | `chatbot/doctype/chatbot_knowledge_base/` |
-| Indexing pipeline | Scheduled task in `hooks.py` |
 | Frontend | `KnowledgeBaseView.vue`, `DocumentUploader.vue`, `DocumentList.vue`, `AgentThinking.vue` |
-| Chat integration | Updated `api/chat.py` to use orchestrator |
 
 **New dependencies:**
-- **Backend:** `chromadb`, `openai` (for embeddings), `pypdf` (PDF extraction), `python-docx` (DOCX extraction)
-- **Frontend:** None
-
----
-
-## Phase 8: Intelligent Document Processing (IDP)
-
-**Goal:** Extract data from uploaded documents (invoices, receipts, POs) and create ERPNext records. Includes file upload capability, data comparison, and reconciliation.
-
-### 8.1 File Upload Infrastructure (Completed in Phase 5A)
-
-File upload and Vision API support was implemented in Phase 5A:
-- `api/files.py` — upload endpoint, base64 encoding, vision content builder
-- Frontend: file picker + drag-and-drop in ChatInput (accept PDF, images, Excel, CSV, DOCX, TXT)
-- Frappe File DocType storage with `is_private=True`
-- Image attachments sent to LLM Vision API (OpenAI & Claude)
-- Non-image attachments annotated as text in message context
-
-**Phase 7 extends this with:**
-- PDF/Excel text extraction for prompt context
-- Structured data extraction from documents
-
-### 8.2 Document Extraction (`ai_chatbot/idp/`)
-
-```
-ai_chatbot/idp/
-├── __init__.py
-├── extractors/
-│   ├── base_extractor.py      # Abstract extractor interface
-│   ├── invoice_extractor.py   # Invoice data extraction (via LLM vision)
-│   ├── receipt_extractor.py   # Receipt processing
-│   └── generic_extractor.py   # Generic document extraction
-├── validators/
-│   ├── schema_validator.py    # Validates extracted data against DocType schema
-│   └── business_rules.py      # Business rule validation
-└── mappers/
-    ├── base_mapper.py         # Abstract mapper
-    ├── invoice_mapper.py      # Maps extracted data → Purchase Invoice
-    ├── supplier_mapper.py     # Maps extracted data → Supplier
-    └── item_mapper.py         # Maps extracted data → Item
-```
-
-**Extraction approach:**
-- Use GPT-4 Vision or Claude Vision to extract structured data from document images
-- No OCR dependency for initial version (LLM vision is more accurate)
-- Fallback to OCR (pytesseract) for high-volume, lower-cost processing
-
-**Mapping flow:**
-1. User uploads document (PDF/image) in chat
-2. LLM Vision extracts structured data (supplier, items, amounts, dates)
-3. Validator checks against ERPNext schema and business rules
-4. Mapper creates draft ERPNext document
-5. User reviews and confirms (reuses Phase 3 confirmation pattern)
-6. Document is submitted
-
-### 8.3 Data Comparison & Reconciliation
-
-**Files:** `ai_chatbot/idp/comparison.py` (new), `ai_chatbot/tools/operations/reconcile.py` (new)
-
-**Use case:** User attaches a client's Purchase Order PDF to a Sales Order → system compares and highlights discrepancies.
-
-**Architecture:**
-- `extract_document_data(file_url)` — extract structured data from attached file (PDF/Excel)
-- `compare_documents(extracted_data, erpnext_doc)` — field-by-field comparison
-- `generate_reconciliation_report(comparison_result)` — formatted diff report
-
-**Reconciliation tool:**
-```python
-@register_tool(
-    name="compare_document_with_record",
-    category="operations",
-    description="Compare an uploaded document with an ERPNext record and highlight differences",
-    parameters={
-        "file_url": {"type": "string", "description": "URL of the uploaded file to compare"},
-        "doctype": {"type": "string", "description": "ERPNext DocType to compare against"},
-        "docname": {"type": "string", "description": "Document name to compare against"},
-    },
-)
-def compare_document_with_record(file_url, doctype, docname):
-    ...
-```
-
-**Output format:**
-```
-| Field           | Uploaded Document | ERPNext Record | Match |
-|-----------------|-------------------|----------------|-------|
-| Supplier        | Acme Corp         | Acme Corp      | ✓     |
-| PO Number       | PO-2026-001       | PO-2026-001    | ✓     |
-| Item: Widget A  | Qty: 100          | Qty: 90        | ✗     |
-| Total Amount    | $15,000           | $13,500        | ✗     |
-```
-
-### 8.4 Frontend
-
-```
-frontend/src/
-├── pages/
-│   └── DocumentProcessingView.vue
-├── components/
-│   └── idp/
-│       ├── DocumentUploader.vue    # Upload with preview
-│       ├── ExtractionResult.vue    # Show extracted fields, allow editing
-│       └── MappingPreview.vue      # Preview ERPNext document before creation
-```
-
-### 8.5 Deliverables
-
-| Item | Files |
-|------|-------|
-| File upload | `api/files.py`, updated `ChatInput.vue`, updated `chatbot_message.json` |
-| Extractors | `idp/extractors/invoice_extractor.py`, `receipt_extractor.py`, `generic_extractor.py` |
-| Validators | `idp/validators/schema_validator.py`, `business_rules.py` |
-| Mappers | `idp/mappers/invoice_mapper.py`, `supplier_mapper.py`, `item_mapper.py` |
-| Comparison | `idp/comparison.py`, `tools/operations/reconcile.py` |
-| Frontend | `DocumentProcessingView.vue`, extraction/mapping components |
-| DocType | `chatbot_document_queue` — tracks processing status |
-
-**New dependencies:**
-- **Backend:** `pypdf` (if not added in Phase 6), `Pillow`, optionally `pytesseract` + `pdf2image`, `openpyxl` (Excel parsing)
+- **Backend:** `chromadb`, `openai` (for embeddings)
 - **Frontend:** None
 
 ---
@@ -1576,9 +1648,9 @@ ai_chatbot/automation/notifications/
 | **6** | Settings & Gemini | High | ✅ Done | Unified provider config, Gemini, token/cost tracking, file headers | None |
 | **6A** | UI Overhaul | High | ✅ Done | Claude-style sidebar, process indicators, greeting, search, dark mode | None |
 | **6B** | Multi-Dim Analytics | Medium | ✅ Done | Hierarchical grouping, GL Entry finance, BI cards, sidebar/greeting refinements | None |
-| **6C** | Workspace & Help | Low | Planned | Frappe workspace, help button, language selector | None |
-| **7** | Agentic RAG | Medium | Planned | Vector search + multi-agent orchestration + memory | chromadb, pypdf, python-docx |
-| **8** | IDP | Medium | Planned | Document extraction, data comparison/reconciliation | Pillow, pytesseract (opt), openpyxl |
+| **6C** | Workspace & Help | Low | ✅ Done | Frappe workspace, help button, language selector | None |
+| **7** | IDP | Medium | ✅ Done | Document extraction, schema mapping, comparison/reconciliation | pypdf, openpyxl, python-docx (opt) |
+| **8** | Agentic RAG | Medium | Planned | Vector search + multi-agent orchestration + memory | chromadb |
 | **9** | Predictive | Low | Planned | Forecasting, anomaly detection | pandas, numpy, prophet (opt) |
 | **10** | Automation | Low | Planned | Auto-email, scheduled reports, alerts, notifications | slack_sdk (opt) |
 
@@ -1625,7 +1697,7 @@ When a company is a parent company:
 4. Convert to target currency using `get_exchange_rate()`
 5. Aggregate and present consolidated view
 
-### Company Isolation for RAG (Phase 7)
+### Company Isolation for RAG (Phase 8)
 
 Vector store collections are namespaced by company:
 - Collection name: `knowledge_{company_name_slug}`
@@ -1709,7 +1781,7 @@ For the current tool-based analytics (Phases 1–6B), `frappe.qb` (Query Builder
 - **Knowledge memory** (long-term) — not needed without document search
 - **Memory manager** (context allocation) — addressed by Phase 6.4 token optimization
 
-**Recommendation:** Simplify Phase 7 (Agentic RAG) to focus only on the multi-agent orchestration pattern (planner + analyst agents) for complex multi-step queries. Drop the RAG/vector store components unless a clear document search use case emerges.
+**Recommendation:** Simplify Phase 8 (Agentic RAG) to focus only on the multi-agent orchestration pattern (planner + analyst agents) for complex multi-step queries. Drop the RAG/vector store components unless a clear document search use case emerges. Phase 7 (IDP) now handles the document extraction and record creation use case.
 
 ### Q: Python Libraries recommendation
 
@@ -1743,8 +1815,8 @@ The current architecture already supports several future-proofing patterns:
 | **Pluggable tool framework** | ✅ Done | `@register_tool` decorator + hooks-based plugin loading (Phase 5B.8) |
 | **LLM-agnostic architecture** | ✅ Done | Unified provider config; all providers use the same tool schema format |
 | **Event-driven processing** | ✅ Done | Streaming via `frappe.publish_realtime` (Redis Pub/Sub + Socket.IO) |
-| **Agentic orchestration readiness** | Phase 7 | Multi-agent framework with planner + analyst agents |
-| **Graph-based execution** | Phase 7+ | Could be added to the planner agent for complex query decomposition |
+| **Agentic orchestration readiness** | Phase 8 | Multi-agent framework with planner + analyst agents |
+| **Graph-based execution** | Phase 8+ | Could be added to the planner agent for complex query decomposition |
 
 ---
 
@@ -1770,17 +1842,16 @@ ai_chatbot/
 │   ├── operations.py              # Phase 3
 │   └── validators.py              # Phase 3
 │
-├── api/                           # Phase 1, 2, 3, 5A, 7
+├── api/                           # Phase 1, 2, 3, 5A
 │   ├── chat.py                    # Updated: 5A (attachments, @mention endpoint)
 │   ├── streaming.py               # Phase 2, updated: 5A (attachments, vision content)
-│   ├── files.py                   # Phase 5A (file upload, vision content builder)
-│   └── documents.py               # Phase 7 (IDP)
+│   └── files.py                   # Phase 5A (file upload, vision content builder)
 │
 ├── utils/
 │   └── ai_providers.py            # Updated: 5A (Claude multimodal/vision content conversion)
 │
-├── tools/                         # Phase 1, 3, 4, 5, 5B, 8
-│   ├── registry.py                # Phase 1, updated: 5B (permissions, plugins)
+├── tools/                         # Phase 1, 3, 4, 5, 5B, 7
+│   ├── registry.py                # Phase 1, updated: 5B (permissions, plugins), 7 (IDP import)
 │   ├── base.py
 │   ├── crm.py                     # Phase 1, updated: 5
 │   ├── selling.py                 # Phase 1, updated: 4
@@ -1788,12 +1859,12 @@ ai_chatbot/
 │   ├── stock.py                   # Phase 1, updated: 4
 │   ├── account.py                 # Phase 1
 │   ├── hrms.py                    # Phase 5
+│   ├── idp.py                     # Phase 7 (IDP: extract, create, compare tools)
 │   ├── reports.py                 # Phase 5B (report data tools)
 │   ├── operations/                # Phase 3
 │   │   ├── create.py
 │   │   ├── update.py
-│   │   ├── search.py
-│   │   └── reconcile.py           # Phase 7
+│   │   └── search.py
 │   ├── finance/                   # Phase 4, 5B
 │   │   ├── budget.py
 │   │   ├── ratios.py
@@ -1811,7 +1882,18 @@ ai_chatbot/
 │       ├── cash_flow_forecast.py
 │       └── anomaly_detection.py
 │
-├── ai/                            # Phase 6 (Agentic RAG)
+├── idp/                           # Phase 7 (Intelligent Document Processing)
+│   ├── extractors/
+│   │   ├── base.py                # Unified extraction factory
+│   │   ├── pdf_extractor.py       # pypdf text extraction
+│   │   ├── excel_extractor.py     # openpyxl (XLSX) + csv extraction
+│   │   └── docx_extractor.py      # python-docx extraction
+│   ├── schema.py                  # ERPNext DocType schema discovery
+│   ├── mapper.py                  # LLM semantic extraction + schema mapping
+│   ├── validators.py              # Post-extraction validation + link resolution
+│   └── comparison.py              # Document vs record comparison
+│
+├── ai/                            # Phase 8 (Agentic RAG — planned)
 │   ├── rag/
 │   │   ├── embeddings.py
 │   │   ├── vector_store.py
@@ -1828,22 +1910,6 @@ ai_chatbot/
 │       ├── knowledge_memory.py
 │       └── memory_manager.py
 │
-├── idp/                           # Phase 7
-│   ├── extractors/
-│   │   ├── base_extractor.py
-│   │   ├── invoice_extractor.py
-│   │   ├── receipt_extractor.py
-│   │   └── generic_extractor.py
-│   ├── validators/
-│   │   ├── schema_validator.py
-│   │   └── business_rules.py
-│   ├── mappers/
-│   │   ├── base_mapper.py
-│   │   ├── invoice_mapper.py
-│   │   ├── supplier_mapper.py
-│   │   └── item_mapper.py
-│   └── comparison.py              # Phase 7 (data comparison/reconciliation)
-│
 ├── automation/                    # Phase 9
 │   ├── scheduled_reports.py
 │   ├── alerts.py
@@ -1856,13 +1922,12 @@ ai_chatbot/
 │
 ├── chatbot/                       # Frappe DocTypes (expanded across phases)
 │   └── doctype/
-│       ├── chatbot_settings/      # Updated: 5A, 5B (prompts, constants, suggestions)
+│       ├── chatbot_settings/      # Updated: 5A, 5B (prompts, constants), 7 (enable_idp_tools)
 │       ├── chatbot_conversation/
-│       ├── chatbot_message/       # Updated: 4 (tool_results), 7 (attachments)
-│       ├── chatbot_knowledge_base/    # Phase 6
-│       ├── chatbot_document_queue/    # Phase 7
-│       ├── chatbot_scheduled_report/  # Phase 9
-│       └── chatbot_alert/             # Phase 9
+│       ├── chatbot_message/       # Updated: 4 (tool_results), 5A (attachments)
+│       ├── chatbot_knowledge_base/    # Phase 8
+│       ├── chatbot_scheduled_report/  # Phase 10
+│       └── chatbot_alert/             # Phase 10
 │
 └── tests/                         # All phases
     ├── unit/
@@ -1882,18 +1947,14 @@ frontend/src/
 │   │   ├── BiCards.vue            # Phase 6B (BI metric cards)
 │   │   ├── HierarchicalTable.vue  # Phase 6B (indented data table)
 │   │   └── DataTable.vue          # Phase 5A (styled tables)
-│   ├── documents/                 # Phase 6
+│   ├── documents/                 # Phase 8
 │   │   ├── DocumentUploader.vue
 │   │   └── DocumentList.vue
-│   ├── idp/                       # Phase 7
-│   │   ├── ExtractionResult.vue
-│   │   └── MappingPreview.vue
 │   └── chat/
-│       └── AgentThinking.vue      # Phase 6
+│       └── AgentThinking.vue      # Phase 8
 ├── pages/
 │   ├── ChatView.vue               # Updated: 5A (sidebar toggle, payload handling, voice output, suggestions)
-│   ├── KnowledgeBaseView.vue      # Phase 6
-│   └── DocumentProcessingView.vue # Phase 7
+│   └── KnowledgeBaseView.vue      # Phase 8
 ├── composables/
 │   ├── useStreaming.js             # Phase 2
 │   ├── useSocket.js               # Phase 2

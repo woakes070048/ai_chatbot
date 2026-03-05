@@ -1,0 +1,609 @@
+# Copyright (c) 2026, Sanjay Kumar and contributors
+# For license information, please see license.txt
+"""
+IDP Tools Module — Intelligent Document Processing
+
+Registered tools that the LLM can call to:
+1. Extract structured data from uploaded documents
+2. Create ERPNext records from extracted data
+3. Compare uploaded documents against existing records
+
+These tools use the IDP pipeline: content extraction → LLM semantic mapping →
+validation → record creation/comparison.
+"""
+
+import json
+
+import frappe
+
+from ai_chatbot.core.config import get_default_company
+from ai_chatbot.data.currency import build_currency_response
+from ai_chatbot.data.operations import create_document
+from ai_chatbot.idp.comparison import compare_with_record
+from ai_chatbot.idp.mapper import extract_and_map
+from ai_chatbot.idp.validators import validate_extraction
+from ai_chatbot.tools.registry import register_tool
+
+
+@register_tool(
+	name="extract_document_data",
+	category="idp",
+	description=(
+		"Extract structured data from an uploaded document (invoice, purchase order, "
+		"quotation, receipt) and map it to an ERPNext DocType schema. "
+		"The document can be in any language and any format (PDF, image, Excel, Word). "
+		"Handles non-uniform headers, inconsistent formats, and naming discrepancies. "
+		"Returns the extracted fields for user review BEFORE creating any record. "
+		"IMPORTANT: After extraction, ALWAYS present the results to the user for "
+		"confirmation before calling create_from_extracted_data."
+	),
+	parameters={
+		"file_url": {
+			"type": "string",
+			"description": (
+				"Frappe file URL of the uploaded document "
+				"(e.g., '/private/files/invoice.pdf'). Use the file_url from "
+				"the user's uploaded attachment."
+			),
+		},
+		"target_doctype": {
+			"type": "string",
+			"description": (
+				"ERPNext DocType to map the extracted data to. "
+				"Supported: 'Sales Invoice', 'Purchase Invoice', 'Quotation', "
+				"'Sales Order', 'Purchase Order', 'Delivery Note', 'Purchase Receipt'."
+			),
+		},
+		"company": {
+			"type": "string",
+			"description": "Company name. Optional — omit to use user's default company.",
+		},
+		"output_language": {
+			"type": "string",
+			"description": (
+				"Language for the extracted output values (e.g., 'English', 'Spanish', "
+				"'French'). The document can be in any language — extracted field values "
+				"(item descriptions, terms, remarks, party names) will be translated to "
+				"this language. Default: 'English'."
+			),
+		},
+	},
+	doctypes=[],
+)
+def extract_document_data(file_url=None, target_doctype=None, company=None, output_language=None):
+	"""Extract structured data from an uploaded document.
+
+	Runs the full IDP pipeline:
+	1. Content extraction (PDF text, image base64, Excel/CSV tabular)
+	2. LLM semantic mapping to target DocType schema
+	3. Post-extraction validation (only when strict validation is enabled)
+
+	Returns extraction results for user review.
+	"""
+	if not file_url:
+		return {"error": "file_url is required — specify the uploaded file URL"}
+
+	if not target_doctype:
+		return {"error": "target_doctype is required (e.g., 'Sales Invoice', 'Purchase Invoice')"}
+
+	company = get_default_company(company)
+	output_language = output_language or "English"
+
+	# Step 1 & 2: Extract and map via LLM
+	result = extract_and_map(file_url, target_doctype, company=company, output_language=output_language)
+	if not result.get("success"):
+		return {"error": result.get("error", "Extraction failed")}
+
+	extracted_data = result["extracted_data"]
+
+	# Step 3: Validate only when strict validation is enabled
+	settings = frappe.get_single("Chatbot Settings")
+	strict_validation = getattr(settings, "enable_strict_idp_validation", False)
+
+	if strict_validation:
+		validation = validate_extraction(extracted_data, target_doctype, company=company)
+
+		# Apply resolved links back into extracted data
+		for field_path, resolved_value in validation.get("resolved_links", {}).items():
+			if "[" in field_path:
+				_apply_nested_resolution(extracted_data, field_path, resolved_value)
+			else:
+				extracted_data[field_path] = resolved_value
+
+		return {
+			"extracted_data": extracted_data,
+			"target_doctype": target_doctype,
+			"company": company,
+			"validation": {
+				"valid": validation["valid"],
+				"errors": validation["errors"],
+				"warnings": validation["warnings"],
+			},
+			"resolved_links": validation["resolved_links"],
+			"unmapped_fields": result.get("unmapped_fields", []),
+			"source_file": file_url,
+			"message": (
+				"Data extracted successfully. Please review the extracted fields above. "
+				"If correct, confirm to create the record."
+				if validation["valid"]
+				else "Data extracted with validation errors. Please review and correct."
+			),
+		}
+
+	# No strict validation — return extracted data directly.
+	# ERPNext will handle validation via set_missing_values / set_item_defaults on save.
+	return {
+		"extracted_data": extracted_data,
+		"target_doctype": target_doctype,
+		"company": company,
+		"validation": {"valid": True, "errors": [], "warnings": []},
+		"resolved_links": {},
+		"unmapped_fields": result.get("unmapped_fields", []),
+		"source_file": file_url,
+		"message": (
+			"Data extracted successfully. Please review the extracted fields above. "
+			"If correct, confirm to create the record. "
+			"ERPNext will auto-populate missing defaults during save."
+		),
+	}
+
+
+@register_tool(
+	name="create_from_extracted_data",
+	category="idp",
+	description=(
+		"Create an ERPNext record from previously extracted document data. "
+		"IMPORTANT: Only call this AFTER extract_document_data has been called "
+		"and the user has confirmed the extracted data is correct. "
+		"When Items/Customer/Supplier are missing in ERPNext, ask the user: "
+		"(1) Should I create the missing masters? "
+		"(2) For Items: Is Stock Item?, Is Fixed Asset?, Item Group? "
+		"Then set create_missing_masters='true' and pass item_defaults_json. "
+		"Do NOT call this tool repeatedly with the same data if it fails — "
+		"ask the user for guidance instead."
+	),
+	parameters={
+		"extracted_data_json": {
+			"type": "string",
+			"description": (
+				"JSON string of the extracted data from extract_document_data. "
+				"Pass the full extracted_data object as a JSON string."
+			),
+		},
+		"target_doctype": {
+			"type": "string",
+			"description": "ERPNext DocType to create (must match the extraction target).",
+		},
+		"company": {
+			"type": "string",
+			"description": "Company name. Optional — omit to use user's default company.",
+		},
+		"create_missing_masters": {
+			"type": "string",
+			"description": (
+				"Set to 'true' to auto-create missing Customer, Supplier, Item, and UOM "
+				"records during document creation. Only set this after the user explicitly "
+				"confirms they want masters created. Default: uses Chatbot Settings toggle."
+			),
+		},
+		"item_defaults_json": {
+			"type": "string",
+			"description": (
+				"JSON string with defaults for creating missing Item masters. "
+				'Example: {"is_stock_item": 1, "is_fixed_asset": 0, "item_group": "Consumable"}. '
+				"Ask the user for these values before calling. "
+				"is_stock_item: 1 for physical inventory items, 0 otherwise. "
+				"is_fixed_asset: 1 for fixed assets, 0 otherwise. "
+				"item_group: ERPNext Item Group name."
+			),
+		},
+	},
+	doctypes=[],
+)
+def create_from_extracted_data(
+	extracted_data_json=None,
+	target_doctype=None,
+	company=None,
+	create_missing_masters=None,
+	item_defaults_json=None,
+):
+	"""Create an ERPNext document from extracted and validated data.
+
+	Expects the extracted_data from extract_document_data to be passed
+	as a JSON string. Validates permissions and creates the document.
+
+	When strict IDP validation is enabled, re-validates before creation.
+	Otherwise, relies on ERPNext's built-in validation during doc.insert().
+	"""
+	if not extracted_data_json:
+		return {"error": "extracted_data_json is required"}
+
+	if not target_doctype:
+		return {"error": "target_doctype is required"}
+
+	# Check that write operations are enabled
+	settings = frappe.get_single("Chatbot Settings")
+	if not getattr(settings, "enable_write_operations", False):
+		return {"error": "Write operations are disabled in Chatbot Settings"}
+
+	# Parse the data
+	if isinstance(extracted_data_json, str):
+		try:
+			extracted_data = json.loads(extracted_data_json)
+		except json.JSONDecodeError:
+			return {"error": "Invalid JSON in extracted_data_json"}
+	else:
+		extracted_data = extracted_data_json
+
+	# Parse item defaults
+	item_defaults = {}
+	if item_defaults_json:
+		if isinstance(item_defaults_json, str):
+			try:
+				item_defaults = json.loads(item_defaults_json)
+			except json.JSONDecodeError:
+				pass
+		elif isinstance(item_defaults_json, dict):
+			item_defaults = item_defaults_json
+
+	company = get_default_company(company)
+
+	# Re-validate before creation only when strict validation is enabled
+	strict_validation = getattr(settings, "enable_strict_idp_validation", False)
+	if strict_validation:
+		validation = validate_extraction(extracted_data, target_doctype, company=company)
+		if not validation["valid"]:
+			return {
+				"error": "Validation failed",
+				"validation_errors": validation["errors"],
+				"warnings": validation["warnings"],
+			}
+
+	# Determine whether to auto-create missing masters:
+	# 1. Explicit parameter from LLM (user confirmed) takes priority
+	# 2. Falls back to Chatbot Settings toggle
+	should_auto_create = getattr(settings, "auto_create_idp_masters", False)
+	if create_missing_masters is not None:
+		should_auto_create = str(create_missing_masters).lower() in ("true", "1", "yes")
+
+	created_masters = []
+
+	if should_auto_create:
+		created_masters = _auto_create_missing_masters(
+			extracted_data, target_doctype, company, item_defaults=item_defaults
+		)
+	else:
+		# Check if masters are missing — if so, report them and stop
+		missing_masters = _find_missing_masters(extracted_data, target_doctype, company)
+		if missing_masters:
+			missing_items = [m for m in missing_masters if m["doctype"] == "Item"]
+			missing_parties = [m for m in missing_masters if m["doctype"] in ("Customer", "Supplier")]
+			missing_uoms = [m for m in missing_masters if m["doctype"] == "UOM"]
+			hint_parts = []
+			if missing_parties:
+				names = ", ".join(f"{m['doctype']}: {m['value']}" for m in missing_parties)
+				hint_parts.append(f"Missing: {names}.")
+			if missing_items:
+				names = ", ".join(m["value"] for m in missing_items[:5])
+				hint_parts.append(f"Items not found: {names}.")
+			if missing_uoms:
+				names = ", ".join(m["value"] for m in missing_uoms)
+				hint_parts.append(f"UOMs not found: {names}.")
+
+			return {
+				"error": "Cannot create record — missing master records in ERPNext.",
+				"missing_masters": missing_masters,
+				"action_required": (
+					" ".join(hint_parts) + " Ask the user if they want to create these masters. If yes, "
+					"ask about Item properties (Is Stock Item?, Is Fixed Asset?, Item Group?) "
+					"then call this tool again with create_missing_masters='true' "
+					"and item_defaults_json."
+				),
+			}
+
+	# Create the document using existing create_document infrastructure
+	# ERPNext handles set_missing_values, set_item_defaults, and validate on save
+	try:
+		result = create_document(target_doctype, extracted_data, company=company)
+		if created_masters:
+			result["auto_created_masters"] = created_masters
+		return build_currency_response(result, company)
+	except Exception as e:
+		frappe.log_error(f"IDP record creation error: {e!s}", "AI Chatbot IDP")
+		return {"error": f"Failed to create {target_doctype}: {e!s}"}
+
+
+@register_tool(
+	name="compare_document_with_record",
+	category="idp",
+	description=(
+		"Compare an uploaded document with an existing ERPNext record and highlight "
+		"differences. Useful for reconciliation — e.g., comparing a vendor's invoice "
+		"against a Purchase Order, or a client's PO against a Sales Order. "
+		"First extracts data from the document, then compares field-by-field."
+	),
+	parameters={
+		"file_url": {
+			"type": "string",
+			"description": "Frappe file URL of the uploaded document to compare.",
+		},
+		"doctype": {
+			"type": "string",
+			"description": "ERPNext DocType of the existing record to compare against.",
+		},
+		"docname": {
+			"type": "string",
+			"description": "Name/ID of the existing record to compare against.",
+		},
+		"company": {
+			"type": "string",
+			"description": "Company name. Optional — omit to use user's default company.",
+		},
+	},
+	doctypes=[],
+)
+def compare_document_with_record(file_url=None, doctype=None, docname=None, company=None):
+	"""Compare an uploaded document against an existing ERPNext record.
+
+	Pipeline:
+	1. Extract data from uploaded document using IDP extraction
+	2. Load existing ERPNext record
+	3. Field-by-field comparison
+	4. Return discrepancy report
+	"""
+	if not file_url:
+		return {"error": "file_url is required"}
+	if not doctype:
+		return {"error": "doctype is required"}
+	if not docname:
+		return {"error": "docname is required"}
+
+	company = get_default_company(company)
+
+	# Step 1: Extract data from the uploaded document
+	extraction = extract_and_map(file_url, doctype, company=company)
+	if not extraction.get("success"):
+		return {"error": f"Document extraction failed: {extraction.get('error', 'Unknown error')}"}
+
+	extracted_data = extraction["extracted_data"]
+
+	# Step 2 & 3: Compare with existing record
+	comparison = compare_with_record(extracted_data, doctype, docname)
+	if comparison.get("error"):
+		return comparison
+
+	return {
+		"comparison": comparison,
+		"source_file": file_url,
+		"compared_with": f"{doctype}: {docname}",
+		"message": comparison.get("summary", "Comparison complete."),
+	}
+
+
+def _apply_nested_resolution(data: dict, field_path: str, resolved_value: str) -> None:
+	"""Apply a resolved link value to a nested field path.
+
+	Handles paths like "items[0].item_code" by navigating into
+	the data structure.
+
+	Args:
+		data: The extracted data dict.
+		field_path: Dot-path with array indices (e.g., "items[0].item_code").
+		resolved_value: The resolved value to set.
+	"""
+	import re
+
+	parts = re.split(r"\[(\d+)\]\.", field_path)
+	if len(parts) != 3:
+		return
+
+	array_field = parts[0]
+	index = int(parts[1])
+	child_field = parts[2]
+
+	items = data.get(array_field, [])
+	if isinstance(items, list) and index < len(items):
+		items[index][child_field] = resolved_value
+
+
+# --- Master auto-creation helpers ---
+
+# DocType field → master DocType mapping for common transaction link fields
+_PARTY_FIELD_MAP = {
+	"customer": "Customer",
+	"supplier": "Supplier",
+	"party_name": None,  # resolved by party_type
+}
+
+_ITEM_FIELD = "item_code"
+
+
+def _find_missing_masters(data: dict, target_doctype: str, company: str) -> list[dict]:
+	"""Identify master records referenced in extracted data that don't exist.
+
+	Returns a list of dicts: [{"doctype": "Customer", "value": "Acme Corp"}, ...]
+	"""
+	missing = []
+
+	# Check party (customer/supplier) fields
+	for field, master_dt in _PARTY_FIELD_MAP.items():
+		value = data.get(field)
+		if not value:
+			continue
+		dt = master_dt or _infer_party_doctype(target_doctype)
+		if dt and not frappe.db.exists(dt, value):
+			# Also try by display name
+			name_field = _get_display_name_field(dt)
+			if not name_field or not frappe.db.exists(dt, {name_field: value}):
+				missing.append({"doctype": dt, "value": value})
+
+	# Check items for missing Item records
+	items_table = _get_items_from_data(data)
+	seen_items = set()
+	for item in items_table:
+		item_code = item.get(_ITEM_FIELD)
+		if not item_code or item_code in seen_items:
+			continue
+		seen_items.add(item_code)
+		if not frappe.db.exists("Item", item_code):
+			# Also try by item_name
+			if not frappe.db.exists("Item", {"item_name": item_code}):
+				missing.append({"doctype": "Item", "value": item_code})
+
+	# Check UOM
+	for item in items_table:
+		uom = item.get("uom")
+		if uom and not frappe.db.exists("UOM", uom):
+			missing.append({"doctype": "UOM", "value": uom})
+
+	return missing
+
+
+def _auto_create_missing_masters(
+	data: dict, target_doctype: str, company: str, item_defaults: dict | None = None
+) -> list[str]:
+	"""Auto-create missing master records (Customer, Supplier, Item, UOM).
+
+	Creates minimal records with the extracted name. Returns a list of
+	human-readable descriptions of what was created.
+
+	Args:
+		data: Extracted document data (modified in-place with resolved names).
+		target_doctype: Target ERPNext DocType.
+		company: Company name.
+		item_defaults: Optional dict with Item creation defaults:
+			- is_stock_item (int 0/1, default 0)
+			- is_fixed_asset (int 0/1, default 0)
+			- item_group (str, default from Stock Settings)
+	"""
+	created = []
+	item_defaults = item_defaults or {}
+
+	# Party (Customer / Supplier)
+	for field, master_dt in _PARTY_FIELD_MAP.items():
+		value = data.get(field)
+		if not value:
+			continue
+		dt = master_dt or _infer_party_doctype(target_doctype)
+		if not dt:
+			continue
+
+		# Check if exists by name or display name
+		if frappe.db.exists(dt, value):
+			continue
+		name_field = _get_display_name_field(dt)
+		if name_field:
+			existing = frappe.db.get_value(dt, {name_field: value}, "name")
+			if existing:
+				# Update the data to use the actual record name
+				data[field] = existing
+				continue
+
+		# Create the master
+		try:
+			new_doc = frappe.new_doc(dt)
+			if name_field:
+				new_doc.set(name_field, value)
+			if dt == "Customer":
+				new_doc.customer_type = "Company"
+				new_doc.customer_group = (
+					frappe.db.get_single_value("Selling Settings", "customer_group") or "All Customer Groups"
+				)
+				new_doc.territory = (
+					frappe.db.get_single_value("Selling Settings", "territory") or "All Territories"
+				)
+			elif dt == "Supplier":
+				new_doc.supplier_group = (
+					frappe.db.get_single_value("Buying Settings", "supplier_group") or "All Supplier Groups"
+				)
+			new_doc.insert(ignore_permissions=True)
+			data[field] = new_doc.name
+			created.append(f"{dt}: {new_doc.name}")
+		except Exception as e:
+			frappe.log_error(f"IDP auto-create {dt} '{value}' failed: {e!s}", "AI Chatbot IDP")
+
+	# Resolve item defaults
+	is_stock_item = int(item_defaults.get("is_stock_item", 0))
+	is_fixed_asset = int(item_defaults.get("is_fixed_asset", 0))
+	item_group = item_defaults.get("item_group") or (
+		frappe.db.get_single_value("Stock Settings", "item_group") or "All Item Groups"
+	)
+
+	# Items
+	items_table = _get_items_from_data(data)
+	seen_items = set()
+	for item in items_table:
+		item_code = item.get(_ITEM_FIELD)
+		if not item_code or item_code in seen_items:
+			continue
+		seen_items.add(item_code)
+
+		if frappe.db.exists("Item", item_code):
+			continue
+		# Check by item_name
+		existing = frappe.db.get_value("Item", {"item_name": item_code}, "name")
+		if existing:
+			item[_ITEM_FIELD] = existing
+			continue
+
+		# Create Item with user-specified defaults
+		try:
+			new_item = frappe.new_doc("Item")
+			new_item.item_code = item_code
+			new_item.item_name = item.get("item_name") or item_code
+			new_item.description = item.get("description") or item_code
+			new_item.item_group = item_group
+			new_item.stock_uom = item.get("uom") or "Nos"
+			new_item.is_stock_item = is_stock_item
+			new_item.is_fixed_asset = is_fixed_asset
+			new_item.insert(ignore_permissions=True)
+			item[_ITEM_FIELD] = new_item.name
+			created.append(f"Item: {new_item.name}")
+		except Exception as e:
+			frappe.log_error(f"IDP auto-create Item '{item_code}' failed: {e!s}", "AI Chatbot IDP")
+
+	# UOM
+	for item in items_table:
+		uom = item.get("uom")
+		if uom and not frappe.db.exists("UOM", uom):
+			try:
+				new_uom = frappe.new_doc("UOM")
+				new_uom.uom_name = uom
+				new_uom.insert(ignore_permissions=True)
+				created.append(f"UOM: {uom}")
+			except Exception as e:
+				frappe.log_error(f"IDP auto-create UOM '{uom}' failed: {e!s}", "AI Chatbot IDP")
+
+	if created:
+		frappe.db.commit()
+
+	return created
+
+
+def _infer_party_doctype(target_doctype: str) -> str | None:
+	"""Infer whether the party is a Customer or Supplier from the target DocType."""
+	customer_doctypes = {"Sales Invoice", "Sales Order", "Quotation", "Delivery Note"}
+	supplier_doctypes = {"Purchase Invoice", "Purchase Order", "Purchase Receipt"}
+	if target_doctype in customer_doctypes:
+		return "Customer"
+	if target_doctype in supplier_doctypes:
+		return "Supplier"
+	return None
+
+
+def _get_display_name_field(doctype: str) -> str | None:
+	"""Get the display name field for a DocType."""
+	name_map = {
+		"Customer": "customer_name",
+		"Supplier": "supplier_name",
+		"Item": "item_name",
+	}
+	return name_map.get(doctype)
+
+
+def _get_items_from_data(data: dict) -> list[dict]:
+	"""Extract the items child table from extracted data."""
+	for _key, value in data.items():
+		if isinstance(value, list) and value and isinstance(value[0], dict):
+			return value
+	return []
