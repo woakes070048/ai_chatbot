@@ -254,6 +254,29 @@ def build_system_prompt(conversation_id: str | None = None):
 			"When presenting extracted data, mention any defaults that were applied.\n"
 		)
 
+	# --- Predictive Analytics ---
+	if getattr(settings, "enable_predictive_tools", False):
+		parts.append(
+			"\n## Predictive Analytics\n"
+			"You have access to forecasting and anomaly detection tools. Guidelines:\n"
+			"- **Forecasting tools** (`forecast_demand`, `forecast_revenue`, `forecast_cash_flow`, "
+			"`forecast_by_territory`) use statistical methods (moving averages, exponential "
+			"smoothing, trend analysis) on historical data to project future values.\n"
+			"- **Forecasts require at least 3 months of historical data.** If data is insufficient, "
+			"inform the user how much history is available and suggest waiting.\n"
+			"- Always present the forecasting method used, confidence intervals, and any "
+			"detected trends or seasonality in your response.\n"
+			"- **Confidence intervals:** 80% and 95% bands are provided. Explain to the user "
+			"that wider bands mean more uncertainty.\n"
+			"- **Anomaly detection** (`detect_anomalies`) identifies unusual transactions using "
+			"statistical methods (z-score, IQR). Present flagged anomalies with context "
+			"(amount, date, party) and explain why they were flagged.\n"
+			"- Forecasts are statistical projections, not guarantees. Always include a disclaimer "
+			"that actual results may differ.\n"
+			"- When the user asks about future revenue, demand, or cash flow, proactively use "
+			"the forecast tools rather than extrapolating manually."
+		)
+
 	# --- Write Operations ---
 	write_enabled = getattr(settings, "enable_write_operations", False)
 	if write_enabled:

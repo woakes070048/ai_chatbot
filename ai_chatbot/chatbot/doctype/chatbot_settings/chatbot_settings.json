@@ -26,6 +26,8 @@
   "enable_idp_tools",
   "enable_strict_idp_validation",
   "auto_create_idp_masters",
+  "predictive_section",
+  "enable_predictive_tools",
   "data_operations_section",
   "enable_write_operations",
   "agent_orchestration_section",
@@ -187,6 +189,18 @@
    "fieldname": "auto_create_idp_masters",
    "fieldtype": "Check",
    "label": "Auto Create Missing Masters"
+  },
+  {
+   "fieldname": "predictive_section",
+   "fieldtype": "Section Break",
+   "label": "Predictive Analytics"
+  },
+  {
+   "default": "0",
+   "description": "Enable demand forecasting, revenue projection, cash flow forecasting, and anomaly detection tools. Uses statistical methods (no external ML dependencies required).",
+   "fieldname": "enable_predictive_tools",
+   "fieldtype": "Check",
+   "label": "Enable Predictive Tools"
   },
   {
    "fieldname": "data_operations_section",

@@ -90,8 +90,7 @@ def get_all_tools_schema():
 		tool_doctypes = tool_info.get("doctypes", [])
 		if tool_doctypes:
 			has_perm = all(
-				frappe.has_permission(dt, "read", user=frappe.session.user)
-				for dt in tool_doctypes
+				frappe.has_permission(dt, "read", user=frappe.session.user) for dt in tool_doctypes
 			)
 			if not has_perm:
 				continue
@@ -212,19 +211,14 @@ def _ensure_tools_loaded():
 
 	from ai_chatbot.core.config import is_erpnext_installed, is_hrms_installed
 
-	# ERPNext tools (CRM, selling, buying, finance, inventory, operations)
+	# ERPNext tools (CRM, selling, buying, finance, inventory, operations,
+	# IDP, predictive analytics, session management)
 	if is_erpnext_installed():
 		import ai_chatbot.tools.account
 		import ai_chatbot.tools.buying
-
-		# Phase 5B: Multi-company consolidation tool
 		import ai_chatbot.tools.consolidation
 		import ai_chatbot.tools.crm
-
-		# Phase 6B: Multi-dimensional analytics & GL-based finance
 		import ai_chatbot.tools.finance.analytics
-
-		# Phase 4: Finance tools
 		import ai_chatbot.tools.finance.budget
 		import ai_chatbot.tools.finance.cash_flow
 		import ai_chatbot.tools.finance.cfo
@@ -234,15 +228,15 @@ def _ensure_tools_loaded():
 		import ai_chatbot.tools.finance.ratios
 		import ai_chatbot.tools.finance.receivables
 		import ai_chatbot.tools.finance.working_capital
-
-		# Phase 7: Intelligent Document Processing tools
 		import ai_chatbot.tools.idp
 		import ai_chatbot.tools.operations.create
 		import ai_chatbot.tools.operations.search
 		import ai_chatbot.tools.operations.update
+		import ai_chatbot.tools.predictive.anomaly_detection
+		import ai_chatbot.tools.predictive.cash_flow_forecast
+		import ai_chatbot.tools.predictive.demand_forecast
+		import ai_chatbot.tools.predictive.sales_forecast
 		import ai_chatbot.tools.selling
-
-		# Session context management tools
 		import ai_chatbot.tools.session
 		import ai_chatbot.tools.stock
 

@@ -3861,3 +3861,341 @@ Verifies that complex, multi-step queries trigger the multi-agent pipeline.
 3. **Expected**: The `tokens_used` on the Chatbot Message and `total_tokens` on the Chatbot Conversation reflect the combined usage across classification + planning + analyst steps + synthesis.
 4. Navigate to **Token Usage** (`/app/token-usage`).
 5. **Expected**: A token usage record is created for the orchestrated response.
+
+---
+
+## Phase 9: Predictive Analytics & ML
+
+Phase 9 adds statistical forecasting and anomaly detection tools. Forecasts use moving averages, exponential smoothing, linear regression, and seasonal decomposition — no heavy ML dependencies required. All tools return ECharts visualizations with historical data, forecast projections, and confidence intervals.
+
+### Prerequisites
+
+```bash
+cd ~/frappe-bench
+
+# 1. Run migrations (adds enable_predictive_tools field to Chatbot Settings)
+bench --site $SITE migrate
+
+# 2. Clear cache
+bench --site $SITE clear-cache
+
+# 3. Restart bench
+bench restart
+```
+
+**Data requirements**: Forecasting tools require at least **3 months** of historical data (submitted Sales Invoices, Purchase Invoices, and/or Payment Entries). For seasonal detection, 24+ months of data is ideal. If your test site has limited data, create backdated invoices before testing.
+
+---
+
+### 9.1 Enable Predictive Tools in Chatbot Settings
+
+#### 9.1.1 Enable Predictive Tools
+
+1. Go to **Chatbot Settings** (`/app/chatbot-settings`).
+2. Switch to the **Tools** tab.
+3. Find the **Predictive Analytics** section (between "Document Processing (IDP)" and "Data Operations").
+4. Check **Enable Predictive Tools**.
+5. Save.
+6. **Expected**: The setting saves without errors.
+
+#### 9.1.2 Verify Predictive Tools Are Registered
+
+1. Open a terminal and run:
+   ```bash
+   bench --site $SITE execute "from ai_chatbot.tools.registry import get_all_tools_schema; tools = get_all_tools_schema(); pred = [t['function']['name'] for t in tools if 'forecast' in t['function']['name'] or 'anomal' in t['function']['name']]; print(pred)"
+   ```
+2. **Expected**: Output includes `['forecast_demand', 'forecast_revenue', 'forecast_by_territory', 'forecast_cash_flow', 'detect_anomalies']`.
+
+#### 9.1.3 Verify Forecasting Engine Loads
+
+1. Run:
+   ```bash
+   bench --site $SITE execute "from ai_chatbot.data.forecasting import forecast_time_series, HAS_NUMPY; print('Forecasting engine OK'); print('numpy available:', HAS_NUMPY)"
+   ```
+2. **Expected**: Prints `Forecasting engine OK` and shows whether numpy is available. Both paths (with and without numpy) are functional.
+
+---
+
+### 9.2 Revenue Forecast
+
+Tests the `forecast_revenue` tool — projects future monthly revenue from Sales Invoice history.
+
+#### 9.2.1 Basic Revenue Forecast
+
+1. Open the chatbot at `/ai-chatbot`.
+2. Start a new conversation.
+3. Send:
+   > "Forecast revenue for the next 6 months"
+4. **Expected**:
+   - The AI calls `forecast_revenue` with `months_ahead: 6`.
+   - Response includes:
+     - **Historical summary**: number of months analyzed, average monthly revenue.
+     - **Trend**: "increasing", "decreasing", or "stable".
+     - **Forecasting method**: e.g., "ema" (exponential moving average), "linear", "seasonal", or "sma".
+     - **Monthly forecast table** with predicted revenue and confidence intervals (80% and 95%).
+     - **Total forecasted revenue** for the period.
+     - **Disclaimer** that forecasts are statistical projections, not guarantees.
+   - A **chart** appears showing:
+     - Solid blue line for historical revenue (last 12 months).
+     - Dashed red line for the 6-month forecast, connected to the last historical point.
+     - Semi-transparent shaded band for the 95% confidence interval.
+     - Vertical dashed marker separating historical from forecast.
+
+#### 9.2.2 Short-Term Forecast
+
+1. Send:
+   > "What will our revenue be next month?"
+2. **Expected**: The AI calls `forecast_revenue` with `months_ahead: 1`. Response shows a single month prediction with confidence bands.
+
+#### 9.2.3 Revenue Forecast with Specific Company
+
+1. Send (replace with your company name):
+   > "Forecast revenue for Tara Technologies for the next 3 months"
+2. **Expected**: The AI passes the company name. The response includes the company name and its currency.
+
+---
+
+### 9.3 Demand Forecast
+
+Tests the `forecast_demand` tool — projects future item quantity based on Sales Invoice Item history.
+
+#### 9.3.1 Forecast Demand for a Specific Item
+
+1. Send (replace with an item that has at least 3 months of sales history):
+   > "Forecast demand for [item name] for the next 3 months"
+2. **Expected**:
+   - The AI calls `forecast_demand` with the `item_code`.
+   - Response includes:
+     - **Item code and name** (resolved even if user provided a partial name).
+     - **Historical months** analyzed.
+     - **Trend** and whether seasonality was detected.
+     - **Monthly forecast** with predicted quantities and 80%/95% confidence intervals.
+   - A **chart** showing historical quantity (solid line) and forecast (dashed line) with confidence band.
+
+#### 9.3.2 Fuzzy Item Name Resolution
+
+1. Send a partial item name:
+   > "How much demand will there be for Camera next quarter?"
+2. **Expected**: The AI resolves "Camera" to the actual item code in the system (e.g., "Camera-001") and proceeds with the forecast.
+
+#### 9.3.3 Item Not Found
+
+1. Send:
+   > "Forecast demand for NONEXISTENT-ITEM-XYZ"
+2. **Expected**: The AI reports that the item was not found. No chart is rendered.
+
+#### 9.3.4 Insufficient Data
+
+1. Send a forecast for an item with very few sales (fewer than 3 months):
+   > "Forecast demand for [rarely sold item]"
+2. **Expected**: The AI reports insufficient historical data, states how many months are available, and suggests waiting for more history.
+
+---
+
+### 9.4 Cash Flow Forecast
+
+Tests the `forecast_cash_flow` tool — projects future cash inflows and outflows from Payment Entry history.
+
+#### 9.4.1 Basic Cash Flow Forecast
+
+1. Send:
+   > "Forecast our cash flow for the next 3 months"
+2. **Expected**:
+   - The AI calls `forecast_cash_flow` with `months_ahead: 3`.
+   - Response includes:
+     - **Inflow trend** and **outflow trend** (each independently analyzed).
+     - **Methods used** for inflow and outflow forecasts (may differ).
+     - **Average monthly inflow, outflow, and net** from historical data.
+     - **Monthly forecast table** with projected inflows, outflows, and net cash flow.
+     - **Total projected net** for the forecast period.
+   - A **chart** with 6 series:
+     - Solid green line for historical inflows.
+     - Dashed green line for forecast inflows.
+     - Solid red line for historical outflows.
+     - Dashed red line for forecast outflows.
+     - Solid blue line for historical net cash flow.
+     - Dashed blue line for forecast net cash flow.
+     - Vertical dashed marker at the historical/forecast boundary.
+
+#### 9.4.2 Longer Cash Flow Projection
+
+1. Send:
+   > "Project cash flow for the next 12 months"
+2. **Expected**: The AI calls with `months_ahead: 12`. The chart shows a wider forecast window. Confidence naturally decreases for distant months (wider potential ranges mentioned by the AI).
+
+---
+
+### 9.5 Revenue Forecast by Territory
+
+Tests the `forecast_by_territory` tool — runs separate forecasts for top territories.
+
+#### 9.5.1 Territory Forecast
+
+1. Send:
+   > "Forecast revenue by territory for the next 3 months"
+2. **Expected**:
+   - The AI calls `forecast_by_territory` with `months_ahead: 3`.
+   - Response includes per-territory forecasts for the **top 5 territories** by historical revenue.
+   - Each territory shows:
+     - Territory name, historical revenue, trend, method used.
+     - Monthly forecast values.
+     - Status: "forecasted" or "insufficient_data" (if a territory has too few months).
+   - A **bar chart** comparing forecasted revenue across territories for each future month.
+
+#### 9.5.2 No Territory Data
+
+1. If your data has no territory values set on Sales Invoices:
+   > "Forecast revenue by territory"
+2. **Expected**: The AI reports that no territory data was found and suggests checking Sales Invoice territory assignments.
+
+---
+
+### 9.6 Anomaly Detection
+
+Tests the `detect_anomalies` tool — flags unusual transactions using z-score and IQR methods.
+
+#### 9.6.1 Basic Anomaly Scan
+
+1. Send:
+   > "Detect any unusual transactions this fiscal year"
+2. **Expected**:
+   - The AI calls `detect_anomalies` (defaults to current fiscal year, medium sensitivity).
+   - Response includes:
+     - **Total anomalies** found across Sales Invoices, Purchase Invoices, and Payment Entries.
+     - **Top anomalies** listed with:
+       - Document type and name (e.g., "Sales Invoice SINV-00123").
+       - Date and party name.
+       - Amount and z-score (how far from normal).
+       - Reason (e.g., "unusually_large_amount", "new_customer_large_first_order").
+     - **Summary by type** showing count per doctype.
+   - A **bar chart** showing anomaly counts by doctype.
+
+#### 9.6.2 High Sensitivity Scan
+
+1. Send:
+   > "Scan for anomalies with high sensitivity"
+2. **Expected**: The AI calls with `sensitivity: "high"` (z-threshold: 2.0). More anomalies are detected compared to the default medium (2.5) setting.
+
+#### 9.6.3 Low Sensitivity Scan
+
+1. Send:
+   > "Show me only the most extreme anomalies"
+2. **Expected**: The AI calls with `sensitivity: "low"` (z-threshold: 3.0). Fewer anomalies, only the most extreme outliers.
+
+#### 9.6.4 Date-Restricted Anomaly Scan
+
+1. Send:
+   > "Detect anomalies in January 2026"
+2. **Expected**: The AI passes `from_date: "2026-01-01"` and `to_date: "2026-01-31"`. Only transactions in January are analyzed.
+
+#### 9.6.5 New Party Detection
+
+1. If your data has a recently added customer or supplier with a large first order:
+   > "Check for any suspicious new customers or suppliers this year"
+2. **Expected**: The anomaly detection includes `new_customer_large_first_order` or `new_supplier_large_first_order` entries — parties whose first transaction in the period is unusually large compared to the overall average.
+
+---
+
+### 9.7 Chart Rendering
+
+Verifies that all forecast charts render correctly in the frontend.
+
+#### 9.7.1 Forecast Chart Elements
+
+1. After any forecast response (revenue, demand, or cash flow), inspect the chart:
+   - **Historical line**: Solid, with circular data point markers.
+   - **Forecast line**: Dashed, connected to the last historical data point (no gap).
+   - **Confidence band**: Semi-transparent shaded area in the forecast region.
+   - **Legend**: Shows "Historical", "Forecast", "95% Confidence" labels.
+   - **Tooltip**: Hovering over data points shows exact values.
+   - **Boundary marker**: Vertical dashed line at the boundary between historical and forecast.
+2. **Expected**: All elements render correctly. The chart is interactive (zoom, hover tooltips).
+
+#### 9.7.2 Cash Flow Multi-Series Chart
+
+1. After a cash flow forecast, verify the chart shows:
+   - 6 series in the legend: Inflow, Inflow (forecast), Outflow, Outflow (forecast), Net, Net (forecast).
+   - Historical portions are solid lines; forecast portions are dashed.
+   - The boundary marker is present.
+2. **Expected**: All 6 series are visible with correct colors and line styles.
+
+#### 9.7.3 Territory Bar Chart
+
+1. After a territory forecast, verify:
+   - Bar chart with territories grouped by forecast month.
+   - Each territory has a different color.
+2. **Expected**: Chart renders with correct territory labels and values.
+
+---
+
+### 9.8 Multi-Company Support
+
+Tests that predictive tools respect multi-company settings.
+
+#### 9.8.1 Forecast with Subsidiaries
+
+1. If your setup has a parent company with subsidiaries:
+   > "Include subsidiaries"
+2. Then:
+   > "Forecast revenue for next 3 months"
+3. **Expected**: The AI sets `include_subsidiaries` first, then the forecast aggregates data across the parent and all child companies. The response mentions the company label with subsidiary notation (e.g., "Company A including its subsidiaries").
+
+#### 9.8.2 Forecast for Specific Company
+
+1. Send:
+   > "Forecast cash flow for [child company name] for 3 months"
+2. **Expected**: The forecast runs only for the specified child company, not the parent or other subsidiaries.
+
+---
+
+### 9.9 Edge Cases
+
+#### 9.9.1 Zero-Value Months
+
+1. If an item has months with no sales (zero quantity) between active months:
+   > "Forecast demand for [item with gaps]"
+2. **Expected**: The tool zero-fills the gaps and the forecast handles the sparse data. The chart shows zero-value dips in the historical line.
+
+#### 9.9.2 All-Zero Historical Data
+
+1. For an item with no sales at all:
+   > "Forecast demand for [unsold item]"
+2. **Expected**: Returns an insufficient data error (after trimming leading zeros, no data remains).
+
+#### 9.9.3 Maximum Forecast Horizon
+
+1. Send:
+   > "Forecast revenue for 24 months"
+2. **Expected**: The tool clamps to the maximum of 12 months. The AI should mention that it forecast 12 months (the maximum allowed).
+
+#### 9.9.4 Anomaly Detection with Very Few Transactions
+
+1. Run anomaly detection on a date range with fewer than 5 transactions:
+   > "Detect anomalies from March 1 to March 5, 2026"
+2. **Expected**: The tool returns gracefully — no anomalies detected (needs at least 5 data points for meaningful z-score analysis). No errors.
+
+---
+
+### 9.10 Toggle Test — Disable Predictive Tools
+
+1. Navigate to **Chatbot Settings** → **Tools** tab.
+2. Uncheck **Enable Predictive Tools** and save.
+3. Send:
+   > "Forecast revenue for next 3 months"
+4. **Expected**: The AI does NOT call any forecast tools. Instead, it responds conversationally (e.g., "I don't currently have access to forecasting tools...").
+5. Re-enable the setting for further testing.
+
+---
+
+### 9.11 Verify System Prompt
+
+1. With predictive tools enabled, check the system prompt includes the predictive analytics section:
+   ```bash
+   bench --site $SITE execute "from ai_chatbot.core.prompts import build_system_prompt; prompt = build_system_prompt(); print('Predictive Analytics' in prompt)"
+   ```
+2. **Expected**: Prints `True`.
+3. Disable predictive tools and run again:
+   ```bash
+   bench --site $SITE execute "from ai_chatbot.core.prompts import build_system_prompt; prompt = build_system_prompt(); print('Predictive Analytics' in prompt)"
+   ```
+4. **Expected**: Prints `False`.

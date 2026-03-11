@@ -65,3 +65,16 @@ class DocumentValidationError(ChatbotError):
 		self.errors = errors
 		msg = f"Validation failed for {doctype}: {', '.join(errors)}"
 		super().__init__(msg, error_code="DOCUMENT_VALIDATION_ERROR")
+
+
+class InsufficientDataError(ChatbotError):
+	"""Raised when there is not enough historical data for forecasting"""
+
+	def __init__(self, required_months, available_months):
+		self.required_months = required_months
+		self.available_months = available_months
+		super().__init__(
+			f"Insufficient historical data for forecasting. "
+			f"Need at least {required_months} months, but only {available_months} available.",
+			error_code="INSUFFICIENT_DATA",
+		)

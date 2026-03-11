@@ -30,7 +30,13 @@ TOOL_CATEGORIES = {
 	"hrms": "enable_hrms_tools",
 	"operations": "enable_write_operations",
 	"idp": "enable_idp_tools",
+	"predictive": "enable_predictive_tools",
 }
+
+# Predictive analytics defaults
+MAX_FORECAST_MONTHS = 12
+DEFAULT_FORECAST_MONTHS = 3
+MIN_FORECAST_HISTORY = 3
 
 # Base amount fields for multi-currency support
 # Maps doctype to the field that holds the company-currency amount
