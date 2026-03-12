@@ -472,7 +472,7 @@ def _get_conversation_history(conversation_id: str) -> list[dict]:
 		if msg.role == "user" and msg.attachments:
 			try:
 				atts = json.loads(msg.attachments) if isinstance(msg.attachments, str) else msg.attachments
-			except json.JSONDecodeError, TypeError:
+			except (json.JSONDecodeError, TypeError):
 				atts = None
 
 			if atts:

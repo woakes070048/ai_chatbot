@@ -150,23 +150,15 @@ ai_chatbot_tool_modules = []
 # Scheduled Tasks
 # ---------------
 
-# scheduler_events = {
-# 	"all": [
-# 		"ai_chatbot.tasks.all"
-# 	],
-# 	"daily": [
-# 		"ai_chatbot.tasks.daily"
-# 	],
-# 	"hourly": [
-# 		"ai_chatbot.tasks.hourly"
-# 	],
-# 	"weekly": [
-# 		"ai_chatbot.tasks.weekly"
-# 	],
-# 	"monthly": [
-# 		"ai_chatbot.tasks.monthly"
-# 	],
-# }
+scheduler_events = {
+	"cron": {
+		# Run every 15 minutes — checks which reports are actually due
+		# based on their individual schedule configuration.
+		"*/15 * * * *": [
+			"ai_chatbot.automation.scheduled_reports.run_scheduled_reports",
+		],
+	},
+}
 
 # Testing
 # -------
@@ -256,4 +248,3 @@ ai_chatbot_tool_modules = []
 # ------------
 # List of apps whose translatable strings should be excluded from this app's translations.
 # ignore_translatable_strings_from = []
-

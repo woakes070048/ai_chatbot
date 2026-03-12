@@ -143,7 +143,7 @@ def build_vision_content(message_text: str, attachments: list[dict] | str) -> li
 	if isinstance(attachments, str):
 		try:
 			attachments = json.loads(attachments)
-		except json.JSONDecodeError, TypeError:
+		except (json.JSONDecodeError, TypeError):
 			return [{"type": "text", "text": message_text}]
 
 	if not attachments:

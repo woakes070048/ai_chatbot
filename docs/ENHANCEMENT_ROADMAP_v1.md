@@ -1551,86 +1551,160 @@ ai_chatbot/tools/predictive/
 
 ---
 
-## Phase 10: Automation & Notifications
+## Phase 10: Automation — Scheduled Reports via Email ✅ Done
 
-**Goal:** Scheduled reports, alerts, automated workflows, and auto-email triggered by chat or conditions.
+**Goal:** AI-generated scheduled reports delivered via email on configurable schedules.
 
 ### 10.1 Auto Email & Scheduled Reports
 
-**Files:** `ai_chatbot/automation/scheduled_reports.py`, new DocType: `Chatbot Scheduled Report`
+**Files:**
+- `ai_chatbot/automation/scheduled_reports.py` — scheduler entry point, schedule evaluation, report execution
+- `ai_chatbot/automation/executor.py` — headless AI execution engine (multi-round tool loop)
+- `ai_chatbot/automation/formatters.py` — HTML email/PDF formatting, markdown preprocessing, ECharts SSR (SVG for PDF, HTML table for email)
+- `ai_chatbot/automation/echart_ssr.cjs` — Node.js ECharts server-side SVG renderer (no browser required)
+- `ai_chatbot/automation/notifications/dispatcher.py` — email dispatch routing
+- `ai_chatbot/automation/notifications/channels/email.py` — email sending via `frappe.sendmail()`
+- `ai_chatbot/core/ai_utils.py` — shared AI response parsing (extracted from `chat.py`)
 
-**Chatbot Scheduled Report** DocType:
-- `report_name` (Data) — user-defined name
-- `prompt` (Text) — the prompt to execute (e.g., "Generate a weekly sales summary with top customers and revenue trend")
-- `recipients` (Table — child: email, user) — who receives the report
-- `schedule` (Select) — Daily / Weekly / Monthly / Custom Cron
-- `day_of_week` (Select) — for weekly (Monday–Sunday)
-- `day_of_month` (Int) — for monthly
-- `cron_expression` (Data) — for custom cron
-- `company` (Link: Company) — company context for the report
-- `ai_provider` (Select) — which AI to use
-- `format` (Select) — Email HTML / PDF attachment / Both
-- `enabled` (Check) — active/inactive toggle
-- `last_run` (Datetime) — last execution timestamp
+**Chatbot Scheduled Report** DocType (`autoname: format:CSR-{#####}`):
+- **Report Configuration tab:**
+  - `report_name` (Data, required) — user-defined name
+  - `prompt` (Text, required) — the prompt to execute
+  - `company` (Link: Company, required) — company context for the report
+  - `format` (Select) — Email HTML / PDF / Both (default: Email HTML)
+  - `enabled` (Check, default: 1) — active/inactive toggle
+- **Schedule tab:**
+  - `schedule` (Select, required) — Daily / Weekly / Monthly / Custom Cron
+  - `time_of_day` (Time, default: 08:00) — server timezone
+  - `day_of_week` (Select, depends_on: Weekly) — Monday–Sunday
+  - `day_of_month` (Int, depends_on: Monthly) — 1–28
+  - `cron_expression` (Data, depends_on: Custom Cron) — standard cron format
+- **Recipients tab:**
+  - `recipients` (Table: Chatbot Report Recipient, required) — email recipients
+  - `sender` (Link: Email Account) — optional sender override; defaults to system outgoing account
+- **Execution Status section (read-only):**
+  - `last_run`, `last_run_status` (Success/Failed), `run_count`, `last_error`
+
+**Chatbot Report Recipient** child table DocType:
+- `recipient_email` (Data, Email, required) — email address
+- `user` (Link: User) — optional Frappe user reference
+
+**AI Provider:** Always uses the global AI provider configured in Chatbot Settings (no per-report override).
 
 **Execution flow:**
-1. Scheduler triggers based on schedule
-2. System builds conversation context (system prompt + company + user)
-3. Sends prompt to AI with tools enabled
-4. Captures response (text + charts + tool results)
-5. Formats as HTML email (renders markdown, embeds chart images)
-6. Sends via `frappe.sendmail()`
+1. Frappe scheduler runs `run_scheduled_reports()` every 15 minutes via cron
+2. Checks `enable_automation` master toggle in Chatbot Settings
+3. Queries all enabled reports and evaluates each schedule (Daily/Weekly/Monthly/Custom Cron)
+4. Due reports are enqueued as background jobs (`frappe.enqueue`, queue="long", timeout=600)
+5. Each job runs `execute_prompt()` — headless AI with multi-round tool calling as Administrator
+6. Response is formatted as styled HTML — separate versions for email and PDF
+7. For PDF: charts rendered as inline SVG via ECharts SSR (Node.js, `echart_ssr.cjs`)
+8. For email: charts rendered as styled HTML tables (Gmail strips SVG and corrupts base64 data URIs)
+9. Email is dispatched via `frappe.sendmail()` with optional sender (Email Account) override
+10. Report status is updated (last_run, last_run_status, run_count, last_error)
 
-**Chart embedding in email:**
-- ECharts renders to PNG on the server side (use `echarts` npm with `node-canvas` or save chart snapshots)
-- Alternative: include chart data as inline HTML tables for email clients that don't render images
+**Chart rendering strategy:**
+- **PDF:** ECharts option → Node.js SSR → inline SVG (works in wkhtmltopdf and Chrome)
+- **Email:** ECharts option → styled HTML table with inline CSS (universal email client support)
+- `echart_ssr.cjs` uses ECharts 6.0 SSR mode (`renderer: 'svg', ssr: true`) — no browser/DOM required
+- `_svg_to_png_img()` via ImageMagick is available but unused (Gmail corrupts large base64 data URIs)
+- Supports all chart types: bar, line, pie, horizontal bar, multi-series, stacked bar
 
-### 10.2 Alert System
+**Markdown preprocessing:**
+- AI models sometimes write inline bullet lists (`text * item1 * item2`) which `markdown2` doesn't parse as lists
+- `_fix_markdown_lists()` preprocessor reformats inline `*` items with proper newlines before HTML conversion
+- Ensures consistent rendering between chatbot frontend (`marked.js`) and email/PDF (`markdown2`)
 
-**Files:** `ai_chatbot/automation/alerts.py`, new DocType: `Chatbot Alert`
+### 10.2 Shared AI Utilities
 
-**Chatbot Alert** DocType:
-- `alert_name` (Data)
-- `condition_type` (Select) — Threshold / Schedule / Event
-- `condition_prompt` (Text) — natural language condition (e.g., "When accounts receivable exceeds 500,000")
-- `threshold_tool` (Data) — tool to call for threshold checks
-- `threshold_field` (Data) — field to check in tool result
-- `threshold_operator` (Select) — `>`, `<`, `>=`, `<=`, `=`
-- `threshold_value` (Float)
-- `notification_channels` (Table) — Email / WhatsApp / Slack / In-App
-- `recipients` (Table) — users/emails
-- `company` (Link: Company)
-- `enabled` (Check)
+**`ai_chatbot/core/ai_utils.py`** — extracted from `chat.py` for reuse by the automation executor:
+- `is_openai_format(provider_name)` — returns True for OpenAI/Gemini format
+- `extract_response(provider_name, response)` — extracts content, tool_calls, token counts
+- `extract_tool_info(provider_name, tool_call)` — extracts func_name and func_args
 
-**Example alerts:**
-- "Notify me when receivables exceed 500,000" → calls `get_receivable_aging`, checks `total_outstanding > 500000`
-- "Alert when stock of Camera falls below 10" → calls `get_inventory_summary` with item filter
-- "Send weekly sales summary every Monday" → scheduled report (see 9.1)
+Both `chat.py` and `executor.py` import from this shared module.
 
-### 10.3 Notification Channels
+### 10.3 Settings
 
+**Chatbot Settings** — Automation tab:
+- `enable_automation` (Check, default: 0) — master toggle for all scheduled report execution
+
+### 10.4 Scheduler Configuration
+
+**`hooks.py`:**
+```python
+scheduler_events = {
+    "cron": {
+        "*/15 * * * *": [
+            "ai_chatbot.automation.scheduled_reports.run_scheduled_reports",
+        ],
+    },
+}
 ```
-ai_chatbot/automation/notifications/
-├── __init__.py
-├── channels/
-│   ├── email.py               # Email via frappe.sendmail
-│   ├── whatsapp.py            # WhatsApp via Twilio (already a dependency)
-│   └── slack.py               # Slack webhook integration
-└── dispatcher.py              # Routes alerts to appropriate channels
-```
 
-### 10.4 Deliverables
+### 10.5 Deliverables
 
 | Item | Files |
 |------|-------|
 | Scheduled reports | `automation/scheduled_reports.py`, `Chatbot Scheduled Report` DocType |
-| Alert engine | `automation/alerts.py`, `Chatbot Alert` DocType |
-| Notifications | `automation/notifications/channels/email.py`, `whatsapp.py`, `slack.py` |
+| Headless executor | `automation/executor.py` |
+| HTML formatters | `automation/formatters.py` (markdown fix, dual email/PDF rendering) |
+| ECharts SSR | `automation/echart_ssr.cjs` (Node.js SVG renderer for PDF charts) |
+| Email channel | `automation/notifications/channels/email.py` |
 | Dispatcher | `automation/notifications/dispatcher.py` |
-| Hooks | Updated `hooks.py` with scheduler_events |
-| Settings | Alert/report configuration in Chatbot Settings |
+| Shared AI utils | `core/ai_utils.py` |
+| Hooks | Updated `hooks.py` with scheduler_events (cron every 15 min) |
+| Settings | `enable_automation` toggle in Chatbot Settings Automation tab |
+| Run Now button | `chatbot_scheduled_report.js` (manual trigger from form UI) |
 
-**New dependencies:** `slack_sdk` (optional, for Slack integration). Twilio already present.
+**New dependencies:** None. Uses only existing Frappe email infrastructure.
+
+---
+
+## Phase 11: PDF Export from Chat (Planned)
+
+**Goal:** Allow users to export any AI chatbot response (including tables and charts) as a downloadable PDF directly from the chat interface.
+
+### 11.1 Backend — PDF Generation API
+
+**New file:** `ai_chatbot/api/export.py`
+
+```python
+@frappe.whitelist()
+def export_message_pdf(message_name: str) -> dict:
+    """Generate a PDF from a Chatbot Message and return the file URL."""
+```
+
+**Approach:**
+- Accept a `Chatbot Message` name (or conversation_id + message range)
+- Render the message content (markdown → HTML) with inline-styled tables
+- Convert ECharts option dicts to HTML tables (reuse `automation/formatters.py` utilities)
+- Generate PDF via `frappe.utils.pdf.get_pdf()` (wkhtmltopdf)
+- Save as a Frappe File attachment and return the file URL for download
+
+**Key considerations:**
+- Reuse `_style_html_tables()`, `_echart_to_html_table()`, and `_echart_to_svg()` from `automation/formatters.py`
+- For PDF: use `format_html_email(for_pdf=True)` for inline SVG charts
+- Include report header with conversation title, date, company
+- Support exporting a single message or a full conversation thread
+
+### 11.2 Frontend — Download Button
+
+**Updated files:** `frontend/src/components/ChatMessage.vue`
+
+- Add a "Download PDF" icon button on assistant messages (next to existing action buttons)
+- On click, call `export_message_pdf` API → receive file URL → trigger browser download
+- Show loading spinner while PDF generates
+
+### 11.3 Deliverables
+
+| Item | Files |
+|------|-------|
+| PDF export API | `api/export.py` |
+| Frontend button | `ChatMessage.vue` (download icon) |
+| Shared formatters | Reuse from `automation/formatters.py` |
+
+**New dependencies:** None (uses existing `frappe.utils.pdf` / wkhtmltopdf).
 
 ---
 
@@ -1650,9 +1724,10 @@ ai_chatbot/automation/notifications/
 | **6B** | Multi-Dim Analytics | Medium | ✅ Done | Hierarchical grouping, GL Entry finance, BI cards, sidebar/greeting refinements | None |
 | **6C** | Workspace & Help | Low | ✅ Done | Frappe workspace, help button, language selector | None |
 | **7** | IDP | Medium | ✅ Done | Document extraction, schema mapping, comparison/reconciliation | pypdf, openpyxl, python-docx (opt) |
-| **8** | Agentic RAG | Medium | Planned | Vector search + multi-agent orchestration + memory | chromadb |
-| **9** | Predictive | Low | Planned | Forecasting, anomaly detection | pandas, numpy, prophet (opt) |
-| **10** | Automation | Low | Planned | Auto-email, scheduled reports, alerts, notifications | slack_sdk (opt) |
+| **8** | Multi-Agent | Medium | ✅ Done | Multi-agent orchestration for complex queries | None |
+| **9** | Predictive | Low | ✅ Done | Forecasting, anomaly detection | None (statistical methods) |
+| **10** | Automation | Low | ✅ Done | Scheduled reports via email, headless AI executor | None |
+| **11** | PDF Export | Low | Planned | Download chat responses as PDF from chat UI | None |
 
 ---
 
@@ -1825,11 +1900,12 @@ The current architecture already supports several future-proofing patterns:
 ```
 ai_chatbot/
 ├── core/                          # Phase 1
+│   ├── ai_utils.py                # Phase 10 (shared AI response parsing for chat + automation)
 │   ├── config.py                  # Updated: Phase 5B (configurable constants)
-│   ├── constants.py               # Updated: Phase 5B (dynamic categories)
+│   ├── constants.py               # Updated: Phase 5B (dynamic categories), 10 (AUTOMATION_MAX_TOOL_ROUNDS)
 │   ├── exceptions.py
 │   ├── logger.py
-│   ├── prompts.py                 # Updated: Phase 5B (configurable prompts, dimensions, consolidation)
+│   ├── prompts.py                 # Updated: Phase 5B (configurable prompts), 10 (optional company param)
 │   ├── dimensions.py              # Phase 5B (accounting dimension helpers)
 │   └── consolidation.py           # Phase 5B (parent company consolidation)
 │
@@ -1910,24 +1986,24 @@ ai_chatbot/
 │       ├── knowledge_memory.py
 │       └── memory_manager.py
 │
-├── automation/                    # Phase 9
-│   ├── scheduled_reports.py
-│   ├── alerts.py
+├── automation/                    # Phase 10
+│   ├── echart_ssr.cjs             # Node.js ECharts SSR → SVG (for PDF charts)
+│   ├── executor.py                # Headless AI execution engine
+│   ├── formatters.py              # HTML email/PDF formatting, markdown fixes, chart rendering
+│   ├── scheduled_reports.py       # Scheduler entry point, schedule evaluation
 │   └── notifications/
 │       ├── channels/
-│       │   ├── email.py
-│       │   ├── whatsapp.py
-│       │   └── slack.py
-│       └── dispatcher.py
+│       │   └── email.py           # Email via frappe.sendmail
+│       └── dispatcher.py          # Email dispatch routing
 │
 ├── chatbot/                       # Frappe DocTypes (expanded across phases)
 │   └── doctype/
-│       ├── chatbot_settings/      # Updated: 5A, 5B (prompts, constants), 7 (enable_idp_tools)
+│       ├── chatbot_settings/      # Updated: 5A, 5B (prompts, constants), 7 (IDP), 10 (enable_automation)
 │       ├── chatbot_conversation/
 │       ├── chatbot_message/       # Updated: 4 (tool_results), 5A (attachments)
 │       ├── chatbot_knowledge_base/    # Phase 8
-│       ├── chatbot_scheduled_report/  # Phase 10
-│       └── chatbot_alert/             # Phase 10
+│       ├── chatbot_scheduled_report/  # Phase 10 (autoname: CSR-{#####})
+│       └── chatbot_report_recipient/  # Phase 10 (child table)
 │
 └── tests/                         # All phases
     ├── unit/

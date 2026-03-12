@@ -16,7 +16,7 @@ import frappe
 
 from ai_chatbot.ai.agents.context import AgentContext, AgentStep
 from ai_chatbot.ai.agents.prompts import get_analyst_prompt
-from ai_chatbot.api.chat import _extract_response, _extract_tool_info, _is_openai_format
+from ai_chatbot.core.ai_utils import extract_response, extract_tool_info
 from ai_chatbot.tools.base import BaseTool
 
 # Analyst gets fewer tool rounds than the main flow (3 vs 5)
@@ -60,7 +60,7 @@ def execute_step(
 		for _round in range(MAX_TOOL_ROUNDS):
 			response = provider.chat_completion(messages, tools=tools, stream=False)
 
-			round_content, tool_calls, prompt_tokens, completion_tokens = _extract_response(
+			round_content, tool_calls, prompt_tokens, completion_tokens = extract_response(
 				ai_provider, response
 			)
 			content = round_content
@@ -79,7 +79,7 @@ def execute_step(
 			)
 
 			for i, tool_call in enumerate(tool_calls):
-				func_name, func_args = _extract_tool_info(ai_provider, tool_call)
+				func_name, func_args = extract_tool_info(ai_provider, tool_call)
 				result = BaseTool.execute_tool(func_name, func_args)
 
 				step.tool_calls.append({"name": func_name, "arguments": func_args})
@@ -152,7 +152,7 @@ def execute_step_streaming(
 		for _round in range(MAX_TOOL_ROUNDS):
 			response = provider.chat_completion(messages, tools=tools, stream=False)
 
-			round_content, tool_calls, prompt_tokens, completion_tokens = _extract_response(
+			round_content, tool_calls, prompt_tokens, completion_tokens = extract_response(
 				ai_provider, response
 			)
 			content = round_content
@@ -170,7 +170,7 @@ def execute_step_streaming(
 			)
 
 			for i, tool_call in enumerate(tool_calls):
-				func_name, func_args = _extract_tool_info(ai_provider, tool_call)
+				func_name, func_args = extract_tool_info(ai_provider, tool_call)
 
 				# Publish tool call event
 				tool_display = func_name.replace("_", " ").title()

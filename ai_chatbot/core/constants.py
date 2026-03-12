@@ -63,5 +63,8 @@ TRANSACTION_AMOUNT_FIELDS = {
 	"Purchase Receipt": "grand_total",
 }
 
+# Automation defaults
+AUTOMATION_MAX_TOOL_ROUNDS = 5
+
 # Logging title prefix
 LOG_TITLE = "AI Chatbot"

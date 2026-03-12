@@ -4199,3 +4199,354 @@ Tests that predictive tools respect multi-company settings.
    bench --site $SITE execute "from ai_chatbot.core.prompts import build_system_prompt; prompt = build_system_prompt(); print('Predictive Analytics' in prompt)"
    ```
 4. **Expected**: Prints `False`.
+
+---
+
+## Phase 10 — Automation: Scheduled Reports via Email
+
+### Prerequisites
+
+- `bench --site $SITE migrate` (creates the new DocTypes)
+- Chatbot Settings → **Automation** tab → check **Enable Automation**
+- A working outgoing email account configured in Frappe (ERPNext → Setup → Email Account)
+- AI provider configured and working (Chatbot Settings → API Configuration)
+- At least one Company with transactional data
+
+### 10.1 DocType Creation & Migration
+
+1. Run `bench --site $SITE migrate`.
+2. Verify DocTypes exist:
+   ```bash
+   bench --site $SITE execute "import frappe; print(frappe.db.exists('DocType', 'Chatbot Scheduled Report'))"
+   bench --site $SITE execute "import frappe; print(frappe.db.exists('DocType', 'Chatbot Report Recipient'))"
+   ```
+3. **Expected**: Both print the DocType name (truthy).
+
+### 10.2 Create a Scheduled Report
+
+1. Navigate to **Chatbot Scheduled Report** → **New**.
+2. Fill in:
+   - **Report Name**: "Daily Sales Summary"
+   - **Prompt**: "Give me a summary of yesterday's sales including top 5 customers and total revenue."
+   - **Company**: Select your company
+   - **Schedule**: Daily
+   - **Time of Day**: Set to a time a few minutes from now (for testing)
+3. In the Recipients tab, add at least one email address.
+4. Save.
+5. **Expected**: Document saves with name `CSR-00001`. Enabled is checked by default.
+
+### 10.3 Validation — Schedule Fields
+
+1. Create a new report with **Schedule** = "Weekly" but leave **Day of Week** blank. Save.
+2. **Expected**: Validation error: "Day of Week is required for weekly schedule."
+3. Set **Schedule** = "Monthly" with **Day of Month** = 0 or 29. Save.
+4. **Expected**: Validation error: "Day of Month must be between 1 and 28."
+5. Set **Schedule** = "Custom Cron" with **Cron Expression** = "invalid". Save.
+6. **Expected**: Validation error about invalid cron expression (if `croniter` is available).
+7. Set **Schedule** = "Custom Cron" with **Cron Expression** = "0 9 * * 1". Save.
+8. **Expected**: Saves successfully.
+
+### 10.4 Validation — Recipients
+
+1. Create a new report with all fields filled except the Recipients table (leave empty). Save.
+2. **Expected**: Validation error: "At least one recipient is required."
+
+### 10.5 Sender Field
+
+1. Open a Chatbot Scheduled Report.
+2. In the Recipients tab, the **Sender** field should show as a Link to Email Account.
+3. Leave it blank.
+4. **Expected**: Saves successfully. When the report runs, it will use the default outgoing email account.
+5. Set it to a valid Email Account.
+6. **Expected**: Saves successfully. The sender email will be resolved from this Email Account.
+
+### 10.6 Enable Automation Toggle
+
+1. Navigate to **Chatbot Settings** → **Automation** tab.
+2. Uncheck **Enable Automation** and save.
+3. Run the scheduler manually:
+   ```bash
+   bench --site $SITE execute "ai_chatbot.automation.scheduled_reports.run_scheduled_reports"
+   ```
+4. **Expected**: Returns immediately with no output (no reports processed because automation is disabled).
+5. Re-check **Enable Automation** and save.
+
+### 10.7 Schedule Evaluation — Daily
+
+1. Create a report with **Schedule** = "Daily", **Time of Day** = a time that has already passed today, **Enabled** = checked.
+2. Run:
+   ```bash
+   bench --site $SITE execute "ai_chatbot.automation.scheduled_reports.run_scheduled_reports"
+   ```
+3. **Expected**: The report is enqueued for execution. Check the background jobs:
+   ```bash
+   bench --site $SITE execute "import frappe; jobs = frappe.get_all('RQ Job', filters={'job_name': ['like', '%execute_single_report%']}, limit=5, order_by='creation desc'); print(jobs)"
+   ```
+4. After the job completes, reload the report document.
+5. **Expected**: `last_run` is set to the current timestamp, `last_run_status` = "Success", `run_count` = 1.
+6. Run the scheduler again immediately.
+7. **Expected**: The report is NOT enqueued again (already ran today).
+
+### 10.8 Schedule Evaluation — Weekly
+
+1. Create a report with **Schedule** = "Weekly", **Day of Week** = today's day name (e.g., "Tuesday"), **Time of Day** = a past time.
+2. Run the scheduler.
+3. **Expected**: Report is enqueued and executes.
+4. Create another report with **Day of Week** = a different day (not today).
+5. Run the scheduler.
+6. **Expected**: This report is NOT enqueued (wrong day).
+
+### 10.9 Schedule Evaluation — Monthly
+
+1. Create a report with **Schedule** = "Monthly", **Day of Month** = today's day number (e.g., 11 for the 11th), **Time of Day** = a past time.
+2. Run the scheduler.
+3. **Expected**: Report is enqueued and executes.
+
+### 10.10 Schedule Evaluation — Custom Cron
+
+1. Create a report with **Schedule** = "Custom Cron", **Cron Expression** = `* * * * *` (every minute).
+2. Run the scheduler.
+3. **Expected**: Report is enqueued and executes (cron matches every minute, so always due).
+
+### 10.11 Email Delivery
+
+1. Create a daily report with a real email recipient (your own email).
+2. Use a prompt like: "Give me a summary of this month's sales including total revenue and top 3 customers."
+3. Wait for the scheduler to run (or run manually).
+4. **Expected**: You receive an HTML email with:
+   - A styled header showing the report name, date, and company
+   - The AI's analysis in formatted HTML (converted from markdown)
+   - Any data tables (ECharts converted to HTML tables)
+   - A footer noting the auto-generation
+
+### 10.12 Email with Sender Override
+
+1. Create or edit a report. Set the **Sender** field to a specific Email Account.
+2. Run the report.
+3. **Expected**: The received email shows the sender as the email address from the selected Email Account, not the system default.
+
+### 10.13 Headless AI Executor
+
+1. Test the executor directly:
+   ```bash
+   bench --site $SITE execute "from ai_chatbot.automation.executor import execute_prompt; result = execute_prompt(prompt='What is the total revenue this month?', company='Your Company Name'); print(result.get('content', '')[:200]); print('Tool calls:', len(result.get('tool_calls', []))); print('Tokens:', result.get('tokens_used', 0))"
+   ```
+2. **Expected**: Returns a dict with `content` (AI text response), `tool_calls` (list of tools used), `tool_results` (data from tools), and `tokens_used` (positive integer).
+3. The executor should have called at least one ERPNext tool (e.g., `get_sales_analytics`).
+
+### 10.14 Executor — AI Provider from Settings
+
+1. Check that the executor reads AI provider from Chatbot Settings:
+   ```bash
+   bench --site $SITE execute "from ai_chatbot.automation.executor import execute_prompt; result = execute_prompt(prompt='Hello, what company am I in?', company='Your Company Name', tools_enabled=False); print(result.get('content', '')[:200])"
+   ```
+2. **Expected**: Returns an AI response mentioning the company name. No tool calls (tools_enabled=False).
+
+### 10.15 HTML Formatter — ECharts to Table (Email)
+
+1. Test the email formatter with mock ECharts data:
+   ```bash
+   bench --site $SITE execute "
+   from ai_chatbot.automation.formatters import format_html_email
+   tool_results = [{'success': True, 'data': {'echart_option': {'title': {'text': 'Monthly Sales'}, 'xAxis': {'type': 'category', 'data': ['Jan', 'Feb', 'Mar']}, 'yAxis': {'type': 'value'}, 'series': [{'name': 'Revenue', 'type': 'bar', 'data': [10000, 15000, 12000]}]}}}]
+   html = format_html_email(content='## Summary\nSales are trending upward.', tool_results=tool_results, report_name='Test Report', company='Test Co', for_pdf=False)
+   print('Monthly Sales' in html, 'Jan' in html, '10,000' in html, 'Test Report' in html)
+   print('Has SVG:', '<svg' in html)
+   print('Has table:', '<table' in html)
+   "
+   ```
+2. **Expected**: First line prints `True True True True`. `Has SVG: False`. `Has table: True`.
+3. Email output uses HTML tables for charts (not SVG, because Gmail strips SVG).
+
+### 10.16 HTML Formatter — Pie Chart (Email)
+
+1. Test pie chart conversion:
+   ```bash
+   bench --site $SITE execute "
+   from ai_chatbot.automation.formatters import format_html_email
+   tool_results = [{'success': True, 'data': {'echart_option': {'title': {'text': 'Revenue by Region'}, 'series': [{'type': 'pie', 'data': [{'name': 'North', 'value': 50000}, {'name': 'South', 'value': 30000}]}]}}}]
+   html = format_html_email(content='Pie chart test', tool_results=tool_results, report_name='Pie Test', for_pdf=False)
+   print('North' in html, '50,000' in html, 'South' in html, '30,000' in html)
+   "
+   ```
+2. **Expected**: Prints `True True True True`.
+
+### 10.16a HTML Formatter — SVG Chart (PDF)
+
+1. Test the PDF formatter renders SVG charts:
+   ```bash
+   bench --site $SITE execute "
+   from ai_chatbot.automation.formatters import format_html_email
+   tool_results = [{'success': True, 'data': {'echart_option': {'title': {'text': 'Monthly Sales'}, 'xAxis': {'type': 'category', 'data': ['Jan', 'Feb', 'Mar']}, 'yAxis': {'type': 'value'}, 'series': [{'name': 'Revenue', 'type': 'bar', 'data': [10000, 15000, 12000]}]}}}]
+   html = format_html_email(content='## Summary\nSales are trending upward.', tool_results=tool_results, report_name='Test Report', company='Test Co', for_pdf=True)
+   print('Has SVG:', '<svg' in html)
+   print('Has chart title:', 'Monthly Sales' in html)
+   "
+   ```
+2. **Expected**: `Has SVG: True`, `Has chart title: True`.
+3. PDF output uses inline SVG for charts (rendered via Node.js ECharts SSR).
+
+### 10.16b HTML Formatter — Colorized Data
+
+1. Test with colorized bar chart data (as produced by `build_bar_chart`):
+   ```bash
+   bench --site $SITE execute "
+   from ai_chatbot.automation.formatters import _echart_to_html_table
+   option = {'title': {'text': 'Test'}, 'xAxis': {'type': 'category', 'data': ['A', 'B']}, 'yAxis': {'type': 'value'}, 'series': [{'name': 'Val', 'type': 'bar', 'data': [{'value': 100, 'itemStyle': {'color': '#5470c6'}}, {'value': 200, 'itemStyle': {'color': '#91cc75'}}]}]}
+   html = _echart_to_html_table(option)
+   print('100.00' in html, '200.00' in html)
+   "
+   ```
+2. **Expected**: Prints `True True` — colorized dicts are correctly unwrapped to their numeric values.
+
+### 10.16c HTML Formatter — Markdown List Fixing
+
+1. Test inline bullet point preprocessing:
+   ```bash
+   bench --site $SITE execute "
+   from ai_chatbot.automation.formatters import _fix_markdown_lists
+   test = '**Recommendations:** * **Item 1:** Details about item 1. * **Item 2:** Details about item 2. * **Item 3:** Details about item 3.'
+   fixed = _fix_markdown_lists(test)
+   import frappe
+   html = frappe.utils.md_to_html(fixed)
+   print('Has <ul>:', '<ul>' in html)
+   print('Has <li>:', '<li>' in html)
+   print('Item count:', html.count('<li>'))
+   "
+   ```
+2. **Expected**: `Has <ul>: True`, `Has <li>: True`, `Item count: 3`.
+3. Inline `* item` patterns are reformatted with proper newlines so `markdown2` renders them as `<ul><li>` lists.
+
+### 10.16d Run Now Button
+
+1. Open any Chatbot Scheduled Report (existing, saved document).
+2. **Expected**: A "Run Now" button appears in the form toolbar.
+3. Click the "Run Now" button.
+4. **Expected**: A confirmation dialog appears: "This will execute the report immediately and email the results. Continue?"
+5. Click "Yes".
+6. **Expected**: A blue message appears: "Report <name> has been queued for execution."
+7. After the background job completes, reload the form.
+8. **Expected**: `last_run` is updated, `last_run_status` = "Success", `run_count` incremented.
+
+### 10.16e Run Now — Disabled Report
+
+1. Open a Chatbot Scheduled Report and uncheck **Enabled**. Save.
+2. Click "Run Now".
+3. **Expected**: Error message: "Cannot run a disabled report. Please enable it first."
+
+### 10.16f Output Format "Both" — Email + PDF
+
+1. Create a scheduled report with **Format** = "Both" and a data-producing prompt (e.g., "Show me accounts receivable aging").
+2. Run it (via "Run Now" or scheduler).
+3. **Expected**:
+   - Email arrives with: styled table from AI markdown, chart as HTML table, bullet points as proper lists
+   - PDF attachment is included with: styled table, chart as SVG (visual bar/pie/line chart), bullet points as lists
+   - Both email and PDF show the same data (derived from the same AI response)
+
+### 10.16g Output Format "PDF" — PDF Only
+
+1. Create a scheduled report with **Format** = "PDF".
+2. Run it.
+3. **Expected**:
+   - Email body is a minimal message: "Please find the attached report: <name>"
+   - PDF attachment contains the full formatted report with SVG charts
+
+### 10.17 Report Failure Handling
+
+1. Create a report with an intentionally bad prompt or configuration that will cause the AI to fail (e.g., if the API key is invalid for a test).
+2. Or simulate by temporarily corrupting the AI provider setting.
+3. Run the scheduler.
+4. **Expected**: The report's `last_run_status` = "Failed", `last_error` contains the error message (truncated to 500 chars). An Error Log entry is created in Frappe.
+
+### 10.18 Shared AI Utils — chat.py Integration
+
+1. Verify that the normal chat still works after the `ai_utils` extraction:
+   - Open the AI Chatbot interface
+   - Send a message: "What are my top 5 customers?"
+2. **Expected**: The chatbot responds normally with tool calls and formatted results. The extraction to `ai_utils.py` did not break the chat flow.
+
+### 10.19 Scheduler Hook Verification
+
+1. Verify the scheduler event is registered:
+   ```bash
+   bench --site $SITE execute "
+   from ai_chatbot.hooks import scheduler_events
+   cron = scheduler_events.get('cron', {})
+   tasks = cron.get('*/15 * * * *', [])
+   print('scheduled_reports' in str(tasks))
+   print(len(tasks))
+   "
+   ```
+2. **Expected**: Prints `True` and `1` (only the scheduled_reports function, no alerts).
+
+### 10.20 Disabled Report
+
+1. Open a Chatbot Scheduled Report and uncheck **Enabled**.
+2. Run the scheduler.
+3. **Expected**: The report is NOT enqueued (filtered out by `enabled: 1` query).
+
+---
+
+### 10.21 Edge Cases
+
+#### 10.21.1 Report with No Tool Results
+
+1. Create a report with a prompt that produces only text (no tool calls):
+   - Prompt: "Write a brief greeting message for the finance team."
+2. **Expected**: Email is sent with just the text content, no chart tables. No errors.
+
+#### 10.21.2 Multiple Recipients
+
+1. Create a report with 3+ recipients in the table.
+2. Run the report.
+3. **Expected**: All recipients receive the email.
+
+#### 10.21.3 Concurrent Reports
+
+1. Create 3 reports that are all due at the same time (Daily, past time_of_day).
+2. Run the scheduler.
+3. **Expected**: All 3 are enqueued as separate background jobs. Each executes independently. If one fails, the others still complete.
+
+#### 10.21.4 Custom Cron with Croniter Not Installed
+
+1. If `croniter` is not installed, create a Custom Cron report.
+2. **Expected**: The cron expression validation is skipped (no error on save). At runtime, `_is_cron_due()` returns False (fails gracefully).
+
+#### 10.21.5 ECharts SSR — Node.js Not Found
+
+1. Test graceful fallback when Node.js is not available:
+   ```bash
+   bench --site $SITE execute "
+   from ai_chatbot.automation.formatters import _echart_to_svg
+   import ai_chatbot.automation.formatters as f
+   original = f._find_node
+   f._find_node = lambda: None  # Simulate missing node
+   result = _echart_to_svg({'title': {'text': 'Test'}, 'series': [{'type': 'bar', 'data': [1]}]})
+   f._find_node = original
+   print('Result:', result)
+   "
+   ```
+2. **Expected**: Returns `None` (no crash). An Error Log entry is created: "Node.js not found in PATH".
+
+#### 10.21.6 ECharts SSR — SVG Rendering
+
+1. Test the Node.js SSR script directly:
+   ```bash
+   echo '{"title":{"text":"Test"},"xAxis":{"type":"category","data":["A","B"]},"yAxis":{"type":"value"},"series":[{"type":"bar","data":[10,20]}]}' | NODE_PATH=$(find /home -path "*/ai_chatbot/frontend/node_modules" 2>/dev/null | head -1) node $(find /home -name "echart_ssr.cjs" -path "*/automation/*" 2>/dev/null | head -1)
+   ```
+2. **Expected**: Outputs an SVG string starting with `<svg width="700" height="400"...`.
+
+#### 10.21.7 Gemini Streaming — Missing Index Field
+
+1. If using Gemini as AI provider, send a message that triggers tool calls (e.g., "What are today's sales?").
+2. **Expected**: No `KeyError: 'index'` error. The response streams and completes normally.
+3. This tests the fix in `ai_providers.py` where `tc.get("index", i)` handles Gemini's omission of the index field.
+
+---
+
+### 10.22 Settings Tab Verification
+
+1. Navigate to **Chatbot Settings**.
+2. **Expected**: The **Automation** tab exists after the Streaming tab.
+3. The tab contains only the **Enable Automation** checkbox.
+4. There are NO Twilio or Slack fields in the Automation tab.

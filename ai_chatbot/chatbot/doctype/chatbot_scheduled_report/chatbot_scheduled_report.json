@@ -1,0 +1,223 @@
+{
+ "actions": [],
+ "autoname": "format:CSR-{#####}",
+ "creation": "2026-03-11 12:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "report_config_tab",
+  "report_name",
+  "prompt",
+  "company",
+  "column_break_config",
+  "format",
+  "enabled",
+  "schedule_tab",
+  "schedule_section",
+  "schedule",
+  "time_of_day",
+  "column_break_schedule",
+  "day_of_week",
+  "day_of_month",
+  "cron_expression",
+  "recipients_tab",
+  "recipients_section",
+  "recipients",
+  "sender_section",
+  "sender",
+  "status_section",
+  "last_run",
+  "last_run_status",
+  "column_break_status",
+  "run_count",
+  "last_error"
+ ],
+ "fields": [
+  {
+   "fieldname": "report_config_tab",
+   "fieldtype": "Tab Break",
+   "label": "Report Configuration"
+  },
+  {
+   "fieldname": "report_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Report Name",
+   "reqd": 1
+  },
+  {
+   "description": "The prompt to send to the AI. Example: 'Give me a summary of yesterday's sales including top 5 customers and total revenue.'",
+   "fieldname": "prompt",
+   "fieldtype": "Text",
+   "label": "Prompt",
+   "reqd": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_config",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Email HTML",
+   "fieldname": "format",
+   "fieldtype": "Select",
+   "label": "Output Format",
+   "options": "Email HTML\nPDF\nBoth"
+  },
+  {
+   "default": "1",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Enabled"
+  },
+  {
+   "fieldname": "schedule_tab",
+   "fieldtype": "Tab Break",
+   "label": "Schedule"
+  },
+  {
+   "fieldname": "schedule_section",
+   "fieldtype": "Section Break",
+   "label": "Schedule Configuration"
+  },
+  {
+   "fieldname": "schedule",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Schedule",
+   "options": "Daily\nWeekly\nMonthly\nCustom Cron",
+   "reqd": 1
+  },
+  {
+   "default": "08:00",
+   "description": "Time to run the report (server timezone).",
+   "fieldname": "time_of_day",
+   "fieldtype": "Time",
+   "label": "Time of Day"
+  },
+  {
+   "fieldname": "column_break_schedule",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "eval:doc.schedule=='Weekly'",
+   "fieldname": "day_of_week",
+   "fieldtype": "Select",
+   "label": "Day of Week",
+   "options": "\nMonday\nTuesday\nWednesday\nThursday\nFriday\nSaturday\nSunday"
+  },
+  {
+   "depends_on": "eval:doc.schedule=='Monthly'",
+   "description": "1\u201328. Use 1 for the first of the month.",
+   "fieldname": "day_of_month",
+   "fieldtype": "Int",
+   "label": "Day of Month"
+  },
+  {
+   "depends_on": "eval:doc.schedule=='Custom Cron'",
+   "description": "Standard cron format: minute hour day month weekday. Example: '0 9 * * 1' for every Monday at 9 AM.",
+   "fieldname": "cron_expression",
+   "fieldtype": "Data",
+   "label": "Cron Expression"
+  },
+  {
+   "fieldname": "recipients_tab",
+   "fieldtype": "Tab Break",
+   "label": "Recipients"
+  },
+  {
+   "fieldname": "recipients_section",
+   "fieldtype": "Section Break",
+   "label": "Email Recipients"
+  },
+  {
+   "fieldname": "recipients",
+   "fieldtype": "Table",
+   "label": "Recipients",
+   "options": "Chatbot Report Recipient",
+   "reqd": 1
+  },
+  {
+   "fieldname": "sender_section",
+   "fieldtype": "Section Break",
+   "label": "Sender"
+  },
+  {
+   "description": "Email Account used as the sender. Leave blank to use the system default outgoing email account.",
+   "fieldname": "sender",
+   "fieldtype": "Link",
+   "label": "Sender",
+   "options": "Email Account"
+  },
+  {
+   "fieldname": "status_section",
+   "fieldtype": "Section Break",
+   "label": "Execution Status"
+  },
+  {
+   "fieldname": "last_run",
+   "fieldtype": "Datetime",
+   "label": "Last Run",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_run_status",
+   "fieldtype": "Select",
+   "label": "Last Run Status",
+   "options": "\nSuccess\nFailed",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_status",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "run_count",
+   "fieldtype": "Int",
+   "label": "Total Runs",
+   "read_only": 1
+  },
+  {
+   "depends_on": "eval:doc.last_run_status=='Failed'",
+   "fieldname": "last_error",
+   "fieldtype": "Small Text",
+   "label": "Last Error",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-03-11 13:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Chatbot",
+ "name": "Chatbot Scheduled Report",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

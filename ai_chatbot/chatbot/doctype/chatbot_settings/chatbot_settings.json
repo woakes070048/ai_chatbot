@@ -1,422 +1,366 @@
 {
- "actions": [],
- "allow_rename": 1,
- "creation": "2024-01-29 12:00:00",
- "doctype": "DocType",
- "editable_grid": 1,
- "engine": "InnoDB",
- "field_order": [
-  "api_config_tab",
-  "ai_provider",
-  "api_key",
-  "model",
-  "column_break_api",
-  "temperature",
-  "max_tokens",
-  "max_context_messages",
-  "tools_tab",
-  "erpnext_tools_section",
-  "enable_crm_tools",
-  "enable_sales_tools",
-  "enable_purchase_tools",
-  "enable_finance_tools",
-  "enable_inventory_tools",
-  "enable_hrms_tools",
-  "idp_section",
-  "enable_idp_tools",
-  "enable_strict_idp_validation",
-  "auto_create_idp_masters",
-  "predictive_section",
-  "enable_predictive_tools",
-  "data_operations_section",
-  "enable_write_operations",
-  "agent_orchestration_section",
-  "enable_agent_orchestration",
-  "query_config_tab",
-  "query_config_section",
-  "default_query_limit",
-  "default_top_n_limit",
-  "column_break_query",
-  "max_query_limit",
-  "prompts_tab",
-  "prompt_config_section",
-  "ai_persona",
-  "response_language",
-  "column_break_prompt",
-  "custom_system_prompt",
-  "custom_instructions",
-  "streaming_tab",
-  "streaming_section",
-  "enable_streaming",
-  "legacy_section",
-  "openai_enabled",
-  "openai_api_key",
-  "openai_model",
-  "openai_temperature",
-  "openai_max_tokens",
-  "claude_enabled",
-  "claude_api_key",
-  "claude_model",
-  "claude_temperature",
-  "claude_max_tokens"
- ],
- "fields": [
-  {
-   "fieldname": "api_config_tab",
-   "fieldtype": "Tab Break",
-   "label": "API Configuration"
-  },
-  {
-   "default": "OpenAI",
-   "description": "Select the AI provider for chat completions.",
-   "fieldname": "ai_provider",
-   "fieldtype": "Select",
-   "in_list_view": 1,
-   "label": "AI Provider",
-   "options": "OpenAI\nClaude\nGemini",
-   "reqd": 1
-  },
-  {
-   "description": "API key for the selected provider. Stored encrypted.",
-   "fieldname": "api_key",
-   "fieldtype": "Data",
-   "in_list_view": 1,
-   "label": "API Key",
-   "reqd": 1
-  },
-  {
-   "description": "Model name. Defaults per provider \u2014 OpenAI: gpt-4o, Claude: claude-sonnet-4-5-20250929, Gemini: gemini-2.5-flash.",
-   "fieldname": "model",
-   "fieldtype": "Data",
-   "label": "Model"
-  },
-  {
-   "fieldname": "column_break_api",
-   "fieldtype": "Column Break"
-  },
-  {
-   "default": "0.7",
-   "description": "Controls randomness (0.0 = deterministic, 1.0 = creative).",
-   "fieldname": "temperature",
-   "fieldtype": "Float",
-   "label": "Temperature"
-  },
-  {
-   "default": "4000",
-   "description": "Maximum tokens in the AI response.",
-   "fieldname": "max_tokens",
-   "fieldtype": "Int",
-   "label": "Max Tokens"
-  },
-  {
-   "default": "20",
-   "description": "Maximum number of conversation messages sent as context to the AI. Older messages are trimmed. Set to 0 for unlimited.",
-   "fieldname": "max_context_messages",
-   "fieldtype": "Int",
-   "label": "Max Context Messages"
-  },
-  {
-   "fieldname": "tools_tab",
-   "fieldtype": "Tab Break",
-   "label": "Tools"
-  },
-  {
-   "fieldname": "erpnext_tools_section",
-   "fieldtype": "Section Break",
-   "label": "ERPNext Tools Configuration"
-  },
-  {
-   "default": "1",
-   "fieldname": "enable_crm_tools",
-   "fieldtype": "Check",
-   "label": "Enable CRM Tools"
-  },
-  {
-   "default": "1",
-   "fieldname": "enable_sales_tools",
-   "fieldtype": "Check",
-   "label": "Enable Sales Tools"
-  },
-  {
-   "default": "1",
-   "fieldname": "enable_purchase_tools",
-   "fieldtype": "Check",
-   "label": "Enable Purchase Tools"
-  },
-  {
-   "default": "1",
-   "fieldname": "enable_finance_tools",
-   "fieldtype": "Check",
-   "label": "Enable Finance Tools"
-  },
-  {
-   "default": "1",
-   "fieldname": "enable_inventory_tools",
-   "fieldtype": "Check",
-   "label": "Enable Inventory Tools"
-  },
-  {
-   "default": "1",
-   "description": "Enable HR & Payroll analytics tools. Requires HRMS app to be installed.",
-   "fieldname": "enable_hrms_tools",
-   "fieldtype": "Check",
-   "label": "Enable HRMS Tools"
-  },
-  {
-   "fieldname": "idp_section",
-   "fieldtype": "Section Break",
-   "label": "Document Processing (IDP)"
-  },
-  {
-   "default": "0",
-   "description": "Enable Intelligent Document Processing \u2014 extract structured data from uploaded documents (invoices, POs, receipts) and create ERPNext records. Requires pypdf, openpyxl, and python-docx packages.",
-   "fieldname": "enable_idp_tools",
-   "fieldtype": "Check",
-   "label": "Enable IDP Tools"
-  },
-  {
-   "default": "0",
-   "depends_on": "eval:doc.enable_idp_tools",
-   "description": "When enabled, IDP validates extracted data (required fields, link resolution, business rules) before creating records. When disabled, ERPNext handles validation during document save \u2014 this is usually sufficient as ERPNext auto-populates missing values via set_missing_values and set_item_defaults.",
-   "fieldname": "enable_strict_idp_validation",
-   "fieldtype": "Check",
-   "label": "Enable Strict IDP Validation"
-  },
-  {
-   "default": "0",
-   "depends_on": "eval:doc.enable_idp_tools",
-   "description": "When enabled, IDP automatically creates missing master records (Customer, Supplier, Item, UOM) from extracted data during document creation. When disabled, reports missing masters and asks the user to create them manually.",
-   "fieldname": "auto_create_idp_masters",
-   "fieldtype": "Check",
-   "label": "Auto Create Missing Masters"
-  },
-  {
-   "fieldname": "predictive_section",
-   "fieldtype": "Section Break",
-   "label": "Predictive Analytics"
-  },
-  {
-   "default": "0",
-   "description": "Enable demand forecasting, revenue projection, cash flow forecasting, and anomaly detection tools. Uses statistical methods (no external ML dependencies required).",
-   "fieldname": "enable_predictive_tools",
-   "fieldtype": "Check",
-   "label": "Enable Predictive Tools"
-  },
-  {
-   "fieldname": "data_operations_section",
-   "fieldtype": "Section Break",
-   "label": "Data Operations"
-  },
-  {
-   "default": "0",
-   "description": "Allow the AI assistant to create and update records in ERPNext (e.g. create leads, update opportunity status). The AI will always ask for confirmation before making changes.",
-   "fieldname": "enable_write_operations",
-   "fieldtype": "Check",
-   "label": "Enable Write Operations"
-  },
-  {
-   "fieldname": "agent_orchestration_section",
-   "fieldtype": "Section Break",
-   "label": "Agent Orchestration"
-  },
-  {
-   "default": "0",
-   "description": "Enable multi-agent orchestration for complex queries. When enabled, complex queries are automatically decomposed into sub-tasks and executed step-by-step by specialized agents. This uses additional LLM calls and tokens but produces more comprehensive analysis for multi-dimensional queries.",
-   "fieldname": "enable_agent_orchestration",
-   "fieldtype": "Check",
-   "label": "Enable Agent Orchestration"
-  },
-  {
-   "fieldname": "query_config_tab",
-   "fieldtype": "Tab Break",
-   "label": "Query Configuration"
-  },
-  {
-   "fieldname": "query_config_section",
-   "fieldtype": "Section Break",
-   "label": "Query Limits"
-  },
-  {
-   "default": "20",
-   "description": "Default number of records returned by tools. Set to 0 to use system default (20).",
-   "fieldname": "default_query_limit",
-   "fieldtype": "Int",
-   "label": "Default Query Limit"
-  },
-  {
-   "default": "10",
-   "description": "Default limit for ranking/top-N tools (e.g. top customers, top debtors). Set to 0 to use system default (10).",
-   "fieldname": "default_top_n_limit",
-   "fieldtype": "Int",
-   "label": "Default Top-N Limit"
-  },
-  {
-   "fieldname": "column_break_query",
-   "fieldtype": "Column Break"
-  },
-  {
-   "default": "100",
-   "description": "Maximum number of records any tool can return, regardless of requested limit.",
-   "fieldname": "max_query_limit",
-   "fieldtype": "Int",
-   "label": "Max Query Limit"
-  },
-  {
-   "fieldname": "prompts_tab",
-   "fieldtype": "Tab Break",
-   "label": "Prompts"
-  },
-  {
-   "fieldname": "prompt_config_section",
-   "fieldtype": "Section Break",
-   "label": "Prompt Configuration"
-  },
-  {
-   "description": "Custom AI persona description. Leave blank for default: 'an intelligent ERPNext business assistant'.",
-   "fieldname": "ai_persona",
-   "fieldtype": "Small Text",
-   "label": "AI Persona"
-  },
-  {
-   "description": "Preferred language for AI responses.",
-   "fieldname": "response_language",
-   "fieldtype": "Select",
-   "label": "Response Language",
-   "options": "\nEnglish\nHindi\nSpanish\nFrench\nGerman\nPortuguese\nArabic\nChinese\nJapanese\nKorean"
-  },
-  {
-   "fieldname": "column_break_prompt",
-   "fieldtype": "Column Break"
-  },
-  {
-   "description": "Additional system prompt instructions appended to the default prompt. Use this for domain-specific or company-specific guidelines.",
-   "fieldname": "custom_system_prompt",
-   "fieldtype": "Text Editor",
-   "label": "Custom System Prompt"
-  },
-  {
-   "description": "Additional behavioral instructions for the AI assistant (e.g. tone, formatting preferences).",
-   "fieldname": "custom_instructions",
-   "fieldtype": "Text Editor",
-   "label": "Custom Instructions"
-  },
-  {
-   "fieldname": "streaming_tab",
-   "fieldtype": "Tab Break",
-   "label": "Streaming"
-  },
-  {
-   "fieldname": "streaming_section",
-   "fieldtype": "Section Break",
-   "label": "Streaming Configuration"
-  },
-  {
-   "default": "1",
-   "description": "Enable real-time token streaming for AI responses. When enabled, responses are delivered word-by-word via WebSocket instead of waiting for the full response.",
-   "fieldname": "enable_streaming",
-   "fieldtype": "Check",
-   "label": "Enable Streaming"
-  },
-  {
-   "fieldname": "legacy_section",
-   "fieldtype": "Section Break",
-   "hidden": 1,
-   "label": "Legacy Fields (Hidden)"
-  },
-  {
-   "default": "0",
-   "fieldname": "openai_enabled",
-   "fieldtype": "Check",
-   "hidden": 1,
-   "label": "Enable OpenAI (Legacy)"
-  },
-  {
-   "fieldname": "openai_api_key",
-   "fieldtype": "Data",
-   "hidden": 1,
-   "label": "OpenAI API Key (Legacy)"
-  },
-  {
-   "default": "gpt-4o",
-   "fieldname": "openai_model",
-   "fieldtype": "Select",
-   "hidden": 1,
-   "label": "OpenAI Model (Legacy)",
-   "options": "gpt-4o\ngpt-4o-mini\ngpt-4-turbo\ngpt-3.5-turbo"
-  },
-  {
-   "default": "0.7",
-   "fieldname": "openai_temperature",
-   "fieldtype": "Float",
-   "hidden": 1,
-   "label": "Temperature (Legacy)"
-  },
-  {
-   "default": "4000",
-   "fieldname": "openai_max_tokens",
-   "fieldtype": "Int",
-   "hidden": 1,
-   "label": "Max Tokens (Legacy)"
-  },
-  {
-   "default": "0",
-   "fieldname": "claude_enabled",
-   "fieldtype": "Check",
-   "hidden": 1,
-   "label": "Enable Claude (Legacy)"
-  },
-  {
-   "fieldname": "claude_api_key",
-   "fieldtype": "Data",
-   "hidden": 1,
-   "label": "Claude API Key (Legacy)"
-  },
-  {
-   "default": "claude-sonnet-4-5-20250929",
-   "fieldname": "claude_model",
-   "fieldtype": "Select",
-   "hidden": 1,
-   "label": "Claude Model (Legacy)",
-   "options": "claude-opus-4-5-20251101\nclaude-sonnet-4-5-20250929\nclaude-haiku-4-5-20251001"
-  },
-  {
-   "default": "0.7",
-   "fieldname": "claude_temperature",
-   "fieldtype": "Float",
-   "hidden": 1,
-   "label": "Temperature (Legacy)"
-  },
-  {
-   "default": "4000",
-   "fieldname": "claude_max_tokens",
-   "fieldtype": "Int",
-   "hidden": 1,
-   "label": "Max Tokens (Legacy)"
-  }
- ],
- "index_web_pages_for_search": 1,
- "issingle": 1,
- "links": [],
- "modified": "2026-03-05 10:00:00.000000",
- "modified_by": "Administrator",
- "module": "Chatbot",
- "name": "Chatbot Settings",
- "owner": "Administrator",
- "permissions": [
-  {
-   "create": 1,
-   "delete": 1,
-   "email": 1,
-   "print": 1,
-   "read": 1,
-   "role": "System Manager",
-   "share": 1,
-   "write": 1
-  }
- ],
- "row_format": "Dynamic",
- "sort_field": "modified",
- "sort_order": "DESC",
- "states": [],
- "track_changes": 1
+	"actions": [],
+	"allow_rename": 1,
+	"creation": "2024-01-29 12:00:00",
+	"doctype": "DocType",
+	"editable_grid": 1,
+	"engine": "InnoDB",
+	"field_order": [
+		"api_config_tab",
+		"ai_provider",
+		"api_key",
+		"model",
+		"column_break_api",
+		"temperature",
+		"max_tokens",
+		"max_context_messages",
+		"tools_tab",
+		"erpnext_tools_section",
+		"enable_crm_tools",
+		"enable_sales_tools",
+		"enable_purchase_tools",
+		"enable_finance_tools",
+		"enable_inventory_tools",
+		"enable_hrms_tools",
+		"idp_section",
+		"enable_idp_tools",
+		"enable_strict_idp_validation",
+		"auto_create_idp_masters",
+		"predictive_section",
+		"enable_predictive_tools",
+		"data_operations_section",
+		"enable_write_operations",
+		"agent_orchestration_section",
+		"enable_agent_orchestration",
+		"query_config_tab",
+		"query_config_section",
+		"default_query_limit",
+		"default_top_n_limit",
+		"column_break_query",
+		"max_query_limit",
+		"prompts_tab",
+		"prompt_config_section",
+		"ai_persona",
+		"response_language",
+		"column_break_prompt",
+		"custom_system_prompt",
+		"custom_instructions",
+		"streaming_tab",
+		"streaming_section",
+		"enable_streaming",
+		"automation_tab",
+		"automation_section",
+		"enable_automation",
+		"legacy_section",
+		"openai_enabled",
+		"openai_api_key",
+		"openai_model",
+		"openai_temperature",
+		"openai_max_tokens",
+		"claude_enabled",
+		"claude_api_key",
+		"claude_model",
+		"claude_temperature",
+		"claude_max_tokens"
+	],
+	"fields": [
+		{"fieldname": "api_config_tab", "fieldtype": "Tab Break", "label": "API Configuration"},
+		{
+			"default": "OpenAI",
+			"description": "Select the AI provider for chat completions.",
+			"fieldname": "ai_provider",
+			"fieldtype": "Select",
+			"in_list_view": 1,
+			"label": "AI Provider",
+			"options": "OpenAI\nClaude\nGemini",
+			"reqd": 1
+		},
+		{
+			"description": "API key for the selected provider. Stored encrypted.",
+			"fieldname": "api_key",
+			"fieldtype": "Data",
+			"in_list_view": 1,
+			"label": "API Key",
+			"reqd": 1
+		},
+		{
+			"description": "Model name. Defaults per provider \u2014 OpenAI: gpt-4o, Claude: claude-sonnet-4-5-20250929, Gemini: gemini-2.5-flash.",
+			"fieldname": "model",
+			"fieldtype": "Data",
+			"label": "Model"
+		},
+		{"fieldname": "column_break_api", "fieldtype": "Column Break"},
+		{
+			"default": "0.7",
+			"description": "Controls randomness (0.0 = deterministic, 1.0 = creative).",
+			"fieldname": "temperature",
+			"fieldtype": "Float",
+			"label": "Temperature"
+		},
+		{
+			"default": "4000",
+			"description": "Maximum tokens in the AI response.",
+			"fieldname": "max_tokens",
+			"fieldtype": "Int",
+			"label": "Max Tokens"
+		},
+		{
+			"default": "20",
+			"description": "Maximum number of conversation messages sent as context to the AI. Older messages are trimmed. Set to 0 for unlimited.",
+			"fieldname": "max_context_messages",
+			"fieldtype": "Int",
+			"label": "Max Context Messages"
+		},
+		{"fieldname": "tools_tab", "fieldtype": "Tab Break", "label": "Tools"},
+		{
+			"fieldname": "erpnext_tools_section",
+			"fieldtype": "Section Break",
+			"label": "ERPNext Tools Configuration"
+		},
+		{"default": "1", "fieldname": "enable_crm_tools", "fieldtype": "Check", "label": "Enable CRM Tools"},
+		{
+			"default": "1",
+			"fieldname": "enable_sales_tools",
+			"fieldtype": "Check",
+			"label": "Enable Sales Tools"
+		},
+		{
+			"default": "1",
+			"fieldname": "enable_purchase_tools",
+			"fieldtype": "Check",
+			"label": "Enable Purchase Tools"
+		},
+		{
+			"default": "1",
+			"fieldname": "enable_finance_tools",
+			"fieldtype": "Check",
+			"label": "Enable Finance Tools"
+		},
+		{
+			"default": "1",
+			"fieldname": "enable_inventory_tools",
+			"fieldtype": "Check",
+			"label": "Enable Inventory Tools"
+		},
+		{
+			"default": "1",
+			"description": "Enable HR & Payroll analytics tools. Requires HRMS app to be installed.",
+			"fieldname": "enable_hrms_tools",
+			"fieldtype": "Check",
+			"label": "Enable HRMS Tools"
+		},
+		{"fieldname": "idp_section", "fieldtype": "Section Break", "label": "Document Processing (IDP)"},
+		{
+			"default": "0",
+			"description": "Enable Intelligent Document Processing \u2014 extract structured data from uploaded documents (invoices, POs, receipts) and create ERPNext records. Requires pypdf, openpyxl, and python-docx packages.",
+			"fieldname": "enable_idp_tools",
+			"fieldtype": "Check",
+			"label": "Enable IDP Tools"
+		},
+		{
+			"default": "0",
+			"depends_on": "eval:doc.enable_idp_tools",
+			"description": "When enabled, IDP validates extracted data (required fields, link resolution, business rules) before creating records. When disabled, ERPNext handles validation during document save \u2014 this is usually sufficient as ERPNext auto-populates missing values via set_missing_values and set_item_defaults.",
+			"fieldname": "enable_strict_idp_validation",
+			"fieldtype": "Check",
+			"label": "Enable Strict IDP Validation"
+		},
+		{
+			"default": "0",
+			"depends_on": "eval:doc.enable_idp_tools",
+			"description": "When enabled, IDP automatically creates missing master records (Customer, Supplier, Item, UOM) from extracted data during document creation. When disabled, reports missing masters and asks the user to create them manually.",
+			"fieldname": "auto_create_idp_masters",
+			"fieldtype": "Check",
+			"label": "Auto Create Missing Masters"
+		},
+		{"fieldname": "predictive_section", "fieldtype": "Section Break", "label": "Predictive Analytics"},
+		{
+			"default": "0",
+			"description": "Enable demand forecasting, revenue projection, cash flow forecasting, and anomaly detection tools. Uses statistical methods (no external ML dependencies required).",
+			"fieldname": "enable_predictive_tools",
+			"fieldtype": "Check",
+			"label": "Enable Predictive Tools"
+		},
+		{"fieldname": "data_operations_section", "fieldtype": "Section Break", "label": "Data Operations"},
+		{
+			"default": "0",
+			"description": "Allow the AI assistant to create and update records in ERPNext (e.g. create leads, update opportunity status). The AI will always ask for confirmation before making changes.",
+			"fieldname": "enable_write_operations",
+			"fieldtype": "Check",
+			"label": "Enable Write Operations"
+		},
+		{
+			"fieldname": "agent_orchestration_section",
+			"fieldtype": "Section Break",
+			"label": "Agent Orchestration"
+		},
+		{
+			"default": "0",
+			"description": "Enable multi-agent orchestration for complex queries. When enabled, complex queries are automatically decomposed into sub-tasks and executed step-by-step by specialized agents. This uses additional LLM calls and tokens but produces more comprehensive analysis for multi-dimensional queries.",
+			"fieldname": "enable_agent_orchestration",
+			"fieldtype": "Check",
+			"label": "Enable Agent Orchestration"
+		},
+		{"fieldname": "query_config_tab", "fieldtype": "Tab Break", "label": "Query Configuration"},
+		{"fieldname": "query_config_section", "fieldtype": "Section Break", "label": "Query Limits"},
+		{
+			"default": "20",
+			"description": "Default number of records returned by tools. Set to 0 to use system default (20).",
+			"fieldname": "default_query_limit",
+			"fieldtype": "Int",
+			"label": "Default Query Limit"
+		},
+		{
+			"default": "10",
+			"description": "Default limit for ranking/top-N tools (e.g. top customers, top debtors). Set to 0 to use system default (10).",
+			"fieldname": "default_top_n_limit",
+			"fieldtype": "Int",
+			"label": "Default Top-N Limit"
+		},
+		{"fieldname": "column_break_query", "fieldtype": "Column Break"},
+		{
+			"default": "100",
+			"description": "Maximum number of records any tool can return, regardless of requested limit.",
+			"fieldname": "max_query_limit",
+			"fieldtype": "Int",
+			"label": "Max Query Limit"
+		},
+		{"fieldname": "prompts_tab", "fieldtype": "Tab Break", "label": "Prompts"},
+		{"fieldname": "prompt_config_section", "fieldtype": "Section Break", "label": "Prompt Configuration"},
+		{
+			"description": "Custom AI persona description. Leave blank for default: 'an intelligent ERPNext business assistant'.",
+			"fieldname": "ai_persona",
+			"fieldtype": "Small Text",
+			"label": "AI Persona"
+		},
+		{
+			"description": "Preferred language for AI responses.",
+			"fieldname": "response_language",
+			"fieldtype": "Select",
+			"label": "Response Language",
+			"options": "\nEnglish\nHindi\nSpanish\nFrench\nGerman\nPortuguese\nArabic\nChinese\nJapanese\nKorean"
+		},
+		{"fieldname": "column_break_prompt", "fieldtype": "Column Break"},
+		{
+			"description": "Additional system prompt instructions appended to the default prompt. Use this for domain-specific or company-specific guidelines.",
+			"fieldname": "custom_system_prompt",
+			"fieldtype": "Text Editor",
+			"label": "Custom System Prompt"
+		},
+		{
+			"description": "Additional behavioral instructions for the AI assistant (e.g. tone, formatting preferences).",
+			"fieldname": "custom_instructions",
+			"fieldtype": "Text Editor",
+			"label": "Custom Instructions"
+		},
+		{"fieldname": "streaming_tab", "fieldtype": "Tab Break", "label": "Streaming"},
+		{"fieldname": "streaming_section", "fieldtype": "Section Break", "label": "Streaming Configuration"},
+		{
+			"default": "1",
+			"description": "Enable real-time token streaming for AI responses. When enabled, responses are delivered word-by-word via WebSocket instead of waiting for the full response.",
+			"fieldname": "enable_streaming",
+			"fieldtype": "Check",
+			"label": "Enable Streaming"
+		},
+		{"fieldname": "automation_tab", "fieldtype": "Tab Break", "label": "Automation"},
+		{"fieldname": "automation_section", "fieldtype": "Section Break", "label": "Automation Settings"},
+		{
+			"default": "0",
+			"description": "Master toggle for scheduled reports. When disabled, no automation tasks will run.",
+			"fieldname": "enable_automation",
+			"fieldtype": "Check",
+			"label": "Enable Automation"
+		},
+		{
+			"fieldname": "legacy_section",
+			"fieldtype": "Section Break",
+			"hidden": 1,
+			"label": "Legacy Fields (Hidden)"
+		},
+		{
+			"default": "0",
+			"fieldname": "openai_enabled",
+			"fieldtype": "Check",
+			"hidden": 1,
+			"label": "Enable OpenAI (Legacy)"
+		},
+		{"fieldname": "openai_api_key", "fieldtype": "Data", "hidden": 1, "label": "OpenAI API Key (Legacy)"},
+		{
+			"default": "gpt-4o",
+			"fieldname": "openai_model",
+			"fieldtype": "Select",
+			"hidden": 1,
+			"label": "OpenAI Model (Legacy)",
+			"options": "gpt-4o\ngpt-4o-mini\ngpt-4-turbo\ngpt-3.5-turbo"
+		},
+		{
+			"default": "0.7",
+			"fieldname": "openai_temperature",
+			"fieldtype": "Float",
+			"hidden": 1,
+			"label": "Temperature (Legacy)"
+		},
+		{
+			"default": "4000",
+			"fieldname": "openai_max_tokens",
+			"fieldtype": "Int",
+			"hidden": 1,
+			"label": "Max Tokens (Legacy)"
+		},
+		{
+			"default": "0",
+			"fieldname": "claude_enabled",
+			"fieldtype": "Check",
+			"hidden": 1,
+			"label": "Enable Claude (Legacy)"
+		},
+		{"fieldname": "claude_api_key", "fieldtype": "Data", "hidden": 1, "label": "Claude API Key (Legacy)"},
+		{
+			"default": "claude-sonnet-4-5-20250929",
+			"fieldname": "claude_model",
+			"fieldtype": "Select",
+			"hidden": 1,
+			"label": "Claude Model (Legacy)",
+			"options": "claude-opus-4-5-20251101\nclaude-sonnet-4-5-20250929\nclaude-haiku-4-5-20251001"
+		},
+		{
+			"default": "0.7",
+			"fieldname": "claude_temperature",
+			"fieldtype": "Float",
+			"hidden": 1,
+			"label": "Temperature (Legacy)"
+		},
+		{
+			"default": "4000",
+			"fieldname": "claude_max_tokens",
+			"fieldtype": "Int",
+			"hidden": 1,
+			"label": "Max Tokens (Legacy)"
+		}
+	],
+	"index_web_pages_for_search": 1,
+	"issingle": 1,
+	"links": [],
+	"modified": "2026-03-11 13:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Chatbot",
+	"name": "Chatbot Settings",
+	"owner": "Administrator",
+	"permissions": [
+		{
+			"create": 1,
+			"delete": 1,
+			"email": 1,
+			"print": 1,
+			"read": 1,
+			"role": "System Manager",
+			"share": 1,
+			"write": 1
+		}
+	],
+	"row_format": "Dynamic",
+	"sort_field": "modified",
+	"sort_order": "DESC",
+	"states": [],
+	"track_changes": 1
 }

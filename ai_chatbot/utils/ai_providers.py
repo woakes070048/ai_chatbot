@@ -208,8 +208,8 @@ class OpenAIProvider(AIProvider):
 
 				# Tool call chunks (streamed incrementally)
 				if delta.get("tool_calls"):
-					for tc in delta["tool_calls"]:
-						idx = tc["index"]
+					for i, tc in enumerate(delta["tool_calls"]):
+						idx = tc.get("index", i)
 						if idx not in tool_calls_acc:
 							tool_calls_acc[idx] = {
 								"id": tc.get("id", ""),
@@ -226,7 +226,7 @@ class OpenAIProvider(AIProvider):
 				# Stream finished
 				if finish_reason:
 					# Emit accumulated tool calls
-					if finish_reason == "tool_calls" and tool_calls_acc:
+					if finish_reason in ("tool_calls", "stop") and tool_calls_acc:
 						for _idx, tc_data in sorted(tool_calls_acc.items()):
 							try:
 								args = json.loads(tc_data["arguments"])

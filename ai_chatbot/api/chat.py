@@ -9,6 +9,7 @@ import json
 
 import frappe
 
+from ai_chatbot.core.ai_utils import extract_response, extract_tool_info
 from ai_chatbot.core.prompts import build_system_prompt
 from ai_chatbot.core.token_optimizer import optimize_history
 from ai_chatbot.core.token_tracker import track_token_usage
@@ -94,7 +95,7 @@ def get_conversation_messages(conversation_id: str) -> dict:
 						if isinstance(msg["tool_calls"], str)
 						else msg["tool_calls"]
 					)
-				except json.JSONDecodeError, TypeError:
+				except (json.JSONDecodeError, TypeError):
 					msg["tool_calls"] = None
 			if msg.get("tool_results"):
 				try:
@@ -103,7 +104,7 @@ def get_conversation_messages(conversation_id: str) -> dict:
 						if isinstance(msg["tool_results"], str)
 						else msg["tool_results"]
 					)
-				except json.JSONDecodeError, TypeError:
+				except (json.JSONDecodeError, TypeError):
 					msg["tool_results"] = None
 			if msg.get("attachments"):
 				try:
@@ -112,7 +113,7 @@ def get_conversation_messages(conversation_id: str) -> dict:
 						if isinstance(msg["attachments"], str)
 						else msg["attachments"]
 					)
-				except json.JSONDecodeError, TypeError:
+				except (json.JSONDecodeError, TypeError):
 					msg["attachments"] = None
 
 		# Load session context for conversation-level preferences
@@ -121,7 +122,7 @@ def get_conversation_messages(conversation_id: str) -> dict:
 			raw_ctx = frappe.db.get_value("Chatbot Conversation", conversation_id, "session_context")
 			if raw_ctx:
 				session_context = json.loads(raw_ctx) if isinstance(raw_ctx, str) else raw_ctx
-		except json.JSONDecodeError, TypeError:
+		except (json.JSONDecodeError, TypeError):
 			pass
 
 		return {
@@ -219,7 +220,7 @@ def get_conversation_history(conversation_id: str) -> list[dict]:
 		if msg.role == "user" and msg.attachments:
 			try:
 				atts = json.loads(msg.attachments) if isinstance(msg.attachments, str) else msg.attachments
-			except json.JSONDecodeError, TypeError:
+			except (json.JSONDecodeError, TypeError):
 				atts = None
 
 			if atts:
@@ -246,46 +247,6 @@ def get_conversation_history(conversation_id: str) -> list[dict]:
 		history.append(message_dict)
 
 	return history
-
-
-def _is_openai_format(provider_name: str) -> bool:
-	"""Return True if the provider uses OpenAI-compatible response format."""
-	return provider_name in ("OpenAI", "Gemini")
-
-
-def _extract_response(provider_name: str, response: dict) -> tuple:
-	"""Extract content, tool_calls, prompt_tokens, completion_tokens from a provider response."""
-	if _is_openai_format(provider_name):
-		msg = response["choices"][0]["message"]
-		content = msg.get("content") or ""
-		tool_calls = msg.get("tool_calls", [])
-		usage = response.get("usage", {})
-		prompt_tokens = usage.get("prompt_tokens", 0)
-		completion_tokens = usage.get("completion_tokens", 0)
-	else:  # Claude
-		content = ""
-		tool_calls = []
-		for block in response.get("content", []):
-			if block.get("type") == "text":
-				content += block.get("text", "")
-			elif block.get("type") == "tool_use":
-				tool_calls.append(block)
-		usage = response.get("usage", {})
-		prompt_tokens = usage.get("input_tokens", 0)
-		completion_tokens = usage.get("output_tokens", 0)
-
-	return content, tool_calls, prompt_tokens, completion_tokens
-
-
-def _extract_tool_info(provider_name: str, tool_call: dict) -> tuple:
-	"""Extract (func_name, func_args) from a tool_call dict."""
-	if _is_openai_format(provider_name):
-		func_name = tool_call["function"]["name"]
-		func_args = json.loads(tool_call["function"]["arguments"])
-	else:  # Claude
-		func_name = tool_call["name"]
-		func_args = tool_call.get("input", {})
-	return func_name, func_args
 
 
 def generate_ai_response(conversation, provider, history, tools) -> dict:
@@ -318,7 +279,7 @@ def generate_ai_response(conversation, provider, history, tools) -> dict:
 		for _round in range(max_tool_rounds):
 			response = provider.chat_completion(history, tools=tools, stream=False)
 
-			round_content, tool_calls, round_prompt, round_completion = _extract_response(
+			round_content, tool_calls, round_prompt, round_completion = extract_response(
 				ai_provider, response
 			)
 			content = round_content
@@ -341,7 +302,7 @@ def generate_ai_response(conversation, provider, history, tools) -> dict:
 			)
 
 			for i, tool_call in enumerate(tool_calls):
-				func_name, func_args = _extract_tool_info(ai_provider, tool_call)
+				func_name, func_args = extract_tool_info(ai_provider, tool_call)
 				result = BaseTool.execute_tool(func_name, func_args)
 				all_tool_results.append(result)
 

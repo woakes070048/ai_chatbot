@@ -18,7 +18,7 @@ from ai_chatbot.core.config import (
 from ai_chatbot.core.constants import TOOL_CATEGORIES
 
 
-def build_system_prompt(conversation_id: str | None = None):
+def build_system_prompt(conversation_id: str | None = None, company: str | None = None):
 	"""Build the system prompt with dynamic context.
 
 	Includes:
@@ -36,13 +36,14 @@ def build_system_prompt(conversation_id: str | None = None):
 
 	Args:
 		conversation_id: Optional conversation ID to read session context.
+		company: Optional company override. When provided, this company is used
+			instead of the user's default. Used by the automation executor.
 
 	Returns:
 		str: The complete system prompt.
 	"""
 	parts = []
 	settings = frappe.get_single("Chatbot Settings")
-	company = None
 
 	# --- Persona (configurable) ---
 	persona = (getattr(settings, "ai_persona", "") or "").strip()
@@ -59,7 +60,7 @@ def build_system_prompt(conversation_id: str | None = None):
 	try:
 		user = frappe.session.user
 		full_name = frappe.db.get_value("User", user, "full_name") or user
-		company = get_default_company()
+		company = company or get_default_company()
 		currency = get_company_currency(company)
 		fy_from, fy_to = get_fiscal_year_dates(company)
 
