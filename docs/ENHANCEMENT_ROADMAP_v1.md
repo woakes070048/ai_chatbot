@@ -1661,50 +1661,77 @@ scheduler_events = {
 
 ---
 
-## Phase 11: PDF Export from Chat (Planned)
+## Phase 11: PDF Export from Chat ✅ Done
 
-**Goal:** Allow users to export any AI chatbot response (including tables and charts) as a downloadable PDF directly from the chat interface.
+**Goal:** Allow users to export any AI chatbot response (including tables and charts) as a downloadable PDF directly from the chat interface. Both single-message and full-conversation exports are supported.
 
 ### 11.1 Backend — PDF Generation API
 
 **New file:** `ai_chatbot/api/export.py`
 
+Two whitelisted endpoints:
+
 ```python
 @frappe.whitelist()
 def export_message_pdf(message_name: str) -> dict:
-    """Generate a PDF from a Chatbot Message and return the file URL."""
+    """Generate a PDF from a single Chatbot Message and return the file URL."""
+
+@frappe.whitelist()
+def export_conversation_pdf(conversation_id: str) -> dict:
+    """Generate a PDF containing all messages in a conversation."""
 ```
 
-**Approach:**
-- Accept a `Chatbot Message` name (or conversation_id + message range)
-- Render the message content (markdown → HTML) with inline-styled tables
-- Convert ECharts option dicts to HTML tables (reuse `automation/formatters.py` utilities)
-- Generate PDF via `frappe.utils.pdf.get_pdf()` (wkhtmltopdf)
-- Save as a Frappe File attachment and return the file URL for download
+**Pipeline (per message):**
+1. `_fix_markdown_structure()` — ensures blank lines before lists and heading markers on their own line
+2. `_fix_markdown_lists()` — converts inline dash-lists (`text - a - b - c`) to proper markdown lists
+3. `_markdown_to_html()` — `markdown2` conversion (via `frappe.utils.md_to_html`)
+4. `_replace_hr_tags()` — replaces `<hr>` with a lightweight `<p>` separator (mitigates wkhtmltopdf centering bug)
+5. `_style_html_tables()` — adds borders, padding, 11px font via `_merge_or_add_style()` (merges with existing `style=` attributes from markdown2's column alignment)
+6. `_style_html_headings()` — replaces `<h1>`–`<h6>` with styled `<p>` tags (bypasses wkhtmltopdf heading centering bug)
+7. `_render_charts()` — ECharts → inline SVG for PDF, HTML table fallback for email (with notice)
 
-**Key considerations:**
-- Reuse `_style_html_tables()`, `_echart_to_html_table()`, and `_echart_to_svg()` from `automation/formatters.py`
-- For PDF: use `format_html_email(for_pdf=True)` for inline SVG charts
-- Include report header with conversation title, date, company
-- Support exporting a single message or a full conversation thread
+**Key design decisions:**
+- Reuses `automation/formatters.py` rendering pipeline — identical output for download PDF, email PDF, and scheduled reports
+- `_merge_or_add_style()` helper merges our border/padding styles with markdown2's existing `text-align:right` on column-aligned tables (`:---:` syntax)
+- Heading `<h1>`–`<h6>` tags are replaced with styled `<p>` tags because wkhtmltopdf centers headings near page breaks regardless of CSS
+- `_PDF_STYLE_BLOCK` provides CSS `!important` overrides for body/heading/table alignment
+- Permission check: only the owning user can export their own messages/conversations
+- Files saved as private Frappe File attachments with sanitised filenames (max 30 chars + message/conversation name + date)
 
 ### 11.2 Frontend — Download Button
 
-**Updated files:** `frontend/src/components/ChatMessage.vue`
+**Updated files:** `frontend/src/components/ChatMessage.vue`, `frontend/src/pages/ChatView.vue`, `frontend/src/utils/api.js`
 
-- Add a "Download PDF" icon button on assistant messages (next to existing action buttons)
-- On click, call `export_message_pdf` API → receive file URL → trigger browser download
-- Show loading spinner while PDF generates
+- "Download PDF" icon button on assistant messages (next to copy button)
+- On click → calls `export_message_pdf` → receives file URL → triggers browser download
+- Loading spinner while PDF generates
+- `ChatAPI` class extended with `exportMessagePDF()` and `exportConversationPDF()` methods
 
-### 11.3 Deliverables
+### 11.3 Markdown Preprocessing Functions (in `automation/formatters.py`)
+
+| Function | Purpose |
+|----------|---------|
+| `_fix_markdown_structure()` | Inserts blank lines before dash/asterisk-lists (required by `markdown2`) and splits inline heading markers onto their own line |
+| `_fix_markdown_lists()` | Converts inline dash-lists (`text - a - b - c`) to proper markdown bullet lists |
+| `_replace_hr_tags()` | Replaces `<hr>` with minimal `<p>` separator to mitigate wkhtmltopdf page-break alignment bug |
+| `_merge_or_add_style()` | Merges CSS into existing `style=` attributes or adds new ones — handles markdown2's column-alignment styles |
+| `_style_html_tables()` | Adds borders, padding, font-size to `<table>`, `<th>`, `<td>` using `_merge_or_add_style()` |
+| `_style_html_headings()` | Replaces `<h1>`–`<h6>` with styled `<p>` tags (size, weight, color, `page-break-inside: avoid`) |
+
+### 11.4 Deliverables
 
 | Item | Files |
 |------|-------|
-| PDF export API | `api/export.py` |
-| Frontend button | `ChatMessage.vue` (download icon) |
-| Shared formatters | Reuse from `automation/formatters.py` |
+| PDF export API | `api/export.py` (`export_message_pdf`, `export_conversation_pdf`) |
+| Markdown/HTML formatters | `automation/formatters.py` (shared pipeline for email + PDF) |
+| Frontend button + API | `ChatMessage.vue`, `ChatView.vue`, `api.js` |
 
 **New dependencies:** None (uses existing `frappe.utils.pdf` / wkhtmltopdf).
+
+### 11.5 Known Limitations
+
+- **wkhtmltopdf page-break centering:** A small number of headings (typically 2–3 per long document) may appear centered when they land exactly at a wkhtmltopdf page break boundary after a separator element. This is a known wkhtmltopdf engine bug that affects even `<p>` tags with explicit `text-align: left !important`. The recommended future fix is migrating to **weasyprint** which has correct CSS page-break handling.
+- **Charts in email:** ECharts are rendered as HTML tables in email (SVG not supported by most email clients). A notice is included informing recipients of the substitution.
 
 ---
 
@@ -1727,7 +1754,7 @@ def export_message_pdf(message_name: str) -> dict:
 | **8** | Multi-Agent | Medium | ✅ Done | Multi-agent orchestration for complex queries | None |
 | **9** | Predictive | Low | ✅ Done | Forecasting, anomaly detection | None (statistical methods) |
 | **10** | Automation | Low | ✅ Done | Scheduled reports via email, headless AI executor | None |
-| **11** | PDF Export | Low | Planned | Download chat responses as PDF from chat UI | None |
+| **11** | PDF Export | Low | ✅ Done | Single-message & conversation PDF export, robust markdown/HTML pipeline | None |
 
 ---
 
@@ -1918,8 +1945,9 @@ ai_chatbot/
 │   ├── operations.py              # Phase 3
 │   └── validators.py              # Phase 3
 │
-├── api/                           # Phase 1, 2, 3, 5A
+├── api/                           # Phase 1, 2, 3, 5A, 11
 │   ├── chat.py                    # Updated: 5A (attachments, @mention endpoint)
+│   ├── export.py                  # Phase 11 (PDF export: single message + full conversation)
 │   ├── streaming.py               # Phase 2, updated: 5A (attachments, vision content)
 │   └── files.py                   # Phase 5A (file upload, vision content builder)
 │
@@ -1986,10 +2014,10 @@ ai_chatbot/
 │       ├── knowledge_memory.py
 │       └── memory_manager.py
 │
-├── automation/                    # Phase 10
+├── automation/                    # Phase 10, 11
 │   ├── echart_ssr.cjs             # Node.js ECharts SSR → SVG (for PDF charts)
 │   ├── executor.py                # Headless AI execution engine
-│   ├── formatters.py              # HTML email/PDF formatting, markdown fixes, chart rendering
+│   ├── formatters.py              # HTML email/PDF formatting, markdown preprocessing, chart rendering (updated: 11)
 │   ├── scheduled_reports.py       # Scheduler entry point, schedule evaluation
 │   └── notifications/
 │       ├── channels/
@@ -2014,7 +2042,7 @@ frontend/src/
 ├── components/
 │   ├── Sidebar.vue                # Updated: 5A (collapsible via parent CSS)
 │   ├── ChatHeader.vue             # Updated: 5A (sidebar toggle button)
-│   ├── ChatMessage.vue            # Updated: 4 (charts), 5A (attachments, speaker button)
+│   ├── ChatMessage.vue            # Updated: 4 (charts), 5A (attachments, speaker button), 11 (PDF download)
 │   ├── ChatInput.vue              # Updated: 5A (file upload, voice, @mentions, suggestions)
 │   ├── TypingIndicator.vue
 │   ├── charts/                    # Phase 4, 5A, 6B
@@ -2029,7 +2057,7 @@ frontend/src/
 │   └── chat/
 │       └── AgentThinking.vue      # Phase 8
 ├── pages/
-│   ├── ChatView.vue               # Updated: 5A (sidebar toggle, payload handling, voice output, suggestions)
+│   ├── ChatView.vue               # Updated: 5A (sidebar toggle, payload handling, voice output, suggestions), 11 (PDF export)
 │   └── KnowledgeBaseView.vue      # Phase 8
 ├── composables/
 │   ├── useStreaming.js             # Phase 2
@@ -2038,6 +2066,6 @@ frontend/src/
 │   ├── useVoiceOutput.js          # Phase 5A (text-to-speech)
 │   └── useFileUpload.js           # Phase 5A (file selection/validation/preview)
 └── utils/
-    ├── api.js                     # Updated: 5A (uploadFile, getMentionValues, attachments)
+    ├── api.js                     # Updated: 5A (uploadFile, getMentionValues, attachments), 11 (exportMessagePDF, exportConversationPDF)
     └── markdown.js                # Phase 2
 ```

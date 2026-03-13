@@ -63,6 +63,21 @@
 
       <!-- Conversation state: messages + bottom-pinned input -->
       <template v-else>
+        <!-- Conversation action bar -->
+        <div class="flex items-center justify-end px-4 py-2 border-b border-gray-200 dark:border-gray-700">
+          <button
+            v-if="currentConversation && messages.length > 0"
+            @click="handleExportConversation"
+            :disabled="isExportingConversation"
+            class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Export entire conversation as PDF"
+          >
+            <Loader2 v-if="isExportingConversation" :size="14" class="animate-spin" />
+            <FileDown v-else :size="14" />
+            <span>{{ isExportingConversation ? 'Exporting...' : 'Export Chat PDF' }}</span>
+          </button>
+        </div>
+
         <!-- Messages Area -->
         <div
           ref="messagesContainer"
@@ -186,6 +201,7 @@ import ChatMessage from '../components/ChatMessage.vue'
 import ChatInput from '../components/ChatInput.vue'
 import TypingIndicator from '../components/TypingIndicator.vue'
 import AgentThinking from '../components/AgentThinking.vue'
+import { FileDown, Loader2 } from 'lucide-vue-next'
 import { chatAPI } from '../utils/api'
 import { renderMarkdown } from '../utils/markdown'
 import { useStreaming } from '../composables/useStreaming'
@@ -215,6 +231,9 @@ const toggleSidebar = () => {
   sidebarCollapsed.value = !sidebarCollapsed.value
   localStorage.setItem('ai_chatbot_sidebar', sidebarCollapsed.value ? 'collapsed' : 'expanded')
 }
+
+// PDF conversation export state
+const isExportingConversation = ref(false)
 
 // Error display state
 const displayError = ref(null)
@@ -544,6 +563,29 @@ const handleChangeLanguage = async (language) => {
     } catch (error) {
       console.error('Error setting language:', error)
     }
+  }
+}
+
+const handleExportConversation = async () => {
+  if (!currentConversation.value || isExportingConversation.value) return
+  isExportingConversation.value = true
+  try {
+    const result = await chatAPI.exportConversationPdf(currentConversation.value.name)
+    if (result.success && result.file_url) {
+      const a = document.createElement('a')
+      a.href = result.file_url
+      a.download = ''
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+    } else {
+      displayError.value = result.error || 'Failed to export conversation as PDF.'
+    }
+  } catch (error) {
+    console.error('Conversation PDF export error:', error)
+    displayError.value = 'Failed to export conversation as PDF.'
+  } finally {
+    isExportingConversation.value = false
   }
 }
 

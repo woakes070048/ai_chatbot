@@ -4550,3 +4550,195 @@ Tests that predictive tools respect multi-company settings.
 2. **Expected**: The **Automation** tab exists after the Streaming tab.
 3. The tab contains only the **Enable Automation** checkbox.
 4. There are NO Twilio or Slack fields in the Automation tab.
+
+---
+
+## Phase 11 — PDF Export from Chat
+
+Phase 11 adds the ability to export individual AI chatbot messages or full conversations as downloadable PDFs. The export pipeline reuses the shared `automation/formatters.py` rendering pipeline so that tables, charts, and markdown render identically to scheduled-report emails/PDFs.
+
+**Prerequisites:**
+- At least one chatbot conversation with assistant responses containing tables, charts, and/or markdown formatting
+- `bench start` running (for wkhtmltopdf PDF generation)
+
+---
+
+### 11.1 Single Message PDF Export — Basic
+
+1. Open the AI Chatbot interface.
+2. Find an assistant message with text content.
+3. Click the **Download PDF** button (download icon) on the message.
+4. **Expected**: A loading spinner appears briefly, then a PDF file downloads automatically.
+5. Open the downloaded PDF.
+6. **Expected**: The PDF contains the message content with:
+   - Report header showing conversation title, date, and company
+   - Text is left-aligned
+   - Font is readable (14px body, 11px tables)
+
+### 11.2 Single Message PDF Export — Tables
+
+1. Find an assistant message containing a markdown table (e.g. ask "Show me a sales summary" or similar).
+2. Click **Download PDF** on that message.
+3. Open the downloaded PDF.
+4. **Expected**:
+   - Tables have visible borders (1px solid #ddd)
+   - Table cells have padding (6px 8px)
+   - Table font size is 11px
+   - Column alignment from markdown (`:---:`, `---:`) is preserved alongside our border/padding styles
+   - Table header row has light grey background (#f5f5f5)
+
+### 11.3 Single Message PDF Export — Charts
+
+1. Find an assistant message containing an ECharts chart (e.g. from a finance or analytics query).
+2. Click **Download PDF** on that message.
+3. Open the downloaded PDF.
+4. **Expected**:
+   - Charts are rendered as inline SVG images in the PDF (not blank or missing)
+   - Chart colours and labels are visible
+   - Charts are generated via Node.js ECharts SSR (`automation/echart_ssr.cjs`)
+
+### 11.4 Single Message PDF Export — Headings & Separators
+
+1. Find an assistant message with multiple section headings (e.g. `## Revenue Trends`, `## Balance Sheet`) and `---` separators.
+2. Click **Download PDF** on that message.
+3. Open the downloaded PDF.
+4. **Expected**:
+   - Section headings are left-aligned (not centered)
+   - Heading font sizes reflect hierarchy (h1: 26px, h2: 22px, h3: 18px, etc.)
+   - `---` separators render as thin horizontal lines, not `<hr>` tags
+   - **Known limitation**: A small number of headings (typically 2–3 per long document) may appear centered when they land at a wkhtmltopdf page break boundary. This is a known wkhtmltopdf engine bug tracked for future fix.
+
+### 11.5 Single Message PDF Export — Bullet Lists
+
+1. Find an assistant message containing bullet lists (dash or asterisk items).
+2. Click **Download PDF** on that message.
+3. Open the downloaded PDF.
+4. **Expected**:
+   - Bullet lists render as proper `<ul><li>` lists with bullet markers
+   - Lists are not rendered as inline text on a single line
+   - Both `-` and `*` list markers are handled correctly
+
+### 11.6 Full Conversation PDF Export
+
+1. Open a conversation with multiple user and assistant messages.
+2. Trigger a full conversation export (via the conversation export option).
+3. Open the downloaded PDF.
+4. **Expected**:
+   - All messages appear in chronological order
+   - User messages have a grey background (#f0f4f8) with a grey left border
+   - Assistant messages have a white background with a blue left border (#4a90d9)
+   - Each message block shows the role label ("You" or "AI Assistant") and timestamp
+   - Tables, charts, and headings in assistant messages render correctly (same as single-message tests)
+   - Header shows conversation title, date, and company
+   - Footer shows "Exported from AI Chatbot" note
+
+### 11.7 Permission Check
+
+1. Log in as **User A** who owns a conversation.
+2. Export a message from that conversation — **Expected**: Success.
+3. Log in as **User B** (different user).
+4. Attempt to call `export_message_pdf` with User A's message name (via browser console or API).
+5. **Expected**: Permission error is raised. User B cannot export User A's messages.
+
+### 11.8 Filename Sanitisation
+
+1. Create a conversation with a long title containing special characters (e.g. `"What's the Q4 2024/2025 Revenue & Profitability Analysis?!"`).
+2. Export a message as PDF.
+3. **Expected**: The downloaded filename is sanitised:
+   - Special characters replaced with underscores
+   - Title portion truncated to 30 characters max
+   - Format: `{safe_title}_{message_name}_{date}.pdf`
+   - Example: `What_s_the_Q4_2024_2025_Reven_MSG-00042_2026-03-13.pdf`
+
+### 11.9 Empty Message Handling
+
+1. Attempt to export a conversation that has no messages (e.g. via API with a newly created empty conversation).
+2. **Expected**: Returns `{"success": false, "error": "No messages to export."}` — does not generate an empty PDF.
+
+### 11.10 Markdown Preprocessing — Inline Dash Lists
+
+1. Send a query that produces a response with inline dash-list formatting like: `Indicators - Revenue growth - Profit margins - Cash flow`
+2. Export as PDF.
+3. **Expected**: Each item renders as a separate bullet point, not all on one line.
+
+### 11.11 Markdown Preprocessing — Inline Headings
+
+1. Send a query that produces a response where AI places headings without leading newlines (e.g. `...some text.## Next Section`).
+2. Export as PDF.
+3. **Expected**: No stray `#` symbols in the output. Headings render on their own line with correct styling.
+
+### 11.12 Email PDF vs Download PDF Consistency
+
+1. Set up a scheduled report (Phase 10) that uses the same query as a chat message.
+2. Compare the email PDF attachment with the downloaded PDF from the chat.
+3. **Expected**: Both use the same rendering pipeline (`format_html_email` with `for_pdf=True`):
+   - Table styling is identical (borders, padding, font size)
+   - Heading styling is identical
+   - The only difference: scheduled report emails show charts as HTML tables (with a notice), while PDFs show inline SVG charts
+
+### 11.13 Chart-to-Table Notice in Email
+
+1. Set up a scheduled report with a query that produces charts.
+2. Trigger the report and check the received email.
+3. **Expected**: If charts were converted to tables, the email includes an italic notice: *"Note: Charts are displayed as tables below for email compatibility."*
+
+### 11.14 Backend API Verification (Console)
+
+```python
+# Single message export
+import frappe
+from ai_chatbot.api.export import export_message_pdf
+result = export_message_pdf("MSG-00042")  # Replace with valid message name
+print(result)
+# Expected: {"success": True, "file_url": "/private/files/...pdf"}
+
+# Conversation export
+from ai_chatbot.api.export import export_conversation_pdf
+result = export_conversation_pdf("CON-00001")  # Replace with valid conversation
+print(result)
+# Expected: {"success": True, "file_url": "/private/files/...pdf"}
+```
+
+### 11.15 Formatter Unit Tests (Console)
+
+```python
+from ai_chatbot.automation.formatters import (
+    _fix_markdown_structure,
+    _fix_markdown_lists,
+    _replace_hr_tags,
+    _style_html_tables,
+    _style_html_headings,
+    _merge_or_add_style,
+)
+
+# Test 1: _fix_markdown_structure inserts blank line before list
+md = "Some text:\n- item1\n- item2"
+result = _fix_markdown_structure(md)
+assert "\n\n- item1" in result, "Should insert blank line before list"
+
+# Test 2: _fix_markdown_lists converts inline dash items
+md = "Indicators - Revenue growth - Profit margins - Cash flow"
+result = _fix_markdown_lists(md)
+assert "- Revenue growth" in result, "Should split inline dash items"
+
+# Test 3: _replace_hr_tags removes <hr>
+html = "<p>text</p><hr><p>more</p>"
+result = _replace_hr_tags(html)
+assert "<hr" not in result, "Should not contain <hr>"
+assert "border-bottom" in result, "Should have border-bottom separator"
+
+# Test 4: _style_html_tables handles existing style= attributes
+html = '<table><th style="text-align:right">Col</th><td>Val</td></table>'
+result = _style_html_tables(html)
+assert "border" in result, "Should add border"
+assert "text-align:right" in result, "Should preserve existing alignment"
+
+# Test 5: _style_html_headings replaces h tags with p tags
+html = "<h2>Section Title</h2>"
+result = _style_html_headings(html)
+assert "<h2" not in result, "Should not contain h2 tag"
+assert "font-size: 22px" in result, "Should have h2-equivalent font size"
+assert "display: block" in result, "Should have display: block"
+
+print("All formatter tests passed.")
+```

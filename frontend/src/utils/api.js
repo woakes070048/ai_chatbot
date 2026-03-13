@@ -7,6 +7,7 @@
 
 const API_BASE = '/api/method/ai_chatbot.api.chat'
 const FILES_API_BASE = '/api/method/ai_chatbot.api.files'
+const EXPORT_API_BASE = '/api/method/ai_chatbot.api.export'
 
 class ChatAPI {
   constructor() {
@@ -221,6 +222,58 @@ class ChatAPI {
    */
   async getSettings() {
     return this.request('get_settings')
+  }
+
+  /**
+   * Export a single assistant message as PDF.
+   * Returns { success, file_url }.
+   */
+  async exportMessagePdf(messageName) {
+    return this.requestEndpoint(EXPORT_API_BASE, 'export_message_pdf', {
+      message_name: messageName,
+    })
+  }
+
+  /**
+   * Export an entire conversation as PDF.
+   * Returns { success, file_url }.
+   */
+  async exportConversationPdf(conversationId) {
+    return this.requestEndpoint(EXPORT_API_BASE, 'export_conversation_pdf', {
+      conversation_id: conversationId,
+    })
+  }
+
+  /**
+   * Make API request to an arbitrary endpoint base.
+   */
+  async requestEndpoint(base, endpoint, data = {}) {
+    try {
+      const token = await this.getToken()
+
+      const response = await fetch(`${base}.${endpoint}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'X-Frappe-CSRF-Token': token || '',
+        },
+        credentials: 'include',
+        body: JSON.stringify(data),
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('API Error Response:', errorText)
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const result = await response.json()
+      return result.message || result
+    } catch (error) {
+      console.error('API request error:', error)
+      throw error
+    }
   }
 
 }

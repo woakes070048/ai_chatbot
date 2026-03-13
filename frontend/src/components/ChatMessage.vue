@@ -129,7 +129,7 @@
               </div>
             </div>
 
-            <!-- Token Usage & Voice -->
+            <!-- Token Usage, Voice & PDF Export -->
             <div class="mt-3 flex items-center gap-3">
               <span v-if="message.tokens_used" class="px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded text-xs">
                 {{ message.tokens_used }} tokens
@@ -144,6 +144,17 @@
                 <Volume2 v-else :size="14" />
                 <span>{{ voiceOutput.isSpeaking.value ? 'Stop' : 'Listen' }}</span>
               </button>
+              <button
+                v-if="message.name"
+                @click="handleDownloadPdf"
+                :disabled="isExporting"
+                class="inline-flex items-center gap-1 px-2 py-1 text-xs text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Download as PDF"
+              >
+                <Loader2 v-if="isExporting" :size="14" class="animate-spin" />
+                <Download v-else :size="14" />
+                <span>{{ isExporting ? 'Exporting...' : 'PDF' }}</span>
+              </button>
             </div>
           </div>
         </div>
@@ -153,16 +164,18 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
-import { Wrench, PenSquare, Volume2, VolumeX, FileText } from 'lucide-vue-next'
+import { computed, ref } from 'vue'
+import { Wrench, PenSquare, Volume2, VolumeX, FileText, Download, Loader2 } from 'lucide-vue-next'
 import { renderMarkdown } from '../utils/markdown'
 import { useVoiceOutput } from '../composables/useVoiceOutput'
+import { chatAPI } from '../utils/api'
 import ChartMessage from './charts/ChartMessage.vue'
 import BiCards from './charts/BiCards.vue'
 import HierarchicalTable from './charts/HierarchicalTable.vue'
 import logoSvg from '../assets/logo.svg'
 
 const voiceOutput = useVoiceOutput()
+const isExporting = ref(false)
 
 const props = defineProps({
   message: {
@@ -404,6 +417,30 @@ const formatToolName = (name, keepPrefix = false) => {
     .split('_')
     .map(word => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ')
+}
+
+// PDF export handler
+const handleDownloadPdf = async () => {
+  if (!props.message.name || isExporting.value) return
+  isExporting.value = true
+  try {
+    const result = await chatAPI.exportMessagePdf(props.message.name)
+    if (result.success && result.file_url) {
+      // Trigger browser download
+      const a = document.createElement('a')
+      a.href = result.file_url
+      a.download = ''
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+    } else {
+      console.error('PDF export failed:', result.error)
+    }
+  } catch (error) {
+    console.error('PDF export error:', error)
+  } finally {
+    isExporting.value = false
+  }
 }
 </script>
 
