@@ -1,0 +1,89 @@
+{
+ "app": "ai_chatbot",
+ "creation": "2026-03-17 15:12:44.975831",
+ "docstatus": 0,
+ "doctype": "Workspace Sidebar",
+ "header_icon": "brain-circuit",
+ "idx": 0,
+ "items": [
+  {
+   "child": 0,
+   "collapsible": 1,
+   "icon": "home",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Home",
+   "link_to": "Chatbot",
+   "link_type": "Workspace",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
+   "icon": "setting-gear",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Settings",
+   "link_to": "Chatbot Settings",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
+   "icon": "shield-user",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Conversation",
+   "link_to": "Chatbot Conversation",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
+   "icon": "message-circle-more",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Message",
+   "link_to": "Chatbot Message",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
+   "icon": "focus",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Token Usage",
+   "link_to": "Chatbot Token Usage",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
+   "icon": "file-clock",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Schedule Report",
+   "link_to": "Chatbot Scheduled Report",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
+  }
+ ],
+ "modified": "2026-03-17 20:33:04.997606",
+ "modified_by": "Administrator",
+ "module": "Chatbot",
+ "name": "Chatbot",
+ "owner": "Administrator",
+ "standard": 1,
+ "title": "Chatbot"
+}

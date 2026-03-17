@@ -24,25 +24,29 @@
    "in_list_view": 1,
    "label": "User",
    "options": "User",
+   "read_only": 1,
    "reqd": 1
   },
   {
    "fieldname": "conversation",
    "fieldtype": "Link",
    "label": "Conversation",
-   "options": "Chatbot Conversation"
+   "options": "Chatbot Conversation",
+   "read_only": 1
   },
   {
    "fieldname": "provider",
    "fieldtype": "Data",
    "in_list_view": 1,
-   "label": "Provider"
+   "label": "Provider",
+   "read_only": 1
   },
   {
    "fieldname": "model",
    "fieldtype": "Data",
    "in_list_view": 1,
-   "label": "Model"
+   "label": "Model",
+   "read_only": 1
   },
   {
    "fieldname": "column_break_1",
@@ -52,33 +56,38 @@
    "default": "0",
    "fieldname": "prompt_tokens",
    "fieldtype": "Int",
-   "label": "Prompt Tokens"
+   "label": "Prompt Tokens",
+   "read_only": 1
   },
   {
    "default": "0",
    "fieldname": "completion_tokens",
    "fieldtype": "Int",
-   "label": "Completion Tokens"
+   "label": "Completion Tokens",
+   "read_only": 1
   },
   {
    "default": "0",
    "fieldname": "total_tokens",
    "fieldtype": "Int",
    "in_list_view": 1,
-   "label": "Total Tokens"
+   "label": "Total Tokens",
+   "read_only": 1
   },
   {
    "default": "0",
    "fieldname": "estimated_cost",
    "fieldtype": "Currency",
    "in_list_view": 1,
-   "label": "Estimated Cost (USD)"
+   "label": "Estimated Cost (USD)",
+   "read_only": 1
   },
   {
    "fieldname": "date",
    "fieldtype": "Date",
    "in_list_view": 1,
    "label": "Date",
+   "read_only": 1,
    "reqd": 1
   }
  ],

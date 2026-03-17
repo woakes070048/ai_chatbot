@@ -36,7 +36,7 @@
   >
     <!-- Header Row: Logo (left) | Settings + Toggle (right) -->
     <div class="flex items-center justify-between px-3 py-3 border-b border-gray-200 dark:border-gray-800">
-      <img :src="logoSvg" alt="AI Chatbot" class="w-8 h-8" />
+      <img :src="logoSvg" alt="AI Chatbot" class="w-8 h-8 dark:invert" />
       <div class="flex items-center gap-1">
         <button
           @click="openSettings"
