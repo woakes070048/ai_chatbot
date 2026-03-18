@@ -4,7 +4,7 @@ authors = [
     { name = "Sanjay Kumar", email = "sanjay.kumar001@gmail.com"}
 ]
 description = "Intelligent AI Chatbot with ERPNext Integration"
-requires-python = ">=3.14"
+requires-python = ">=3.14,<3.15"
 readme = "README.md"
 dynamic = ["version"]
 dependencies = [
@@ -13,8 +13,6 @@ dependencies = [
 
 [project.optional-dependencies]
 idp = [
-     "pypdf>=4.0",
-     "openpyxl>=3.1",
      "python-docx>=1.1",
 ]
 
