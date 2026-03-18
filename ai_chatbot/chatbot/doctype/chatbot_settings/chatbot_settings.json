@@ -26,6 +26,7 @@
   "enable_idp_tools",
   "enable_strict_idp_validation",
   "auto_create_idp_masters",
+  "idp_output_language",
   "predictive_section",
   "enable_predictive_tools",
   "data_operations_section",
@@ -171,7 +172,7 @@
    "label": "Document Processing (IDP)"
   },
   {
-   "default": "0",
+   "default": "1",
    "description": "Enable Intelligent Document Processing \u2014 extract structured data from uploaded documents (invoices, POs, receipts) and create ERPNext records. Requires pypdf, openpyxl, and python-docx packages.",
    "fieldname": "enable_idp_tools",
    "fieldtype": "Check",
@@ -192,6 +193,15 @@
    "fieldname": "auto_create_idp_masters",
    "fieldtype": "Check",
    "label": "Auto Create Missing Masters"
+  },
+  {
+   "default": "English",
+   "depends_on": "eval:doc.enable_idp_tools",
+   "description": "Default language for IDP extracted data output. When set, extraction uses this language without asking the user. Leave blank to ask during each extraction.",
+   "fieldname": "idp_output_language",
+   "fieldtype": "Select",
+   "label": "Extract Data In",
+   "options": "\nEnglish\nHindi\nSpanish\nFrench\nGerman\nPortuguese\nArabic\nChinese\nJapanese\nKorean"
   },
   {
    "fieldname": "predictive_section",
@@ -417,7 +427,7 @@
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-03-17 16:34:51.679819",
+ "modified": "2026-03-17 21:59:34.814020",
  "modified_by": "Administrator",
  "module": "Chatbot",
  "name": "Chatbot Settings",

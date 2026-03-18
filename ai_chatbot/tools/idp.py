@@ -87,7 +87,9 @@ def extract_document_data(file_url=None, target_doctype=None, company=None, outp
 		return {"error": "target_doctype is required (e.g., 'Sales Invoice', 'Purchase Invoice')"}
 
 	company = get_default_company(company)
-	output_language = output_language or "English"
+	if not output_language:
+		settings = frappe.get_single("Chatbot Settings")
+		output_language = getattr(settings, "idp_output_language", "") or "English"
 
 	# Step 1 & 2: Extract and map via LLM
 	result = extract_and_map(file_url, target_doctype, company=company, output_language=output_language)

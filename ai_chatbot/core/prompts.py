@@ -198,6 +198,24 @@ def build_system_prompt(conversation_id: str | None = None, company: str | None 
 
 	# --- IDP (Document Processing) ---
 	if getattr(settings, "enable_idp_tools", False):
+		idp_output_language = (getattr(settings, "idp_output_language", "") or "").strip()
+
+		if idp_output_language:
+			output_lang_instruction = (
+				f"   **a. Output Language: {idp_output_language} (configured in settings)**\n"
+				f"   Use {idp_output_language} as the output language. Only ask if the user "
+				"explicitly requests a different language.\n\n"
+			)
+		else:
+			output_lang_instruction = (
+				"   **a. Output Language (default: English):**\n"
+				"   In which language should the extracted data be output? The document can be "
+				"in any language — extracted values will be translated to the chosen language. "
+				"Only skip asking if the user explicitly states a language (e.g., 'in English', "
+				"'Language: French', 'extract in Spanish'). Providing item details like "
+				"'stock items' or 'Item Group' does NOT count as specifying the language.\n\n"
+			)
+
 		parts.append(
 			"\n## Document Processing (IDP)\n"
 			"You can extract structured data from uploaded documents (invoices, POs, quotations, "
@@ -208,12 +226,7 @@ def build_system_prompt(conversation_id: str | None = None, company: str | None 
 			"collect ALL of the following preferences before calling `extract_document_data`. "
 			"Scan the user's message — if a preference is already stated, memorize it. "
 			"For ALL preferences NOT explicitly stated, you MUST ask the user.\n\n"
-			"   **a. Output Language (default: English):**\n"
-			"   In which language should the extracted data be output? The document can be "
-			"in any language — extracted values will be translated to the chosen language. "
-			"Only skip asking if the user explicitly states a language (e.g., 'in English', "
-			"'Language: French', 'extract in Spanish'). Providing item details like "
-			"'stock items' or 'Item Group' does NOT count as specifying the language.\n\n"
+			+ output_lang_instruction +
 			"   **b. Is Stock Item? (yes/no):**\n"
 			"   Are these physical inventory items? Only skip if user says e.g. 'stock items', "
 			"'non-stock', 'these are services'.\n\n"
@@ -225,9 +238,9 @@ def build_system_prompt(conversation_id: str | None = None, company: str | None 
 			"   Which ERPNext Item Group? Only skip if user says e.g. 'Item Group: Consumable', "
 			"'Products group'.\n\n"
 			"   Ask all missing preferences in a single message. If user says 'skip' or "
-			"'use defaults', use English for language and ERPNext defaults for item settings.\n"
+			f"'use defaults', use {idp_output_language or 'English'} for language and ERPNext defaults for item settings.\n"
 			"2. Call `extract_document_data` with the file_url, target_doctype, and "
-			"`output_language` (from step 1, default 'English').\n"
+			f"`output_language` (from step 1, default '{idp_output_language or 'English'}').\n"
 			"3. Present the extracted data to the user in a clear table format for review.\n"
 			"4. Highlight any validation warnings or unresolved fields.\n"
 			"5. **Only after the user confirms** the data is correct, proceed to step 6.\n"

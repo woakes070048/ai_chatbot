@@ -32,8 +32,8 @@ class ChatbotConversation(Document):
 			frappe.throw(f"Invalid AI provider. Must be one of: {', '.join(valid_providers)}")
 
 	def on_trash(self):
-		"""Called when document is deleted"""
-		# Delete all messages in this conversation
+		"""Called when document is deleted — cascade to linked records"""
+		frappe.db.delete("Chatbot Token Usage", {"conversation": self.name})
 		frappe.db.delete("Chatbot Message", {"conversation": self.name})
 
 	def update_message_count(self):

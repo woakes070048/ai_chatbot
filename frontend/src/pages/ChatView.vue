@@ -340,10 +340,8 @@ onMounted(async () => {
     initSocket()
   }
 
-  // Auto-create first conversation if none exist
-  if (conversations.value.length === 0) {
-    await handleNewChat()
-  }
+  // Always start with a fresh new chat (enabled input + greeting)
+  await handleNewChat()
 })
 
 onUnmounted(() => {
