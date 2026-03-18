@@ -9,10 +9,6 @@ readme = "README.md"
 dynamic = ["version"]
 dependencies = [
      "twilio==8.5.0",
-]
-
-[project.optional-dependencies]
-idp = [
      "python-docx>=1.1",
 ]
 
