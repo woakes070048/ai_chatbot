@@ -537,47 +537,22 @@ class ClaudeProvider(AIProvider):
 
 
 def _resolve_settings(provider_name: str) -> dict:
-	"""Build a unified settings dict for the given provider.
-
-	Reads the new unified fields first; falls back to legacy per-provider
-	fields for backward compatibility with existing deployments.
-	"""
+	"""Build a unified settings dict for the given provider."""
 	settings = frappe.get_single("Chatbot Settings")
 	sd = settings.as_dict()
 
-	# New unified fields — use get_password for encrypted Password field
 	api_key = settings.get_password("api_key") if sd.get("api_key") else None
-	model = sd.get("model")
-	temperature = sd.get("temperature")
-	max_tokens = sd.get("max_tokens")
-
-	# Fallback to legacy fields if unified api_key is not set
-	if not api_key:
-		if provider_name == "OpenAI":
-			api_key = sd.get("openai_api_key")
-			model = model or sd.get("openai_model")
-			temperature = temperature or sd.get("openai_temperature")
-			max_tokens = max_tokens or sd.get("openai_max_tokens")
-		elif provider_name == "Claude":
-			api_key = sd.get("claude_api_key")
-			model = model or sd.get("claude_model")
-			temperature = temperature or sd.get("claude_temperature")
-			max_tokens = max_tokens or sd.get("claude_max_tokens")
 
 	return {
 		"api_key": api_key,
-		"model": model or DEFAULT_MODELS.get(provider_name),
-		"temperature": temperature or 0.7,
-		"max_tokens": max_tokens or 4000,
+		"model": sd.get("model") or DEFAULT_MODELS.get(provider_name),
+		"temperature": sd.get("temperature") or 0.7,
+		"max_tokens": sd.get("max_tokens") or 4000,
 	}
 
 
 def get_ai_provider(provider_name: str) -> AIProvider:
-	"""Factory function to get AI provider instance.
-
-	Uses the unified Chatbot Settings fields, with fallback to legacy
-	per-provider fields for backward compatibility.
-	"""
+	"""Factory function to get AI provider instance."""
 	resolved = _resolve_settings(provider_name)
 
 	if provider_name == "OpenAI":
