@@ -134,7 +134,7 @@ See [docs/TOOLS_REFERENCE.md](docs/TOOLS_REFERENCE.md) for the complete tool ref
 
 ```bash
 # Get the app
-bench get-app https://github.com/sanjay-kumar001/ai_chatbot --branch version-01
+bench get-app https://github.com/sanjay-kumar001/ai_chatbot
 
 # Install on your site
 bench --site <your-site> install-app ai_chatbot
