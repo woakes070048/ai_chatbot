@@ -111,10 +111,22 @@ def _run_streaming_job(conversation_id: str, stream_id: str, ai_provider: str, u
 
 		# Prepend system prompt (pass conversation_id for session context)
 		system_prompt = build_system_prompt(conversation_id=conversation_id)
-		history = [{"role": "system", "content": system_prompt}, *history]
+		system_msg = {"role": "system", "content": system_prompt}
 
-		# Optimize history (trim + compress tool results)
-		history = optimize_history(history)
+		# Attach prompt blocks for Claude prompt caching
+		if ai_provider == "Claude":
+			from ai_chatbot.core.prompts import build_system_prompt_blocks
+
+			system_msg["_prompt_blocks"] = build_system_prompt_blocks(conversation_id=conversation_id)
+
+		history = [system_msg, *history]
+
+		# Optimize history (trim, summarise, compress, deduplicate)
+		history = optimize_history(
+			history,
+			conversation_id=conversation_id,
+			provider_name=ai_provider,
+		)
 
 		_publish_process_step(conversation_id, stream_id, "Communicating with LLM...", user)
 
@@ -135,6 +147,15 @@ def _run_streaming_job(conversation_id: str, stream_id: str, ai_provider: str, u
 		)
 
 		_publish_process_step(conversation_id, stream_id, "Saving response...", user)
+
+		# Guard: if content is empty but tools were called, provide a fallback message
+		if not full_content.strip() and tool_calls_data:
+			full_content = "I processed your request and executed the required tools, but was unable to generate a summary. Please try rephrasing your question."
+			_publish(
+				"ai_chat_token",
+				{"conversation_id": conversation_id, "stream_id": stream_id, "content": full_content},
+				user=user,
+			)
 
 		# Save assistant message to database
 		frappe.get_doc(

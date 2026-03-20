@@ -182,10 +182,22 @@ def send_message(
 
 		# Prepend system prompt (pass conversation_id for session context)
 		system_prompt = build_system_prompt(conversation_id=conversation_id)
-		history = [{"role": "system", "content": system_prompt}, *history]
+		system_msg = {"role": "system", "content": system_prompt}
 
-		# Optimize history (trim + compress tool results)
-		history = optimize_history(history)
+		# Attach prompt blocks for Claude prompt caching
+		if conversation.ai_provider == "Claude":
+			from ai_chatbot.core.prompts import build_system_prompt_blocks
+
+			system_msg["_prompt_blocks"] = build_system_prompt_blocks(conversation_id=conversation_id)
+
+		history = [system_msg, *history]
+
+		# Optimize history (trim, summarise, compress, deduplicate)
+		history = optimize_history(
+			history,
+			conversation_id=conversation_id,
+			provider_name=conversation.ai_provider,
+		)
 
 		# Get AI provider
 		provider = get_ai_provider(conversation.ai_provider)

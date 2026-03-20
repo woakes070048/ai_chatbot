@@ -140,6 +140,10 @@ def run_orchestrated(
 		frappe.log_error(f"Agent synthesis error: {e!s}", "AI Chatbot Agent")
 		return None  # Fall back to simple path
 
+	# Fallback: if synthesis returned empty, build basic response from step data
+	if not synthesis_content.strip():
+		synthesis_content = _build_fallback_response(context)
+
 	# Track token usage
 	track_token_usage(
 		provider=ai_provider,
@@ -394,6 +398,18 @@ def run_orchestrated_streaming(
 		frappe.log_error(f"Agent streaming synthesis error: {e!s}", "AI Chatbot Agent")
 		return None
 
+	# Fallback: if synthesis returned empty content, build a basic response
+	# from step results so the user at least sees the gathered data.
+	if not full_content.strip():
+		full_content = _build_fallback_response(context)
+		if full_content:
+			# Stream the fallback content to the frontend
+			_publish(
+				"ai_chat_token",
+				{"conversation_id": conversation_id, "stream_id": stream_id, "content": full_content},
+				user=user,
+			)
+
 	# Return the same 6-tuple as _stream_with_tools in streaming.py.
 	# The orchestrator doesn't have real per-round usage from the provider,
 	# so prompt_tokens=0 and completion_tokens=total_tokens (estimated).
@@ -447,6 +463,25 @@ def _should_abort(context: AgentContext) -> bool:
 	if data_steps == 0:
 		return True
 	return context.failed_count() / data_steps > FAILURE_THRESHOLD
+
+
+def _build_fallback_response(context: AgentContext) -> str:
+	"""Build a basic response from step results when synthesis returns empty.
+
+	This is a safety net — it formats the raw step summaries into a readable
+	response so the user at least sees the data that was gathered.
+	"""
+	parts = []
+	for step in context.plan:
+		if step.status == "completed" and step.result_summary:
+			parts.append(f"**{step.description}**\n{step.result_summary}")
+		elif step.status == "failed":
+			parts.append(f"**{step.description}** — _{step.error or 'Failed'}_")
+
+	if not parts:
+		return ""
+
+	return "Here are the results from the analysis:\n\n" + "\n\n".join(parts)
 
 
 def _run_synthesis(provider, context: AgentContext, ai_provider: str) -> tuple[str, int]:

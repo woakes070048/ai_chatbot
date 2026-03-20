@@ -20,6 +20,13 @@ DEFAULT_MODELS = {
 	"Gemini": "gemini-2.5-flash",
 }
 
+# Cheap/fast models used for auxiliary tasks (conversation summarisation)
+SUMMARY_MODELS = {
+	"OpenAI": "gpt-4o-mini",
+	"Claude": "claude-haiku-4-5-20251001",
+	"Gemini": "gemini-2.0-flash-lite",
+}
+
 # User-friendly error messages for common API errors
 RATE_LIMIT_MESSAGE = (
 	"The AI service is temporarily unavailable due to rate limiting. "
@@ -311,6 +318,10 @@ class ClaudeProvider(AIProvider):
 		claude_messages = self._convert_messages_to_claude(messages)
 		system_message = self._extract_system_message(messages)
 
+		# Enable prompt caching when system message uses content blocks
+		if isinstance(system_message, list):
+			headers["anthropic-beta"] = "prompt-caching-2024-07-31"
+
 		payload = {
 			"model": self.model,
 			"messages": claude_messages,
@@ -356,6 +367,10 @@ class ClaudeProvider(AIProvider):
 
 		claude_messages = self._convert_messages_to_claude(messages)
 		system_message = self._extract_system_message(messages)
+
+		# Enable prompt caching when system message uses content blocks
+		if isinstance(system_message, list):
+			headers["anthropic-beta"] = "prompt-caching-2024-07-31"
 
 		payload = {
 			"model": self.model,
@@ -542,14 +557,57 @@ class ClaudeProvider(AIProvider):
 		return claude_messages
 
 	def _extract_system_message(self, messages):
-		"""Extract system message from messages list"""
+		"""Extract system message from messages list.
+
+		If the system message carries _prompt_blocks metadata (from structured
+		prompting), builds an array of Claude content blocks with cache_control
+		markers on static blocks. Otherwise returns a plain string.
+		"""
 		for msg in messages:
 			if msg["role"] == "system":
+				blocks = msg.get("_prompt_blocks")
+				if blocks:
+					return self._build_cached_system_blocks(blocks)
 				return msg["content"]
 		return ""
 
+	def _build_cached_system_blocks(self, blocks: list[dict]) -> list[dict]:
+		"""Convert prompt blocks into Claude content blocks with cache_control.
+
+		Static blocks (cacheable=True) get cache_control markers. Claude caches
+		all content up to the last block that has cache_control, so we place the
+		marker on the last cacheable block.
+
+		Args:
+			blocks: List of dicts with tag, content, cacheable keys.
+
+		Returns:
+			List of Claude system content blocks.
+		"""
+		content_blocks = []
+
+		# Find the last cacheable block index
+		last_cacheable_idx = -1
+		for i, block in enumerate(blocks):
+			if block.get("cacheable", False):
+				last_cacheable_idx = i
+
+		for i, block in enumerate(blocks):
+			tag = block["tag"]
+			text = f"<{tag}>\n{block['content']}\n</{tag}>"
+			cb = {"type": "text", "text": text}
+			if i == last_cacheable_idx:
+				cb["cache_control"] = {"type": "ephemeral"}
+			content_blocks.append(cb)
+
+		return content_blocks
+
 	def _convert_tools_to_claude(self, tools):
-		"""Convert OpenAI tool format to Claude format"""
+		"""Convert OpenAI tool format to Claude format.
+
+		Adds cache_control on the last tool so Claude caches the entire
+		tool schema prefix (~8K-12K tokens saved per request).
+		"""
 		claude_tools = []
 		for tool in tools:
 			if tool.get("type") == "function":
@@ -561,6 +619,11 @@ class ClaudeProvider(AIProvider):
 						"input_schema": func.get("parameters", {}),
 					}
 				)
+
+		# Mark the last tool for caching (Claude caches everything up to the marker)
+		if claude_tools:
+			claude_tools[-1]["cache_control"] = {"type": "ephemeral"}
+
 		return claude_tools
 
 
@@ -591,3 +654,30 @@ def get_ai_provider(provider_name: str) -> AIProvider:
 		return GeminiProvider(resolved)
 	else:
 		frappe.throw(f"Unknown AI provider: {provider_name}")
+
+
+def get_summary_provider(provider_name: str) -> AIProvider:
+	"""Get a cheap/fast AI provider for auxiliary tasks (conversation summarisation).
+
+	Uses the same provider family as the conversation but picks the cheapest
+	model to minimise cost. Short max_tokens and low temperature for factual summaries.
+
+	Args:
+		provider_name: The conversation's AI provider (OpenAI/Claude/Gemini).
+
+	Returns:
+		AIProvider instance configured for summarisation.
+	"""
+	resolved = _resolve_settings(provider_name)
+	resolved["model"] = SUMMARY_MODELS.get(provider_name, resolved["model"])
+	resolved["max_tokens"] = 500
+	resolved["temperature"] = 0.3
+
+	if provider_name == "OpenAI":
+		return OpenAIProvider(resolved)
+	elif provider_name == "Claude":
+		return ClaudeProvider(resolved)
+	elif provider_name == "Gemini":
+		return GeminiProvider(resolved)
+	else:
+		frappe.throw(f"Unknown provider for summarisation: {provider_name}")
