@@ -77,9 +77,10 @@
   {
    "default": "0",
    "fieldname": "estimated_cost",
-   "fieldtype": "Currency",
+   "fieldtype": "Float",
    "in_list_view": 1,
    "label": "Estimated Cost (USD)",
+   "precision": "6",
    "read_only": 1
   },
   {
@@ -93,7 +94,7 @@
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-02-24 12:00:00.000000",
+ "modified": "2026-03-20 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Chatbot",
  "name": "Chatbot Token Usage",
