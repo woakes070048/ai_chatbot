@@ -3,32 +3,15 @@
 """
 Common Finance Helpers
 Shared utilities for finance tool modules — eliminates duplication across files.
+
+`primary` and `apply_company_filter` are re-exported from `ai_chatbot.tools.common`
+so existing finance imports continue to work unchanged.
 """
 
 from __future__ import annotations
 
 from ai_chatbot.core.constants import AGING_BUCKETS
-
-
-def primary(company: str | list[str]) -> str:
-	"""Get primary company name (first in list or string as-is)."""
-	return company[0] if isinstance(company, list) else company
-
-
-def apply_company_filter(query, doctype_ref, company: str | list[str]):
-	"""Apply company filter supporting both single string and list.
-
-	Args:
-		query: A frappe.qb query object.
-		doctype_ref: The DocType reference (e.g. `frappe.qb.DocType("Sales Invoice")`).
-		company: Single company string or list of company strings.
-
-	Returns:
-		The query with the company filter applied.
-	"""
-	if isinstance(company, list):
-		return query.where(doctype_ref.company.isin(company))
-	return query.where(doctype_ref.company == company)
+from ai_chatbot.tools.common import apply_company_filter, primary
 
 
 def get_aging_bucket(days_overdue: int) -> str:

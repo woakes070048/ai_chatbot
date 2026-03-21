@@ -17,17 +17,9 @@ from ai_chatbot.core.session_context import get_company_filter
 from ai_chatbot.data.currency import build_currency_response
 from ai_chatbot.data.forecast_charts import build_cash_flow_forecast_chart
 from ai_chatbot.data.forecasting import fill_month_gaps, forecast_time_series, generate_month_labels
+from ai_chatbot.tools.common import apply_company_filter as _apply_company_filter
+from ai_chatbot.tools.common import primary as _primary
 from ai_chatbot.tools.registry import register_tool
-
-
-def _primary(company):
-	return company[0] if isinstance(company, list) else company
-
-
-def _apply_company_filter(query, table, company):
-	if isinstance(company, list):
-		return query.where(table.company.isin(company))
-	return query.where(table.company == company)
 
 
 def _get_monthly_cash_flow(company, months_back: int = 24) -> tuple[list[str], list[float], list[float]]:

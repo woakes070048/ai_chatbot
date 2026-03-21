@@ -20,17 +20,9 @@ from ai_chatbot.core.session_context import get_company_filter
 from ai_chatbot.data.charts import build_bar_chart
 from ai_chatbot.data.currency import build_currency_response
 from ai_chatbot.data.forecasting import _mean, _std
+from ai_chatbot.tools.common import apply_company_filter as _apply_company_filter
+from ai_chatbot.tools.common import primary as _primary
 from ai_chatbot.tools.registry import register_tool
-
-
-def _primary(company):
-	return company[0] if isinstance(company, list) else company
-
-
-def _apply_company_filter(query, table, company):
-	if isinstance(company, list):
-		return query.where(table.company.isin(company))
-	return query.where(table.company == company)
 
 
 @register_tool(

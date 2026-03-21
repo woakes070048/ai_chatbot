@@ -16,13 +16,8 @@ from ai_chatbot.core.config import get_fiscal_year_dates, is_hrms_installed
 from ai_chatbot.core.session_context import get_company_filter
 from ai_chatbot.data.charts import build_bar_chart, build_multi_series_chart, build_pie_chart
 from ai_chatbot.data.currency import build_company_context, build_currency_response
+from ai_chatbot.tools.common import primary as _primary
 from ai_chatbot.tools.registry import register_tool
-
-
-def _primary(company):
-	"""Get primary company name (first in list or string as-is)."""
-	return company[0] if isinstance(company, list) else company
-
 
 _HRMS_NOT_INSTALLED = {
 	"error": (
