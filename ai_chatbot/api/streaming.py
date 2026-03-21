@@ -19,7 +19,7 @@ from ai_chatbot.core.logger import log_error, log_info, log_request, timer
 from ai_chatbot.core.prompts import build_system_prompt
 from ai_chatbot.core.token_optimizer import optimize_history
 from ai_chatbot.core.token_tracker import track_token_usage
-from ai_chatbot.tools.base import BaseTool, get_all_tools_schema
+from ai_chatbot.tools.base import BaseTool, get_tools_for_message
 from ai_chatbot.utils.ai_providers import get_ai_provider
 
 # Buffer threshold — batch tokens to reduce Redis Pub/Sub overhead
@@ -134,7 +134,24 @@ def _run_streaming_job(conversation_id: str, stream_id: str, ai_provider: str, u
 		_publish_process_step(conversation_id, stream_id, "Communicating with LLM...", user)
 
 		provider = get_ai_provider(ai_provider)
-		tools = get_all_tools_schema()
+
+		# Route to relevant tool subset (Phase 12A)
+		user_msg = next(
+			(m.get("content", "") for m in reversed(history) if m.get("role") == "user"),
+			"",
+		)
+		if isinstance(user_msg, list):
+			user_msg = " ".join(p.get("text", "") for p in user_msg if p.get("type") == "text")
+
+		tools, routing = get_tools_for_message(user_msg, history)
+		log_info(
+			"Tool routing (stream)",
+			conversation_id=conversation_id,
+			categories=",".join(routing.intent.categories),
+			tool_count=routing.tool_count,
+			is_fallback=routing.is_fallback,
+			query_type=routing.intent.query_type,
+		)
 
 		# Run the streaming loop
 		with timer() as t:

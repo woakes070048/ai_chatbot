@@ -160,6 +160,55 @@ def get_registered_tools():
 	return {name: info["category"] for name, info in _TOOL_REGISTRY.items()}
 
 
+def get_tools_by_categories(categories: set[str], extra_tool_names: set[str] | None = None) -> list[dict]:
+	"""Get tool schemas filtered to specific categories.
+
+	Like ``get_all_tools_schema()`` but only returns tools whose category
+	is in the provided set.  Also includes any tools explicitly named in
+	*extra_tool_names* (for always-include tools like session management).
+
+	Still respects settings flags and user permission checks.
+
+	Args:
+		categories: Set of category keys (e.g. ``{"selling", "finance"}``).
+		extra_tool_names: Optional set of tool names to always include
+			regardless of category.
+
+	Returns:
+		List of dicts in OpenAI function calling format.
+	"""
+	_ensure_tools_loaded()
+
+	all_categories = {**TOOL_CATEGORIES, **_EXTRA_CATEGORIES}
+	extra = extra_tool_names or set()
+	tools = []
+
+	for tool_name, tool_info in _TOOL_REGISTRY.items():
+		category = tool_info["category"]
+
+		# Include if category matches OR tool name is in the extra set
+		if category not in categories and tool_name not in extra:
+			continue
+
+		# Check settings flag
+		settings_field = all_categories.get(category)
+		if settings_field and not is_tool_category_enabled(settings_field):
+			continue
+
+		# Skip tools the user has no permission for
+		tool_doctypes = tool_info.get("doctypes", [])
+		if tool_doctypes:
+			has_perm = all(
+				frappe.has_permission(dt, "read", user=frappe.session.user) for dt in tool_doctypes
+			)
+			if not has_perm:
+				continue
+
+		tools.append(_build_schema(tool_info))
+
+	return tools
+
+
 def register_tool_category(name, settings_field=None):
 	"""Register a new tool category from an external app.
 
