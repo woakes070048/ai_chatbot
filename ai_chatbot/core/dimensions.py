@@ -9,11 +9,35 @@ import frappe
 
 
 def get_available_dimensions():
-	"""Get all active accounting dimensions.
+	"""Get all active accounting dimensions using ERPNext's official API.
+
+	Uses ``erpnext.accounts.doctype.accounting_dimension.accounting_dimension
+	.get_accounting_dimensions()`` which returns the canonical list of
+	non-disabled dimensions.  Falls back to a direct DocType query when
+	ERPNext is not installed.
 
 	Returns:
 		list[dict]: Each dict has keys: fieldname, label, document_type.
 	"""
+	try:
+		from erpnext.accounts.doctype.accounting_dimension.accounting_dimension import (
+			get_accounting_dimensions,
+		)
+
+		dims = get_accounting_dimensions(as_list=False)
+		return [
+			{
+				"fieldname": d.get("fieldname"),
+				"label": d.get("label") or d.get("fieldname"),
+				"document_type": d.get("document_type") or d.get("fieldname"),
+			}
+			for d in dims
+			if d.get("fieldname")
+		]
+	except ImportError:
+		pass
+
+	# Fallback: query the DocType directly (ERPNext not installed)
 	dimensions = frappe.get_all(
 		"Accounting Dimension",
 		filters={"disabled": 0},

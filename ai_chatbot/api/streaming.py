@@ -15,6 +15,7 @@ import uuid
 import frappe
 
 from ai_chatbot.api.history import get_conversation_history as _get_conversation_history
+from ai_chatbot.core.logger import log_error, log_info, log_request, timer
 from ai_chatbot.core.prompts import build_system_prompt
 from ai_chatbot.core.token_optimizer import optimize_history
 from ai_chatbot.core.token_tracker import track_token_usage
@@ -81,7 +82,7 @@ def send_message_streaming(conversation_id: str, message: str, attachments: str 
 		return {"success": True, "stream_id": stream_id}
 
 	except Exception as e:
-		frappe.log_error(f"Streaming error: {e!s}", "AI Chatbot Streaming")
+		log_error(f"Streaming error: {e!s}", title="Streaming")
 		return {"success": False, "error": str(e)}
 
 
@@ -94,6 +95,7 @@ def _run_streaming_job(conversation_id: str, stream_id: str, ai_provider: str, u
 	try:
 		# Set conversation context for session tools
 		frappe.flags.current_conversation_id = conversation_id
+		log_info("Streaming job started", conversation_id=conversation_id, provider=ai_provider)
 
 		# Notify frontend: stream started
 		_publish(
@@ -135,8 +137,15 @@ def _run_streaming_job(conversation_id: str, stream_id: str, ai_provider: str, u
 		tools = get_all_tools_schema()
 
 		# Run the streaming loop
-		full_content, tool_calls_data, tool_results_data, tokens_used, prompt_tokens, completion_tokens = (
-			_stream_with_tools(
+		with timer() as t:
+			(
+				full_content,
+				tool_calls_data,
+				tool_results_data,
+				tokens_used,
+				prompt_tokens,
+				completion_tokens,
+			) = _stream_with_tools(
 				ai_provider=ai_provider,
 				provider=provider,
 				history=history,
@@ -145,6 +154,15 @@ def _run_streaming_job(conversation_id: str, stream_id: str, ai_provider: str, u
 				stream_id=stream_id,
 				user=user,
 			)
+
+		log_request(
+			provider=ai_provider,
+			model=provider.model,
+			conversation_id=conversation_id,
+			prompt_tokens=prompt_tokens,
+			completion_tokens=completion_tokens,
+			duration_ms=t.duration_ms,
+			stream=True,
 		)
 
 		_publish_process_step(conversation_id, stream_id, "Saving response...", user)
@@ -220,7 +238,7 @@ def _run_streaming_job(conversation_id: str, stream_id: str, ai_provider: str, u
 		)
 
 	except Exception as e:
-		frappe.log_error(f"Streaming job error: {e!s}", "AI Chatbot Streaming")
+		log_error(f"Streaming job error: {e!s}", title="Streaming")
 		_publish(
 			"ai_chat_error",
 			{

@@ -13,6 +13,8 @@ import json
 import frappe
 import requests
 
+from ai_chatbot.core.logger import log_provider_error
+
 # Default models per provider
 DEFAULT_MODELS = {
 	"OpenAI": "gpt-4o",
@@ -150,7 +152,7 @@ class OpenAIProvider(AIProvider):
 			return response.json()
 
 		except requests.exceptions.RequestException as e:
-			frappe.log_error(f"OpenAI API Error: {e!s}", "AI Chatbot")
+			log_provider_error("OpenAI", e)
 			frappe.throw(f"OpenAI API Error: {classify_api_error(e)}")
 
 	def chat_completion_stream(self, messages, tools=None):
@@ -261,7 +263,7 @@ class OpenAIProvider(AIProvider):
 					yield {"type": "finish", "finish_reason": finish_reason}
 
 		except requests.exceptions.RequestException as e:
-			frappe.log_error(f"OpenAI Streaming Error: {e!s}", "AI Chatbot")
+			log_provider_error("OpenAI", e)
 			yield {"type": "error", "content": classify_api_error(e)}
 
 
@@ -347,7 +349,7 @@ class ClaudeProvider(AIProvider):
 			return response.json()
 
 		except requests.exceptions.RequestException as e:
-			frappe.log_error(f"Claude API Error: {e!s}", "AI Chatbot")
+			log_provider_error("Claude", e)
 			frappe.throw(f"Claude API Error: {classify_api_error(e)}")
 
 	def chat_completion_stream(self, messages, tools=None):
@@ -481,7 +483,7 @@ class ClaudeProvider(AIProvider):
 					pass  # Already handled via message_delta
 
 		except requests.exceptions.RequestException as e:
-			frappe.log_error(f"Claude Streaming Error: {e!s}", "AI Chatbot")
+			log_provider_error("Claude", e)
 			yield {"type": "error", "content": classify_api_error(e)}
 
 	def _convert_messages_to_claude(self, messages):

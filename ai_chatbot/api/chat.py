@@ -11,6 +11,7 @@ import frappe
 
 from ai_chatbot.api.history import get_conversation_history
 from ai_chatbot.core.ai_utils import extract_response, extract_tool_info
+from ai_chatbot.core.logger import log_error, log_info, log_warning
 from ai_chatbot.core.prompts import build_system_prompt
 from ai_chatbot.core.token_optimizer import optimize_history
 from ai_chatbot.core.token_tracker import track_token_usage
@@ -42,7 +43,7 @@ def create_conversation(title: str, ai_provider: str = "OpenAI") -> dict:
 			"data": conversation.as_dict(),
 		}
 	except Exception as e:
-		frappe.log_error(f"Error creating conversation: {e!s}", "AI Chatbot")
+		log_error(f"Error creating conversation: {e!s}", title="Chat API")
 		return {"success": False, "error": str(e)}
 
 
@@ -63,7 +64,7 @@ def get_conversations(limit: int = 20) -> dict:
 			"conversations": conversations,
 		}
 	except Exception as e:
-		frappe.log_error(f"Error getting conversations: {e!s}", "AI Chatbot")
+		log_error(f"Error getting conversations: {e!s}", title="Chat API")
 		return {"success": False, "error": str(e)}
 
 
@@ -132,7 +133,7 @@ def get_conversation_messages(conversation_id: str) -> dict:
 			"session_context": session_context,
 		}
 	except Exception as e:
-		frappe.log_error(f"Error getting messages: {e!s}", "AI Chatbot")
+		log_error(f"Error getting messages: {e!s}", title="Chat API")
 		return {"success": False, "error": str(e)}
 
 
@@ -153,6 +154,8 @@ def send_message(
 		attachments: Optional JSON string of file attachment metadata.
 	"""
 	try:
+		log_info("Incoming message", conversation_id=conversation_id, stream=stream)
+
 		if stream:
 			from ai_chatbot.api.streaming import send_message_streaming
 
@@ -210,7 +213,7 @@ def send_message(
 		return generate_ai_response(conversation, provider, history, tools)
 
 	except Exception as e:
-		frappe.log_error(f"Error sending message: {e!s}", "AI Chatbot")
+		log_error(f"Error sending message: {e!s}", title="Chat API")
 		return {"success": False, "error": str(e)}
 
 
@@ -338,7 +341,7 @@ def generate_ai_response(conversation, provider, history, tools) -> dict:
 		}
 
 	except Exception as e:
-		frappe.log_error(f"Error generating response: {e!s}", "AI Chatbot")
+		log_error(f"Error generating response: {e!s}", title="Chat API")
 		return {"success": False, "error": str(e)}
 
 
@@ -361,7 +364,7 @@ def delete_conversation(conversation_id: str) -> dict:
 
 		return {"success": True}
 	except Exception as e:
-		frappe.log_error(f"Error deleting conversation: {e!s}", "AI Chatbot")
+		log_error(f"Error deleting conversation: {e!s}", title="Chat API")
 		return {"success": False, "error": str(e)}
 
 
@@ -380,7 +383,7 @@ def update_conversation_title(conversation_id: str, title: str) -> dict:
 
 		return {"success": True}
 	except Exception as e:
-		frappe.log_error(f"Error updating title: {e!s}", "AI Chatbot")
+		log_error(f"Error updating title: {e!s}", title="Chat API")
 		return {"success": False, "error": str(e)}
 
 
@@ -410,7 +413,7 @@ def set_conversation_language(conversation_id: str, language: str = "") -> dict:
 
 		return {"success": True, "language": language}
 	except Exception as e:
-		frappe.log_error(f"Error setting conversation language: {e!s}", "AI Chatbot")
+		log_error(f"Error setting conversation language: {e!s}", title="Chat API")
 		return {"success": False, "error": str(e)}
 
 
@@ -467,7 +470,7 @@ def get_settings() -> dict:
 			},
 		}
 	except Exception as e:
-		frappe.log_error(f"Error getting settings: {e!s}", "AI Chatbot")
+		log_error(f"Error getting settings: {e!s}", title="Chat API")
 		return {"success": False, "error": str(e)}
 
 
@@ -546,7 +549,7 @@ def search_conversations(query: str, limit: int = 20) -> dict:
 			"conversations": title_matches[:limit],
 		}
 	except Exception as e:
-		frappe.log_error(f"Search conversations error: {e!s}", "AI Chatbot")
+		log_error(f"Search conversations error: {e!s}", title="Chat API")
 		return {"success": False, "error": str(e)}
 
 
@@ -620,7 +623,7 @@ def get_mention_values(mention_type: str, search_term: str = "", company: str | 
 		return {"success": False, "error": f"Unknown mention type: {mention_type}"}
 
 	except Exception as e:
-		frappe.log_error(f"Mention values error: {e!s}", "AI Chatbot")
+		log_error(f"Mention values error: {e!s}", title="Chat API")
 		return {"success": False, "error": str(e)}
 
 
@@ -697,25 +700,23 @@ def _get_period_presets(company: str | None = None) -> list[dict]:
 def _get_accounting_dimensions(company: str | None = None, search_term: str = "") -> list[dict]:
 	"""Return available accounting dimensions and their values.
 
-	Uses frappe.get_all("Accounting Dimension") to list configured dimensions,
-	then queries each dimension's document_type for its values.
+	Uses the centralised ``core.dimensions.get_available_dimensions()``
+	(which calls ERPNext's ``get_accounting_dimensions`` API) to discover
+	active dimensions, then queries each dimension's document_type for values.
 	"""
 	try:
-		# Get accounting dimension records directly from the DocType
-		dim_filters = {"disabled": 0}
-		if search_term:
-			dim_filters["label"] = ["like", f"%{search_term}%"]
+		from ai_chatbot.core.dimensions import get_available_dimensions
 
-		dimensions = frappe.get_all(
-			"Accounting Dimension",
-			filters=dim_filters,
-			fields=["name", "label", "document_type", "disabled"],
-			order_by="label asc",
-		)
+		dimensions = get_available_dimensions()
+
+		# Optional search_term filter on label
+		if search_term:
+			term_lower = search_term.lower()
+			dimensions = [d for d in dimensions if term_lower in (d.get("label") or "").lower()]
 
 		results = []
 		for dim in dimensions:
-			doc_type = dim.get("document_type") or dim.get("name")
+			doc_type = dim.get("document_type") or dim.get("fieldname")
 			label = dim.get("label") or doc_type
 
 			# Get values for this dimension's document type
@@ -743,5 +744,5 @@ def _get_accounting_dimensions(company: str | None = None, search_term: str = ""
 			)
 		return results
 	except Exception as e:
-		frappe.log_error(f"Error fetching accounting dimensions: {e}")
+		log_warning(f"Error fetching accounting dimensions: {e}")
 		return []

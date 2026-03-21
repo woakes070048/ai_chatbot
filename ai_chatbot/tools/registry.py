@@ -8,14 +8,11 @@ Tools self-register with metadata (name, category, description, schema).
 The registry handles discovery, filtering by settings, and execution.
 """
 
-from typing import Any
-
 import frappe
 
 from ai_chatbot.core.config import is_tool_category_enabled
 from ai_chatbot.core.constants import TOOL_CATEGORIES
-from ai_chatbot.core.exceptions import ToolExecutionError, ToolNotFoundError
-from ai_chatbot.core.logger import log_tool_error
+from ai_chatbot.core.logger import log_error, log_tool_call, log_tool_error, timer
 
 # Global tool store — populated by @register_tool decorator at import time
 _TOOL_REGISTRY = {}
@@ -124,8 +121,16 @@ def execute_tool(tool_name: str, arguments: dict) -> dict:
 		if not frappe.has_permission(dt, "read", user=frappe.session.user):
 			return {"success": False, "error": f"You do not have permission to access {dt}"}
 
+	conversation_id = getattr(frappe.flags, "current_conversation_id", None)
 	try:
-		result = tool_info["function"](**arguments)
+		with timer() as t:
+			result = tool_info["function"](**arguments)
+		log_tool_call(
+			tool_name,
+			arguments=arguments,
+			duration_ms=t.duration_ms,
+			conversation_id=conversation_id,
+		)
 		return {"success": True, "data": result}
 	except Exception as e:
 		log_tool_error(tool_name, e, arguments)
@@ -250,7 +255,7 @@ def _ensure_tools_loaded():
 		try:
 			frappe.get_module(module_path)
 		except Exception as e:
-			frappe.log_error(
+			log_error(
 				f"Failed to load AI Chatbot tool plugin: {module_path}: {e}",
-				"AI Chatbot Plugin Error",
+				title="Plugin Loader",
 			)

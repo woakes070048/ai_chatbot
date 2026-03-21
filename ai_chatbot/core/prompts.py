@@ -190,12 +190,24 @@ def build_system_prompt_blocks(conversation_id: str | None = None, company: str 
 			"- Flag anomalies or concerning trends proactively"
 		)
 
-	# Dimension Filtering
+	# Dimension Filtering (dynamically discovered)
+	dim_names = ["cost_center", "department", "project"]
+	try:
+		from ai_chatbot.core.dimensions import get_available_dimensions
+
+		extra_dims = get_available_dimensions()
+		for d in extra_dims:
+			fn = d.get("fieldname")
+			if fn and fn not in dim_names:
+				dim_names.append(fn)
+	except Exception:
+		pass
+
+	dim_list = ", ".join(f"`{d}`" for d in dim_names)
 	rules_parts.append(
 		"## Dimension Filtering\n"
-		"- Finance tools support optional filtering by `cost_center`, `department`, and `project`.\n"
-		"- Only pass these filters when the user explicitly mentions a cost center, department, "
-		"or project.\n"
+		f"- Finance tools support optional filtering by: {dim_list}.\n"
+		"- Only pass these filters when the user explicitly mentions a dimension value.\n"
 		"- Do NOT ask the user for dimension filters — they are optional."
 	)
 
