@@ -67,9 +67,24 @@
         <div class="flex-1 overflow-y-auto px-6 py-4">
           <!-- Sample Prompts Tab -->
           <div v-if="activeTab === 'prompts'" class="space-y-5">
-            <div v-for="category in samplePrompts" :key="category.category">
+            <!-- Loading state -->
+            <div v-if="loading" class="flex items-center justify-center py-12">
+              <div class="animate-spin rounded-full h-6 w-6 border-2 border-blue-600 border-t-transparent"></div>
+              <span class="ml-3 text-sm text-gray-500 dark:text-gray-400">Loading prompts...</span>
+            </div>
+
+            <!-- Error state -->
+            <div v-else-if="loadError" class="text-center py-12">
+              <p class="text-sm text-red-500 dark:text-red-400">{{ loadError }}</p>
+              <button @click="fetchPrompts" class="mt-2 text-sm text-blue-600 dark:text-blue-400 hover:underline">
+                Retry
+              </button>
+            </div>
+
+            <!-- Prompt categories -->
+            <div v-else v-for="category in samplePrompts" :key="category.category">
               <div class="flex items-center gap-2 mb-2">
-                <component :is="category.icon" :size="16" class="text-gray-500 dark:text-gray-400" />
+                <component :is="getCategoryIcon(category.category)" :size="16" class="text-gray-500 dark:text-gray-400" />
                 <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide">
                   {{ category.category }}
                 </h3>
@@ -144,13 +159,15 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import {
   HelpCircle, X, TrendingUp, DollarSign, Users, Target,
   Package, ShoppingCart, MessageSquare, AtSign, Settings,
+  FileText, BarChart3, Building2, Wrench,
 } from 'lucide-vue-next'
+import { chatAPI } from '../utils/api.js'
 
-defineProps({
+const props = defineProps({
   modelValue: {
     type: Boolean,
     default: false,
@@ -160,106 +177,43 @@ defineProps({
 const emit = defineEmits(['update:modelValue', 'select-prompt'])
 
 const activeTab = ref('prompts')
+const samplePrompts = ref([])
+const loading = ref(false)
+const loadError = ref('')
+let fetched = false
 
-const samplePrompts = [
-  {
-    category: 'Sales',
-    icon: TrendingUp,
-    prompts: [
-      { text: 'What is the total sales this month?', type: 'number', expected: 'Revenue figure with currency, date range, company name' },
-      { text: 'Show top 10 customers by revenue this year', type: 'table', expected: 'Ranked customer list with revenue amounts' },
-      { text: 'Sales trend month by month for this fiscal year', type: 'chart', expected: 'ECharts line chart with monthly revenue trend' },
-      { text: 'Compare sales this month vs last month', type: 'table', expected: 'Side-by-side comparison with variance' },
-      { text: 'Break down sales by territory', type: 'chart', expected: 'ECharts pie chart with territory-wise revenue' },
-      { text: 'Show sales by product category', type: 'chart', expected: 'ECharts bar chart by item group' },
-      { text: 'Which products are most profitable?', type: 'chart', expected: 'Items with revenue, cost, margin %, and ECharts chart' },
-      { text: 'Show profitability breakdown by territory', type: 'chart', expected: 'ECharts pie chart with territory margin data' },
-      { text: 'Show sales for @company Acme Corp in @period Last Quarter', type: 'table', expected: 'Filtered sales data for the specified company and period' },
-    ],
-  },
-  {
-    category: 'Finance',
-    icon: DollarSign,
-    prompts: [
-      { text: 'Give me a financial overview', type: 'chart', expected: 'Revenue, COGS, gross profit, net profit, cash position, AR/AP with bar chart' },
-      { text: 'Show me the CFO dashboard', type: 'table', expected: 'Financial highlights, KPIs, cash flow, aging summaries, budget variance' },
-      { text: 'Show profit and loss summary for this fiscal year', type: 'table', expected: 'Revenue, expenses, net profit for fiscal year' },
-      { text: 'What are the current liquidity ratios?', type: 'number', expected: 'Current ratio, quick ratio with component breakdown' },
-      { text: 'Show me profitability ratios for this fiscal year', type: 'number', expected: 'Gross margin %, net margin %, ROA %' },
-      { text: 'What are the efficiency ratios?', type: 'number', expected: 'Inventory turnover, DSO, DPO with component breakdown' },
-      { text: 'Show accounts receivable aging', type: 'chart', expected: 'Aging buckets (0-30, 31-60, 61-90, 90+) with ECharts bar chart' },
-      { text: 'Who are the top 10 debtors?', type: 'chart', expected: 'Customers with outstanding amounts and ECharts horizontal bar' },
-      { text: 'Show accounts payable aging', type: 'chart', expected: 'Supplier aging buckets with ECharts bar chart' },
-      { text: 'What is our working capital position?', type: 'number', expected: 'Receivables, inventory, payables, net working capital' },
-      { text: 'What is the cash conversion cycle?', type: 'number', expected: 'DSO, DIO, DPO, and CCC = DSO + DIO - DPO' },
-      { text: 'Show budget vs actual for this fiscal year', type: 'chart', expected: 'Accounts with budget, actual, variance and multi-series bar chart' },
-      { text: 'Show monthly budget variance', type: 'chart', expected: 'Monthly breakdown with ECharts multi-series line chart' },
-      { text: 'Generate a cash flow statement', type: 'table', expected: 'Operating/financing activities with inflow, outflow, net' },
-      { text: 'Show cash flow trend for the last 12 months', type: 'chart', expected: 'ECharts multi-series line chart (inflow, outflow, net)' },
-      { text: 'What are the current bank balances?', type: 'number', expected: 'Bank/cash accounts with individual and total balances' },
-      { text: 'Show month-over-month comparison for the last 3 months', type: 'chart', expected: 'Revenue, expenses, net profit with MoM variance and line chart' },
-      { text: 'Show expense breakdown by @cost_center', type: 'chart', expected: 'Expenses filtered by cost center' },
-      { text: 'Show consolidated revenue including subsidiaries', type: 'number', expected: 'Aggregated revenue from parent + all child companies' },
-      { text: 'Show CFO dashboard with subsidiary data', type: 'table', expected: 'KPIs, cash flow, aging consolidated across all group companies' },
-      { text: 'Show receivable aging across all group companies', type: 'chart', expected: 'Outstanding invoices from parent + subsidiaries with aging buckets' },
-      { text: 'Show financial ratios for the group', type: 'number', expected: 'Liquidity, profitability, efficiency ratios from consolidated data' },
-    ],
-  },
-  {
-    category: 'HR',
-    icon: Users,
-    prompts: [
-      { text: 'How many active employees do we have?', type: 'chart', expected: 'Total count with department-wise breakdown and pie chart' },
-      { text: 'Show employee distribution by department', type: 'chart', expected: 'Pie chart with department segments' },
-      { text: 'Show attendance summary for this month', type: 'chart', expected: 'Present, Absent, On Leave, Half Day, WFH with bar chart' },
-      { text: 'What is the leave balance for an employee?', type: 'table', expected: 'Leave type breakdown: allocated, consumed, balance' },
-      { text: 'Show payroll summary for this month', type: 'chart', expected: 'Gross pay, deductions, net pay with bar chart' },
-      { text: 'Show department-wise salary distribution', type: 'chart', expected: 'Departments with gross/net pay and pie chart' },
-      { text: 'Show employee turnover for this year', type: 'chart', expected: 'Hires, exits, turnover rate % with multi-series bar chart' },
-      { text: 'Show headcount by @department', type: 'table', expected: 'Filtered count for the specified department' },
-    ],
-  },
-  {
-    category: 'CRM',
-    icon: Target,
-    prompts: [
-      { text: 'Show me lead statistics', type: 'chart', expected: 'Total leads, status breakdown with pie chart' },
-      { text: 'Show opportunity pipeline', type: 'chart', expected: 'Opportunities with amounts by sales stage, bar chart' },
-      { text: 'What is our lead conversion rate?', type: 'number', expected: 'Total leads, converted count, conversion rate %' },
-      { text: 'Which lead sources are performing best?', type: 'chart', expected: 'Sources ranked by lead count with pie chart' },
-      { text: 'Show the sales funnel', type: 'chart', expected: 'Leads > Opportunities > Quotations > Orders with conversion rates' },
-      { text: 'Show opportunities by sales stage', type: 'chart', expected: 'Stages with count and total value, bar chart' },
-      { text: 'Show all open opportunities', type: 'table', expected: 'Filtered opportunities with status Open' },
-      { text: 'List recent activities for @customer', type: 'table', expected: 'Activity log for the specified customer' },
-    ],
-  },
-  {
-    category: 'Stock',
-    icon: Package,
-    prompts: [
-      { text: 'What is the total stock value?', type: 'number', expected: 'Aggregate stock valuation across warehouses' },
-      { text: 'Show low stock items below reorder level', type: 'table', expected: 'Items below reorder point with quantities' },
-      { text: 'Top 10 items by stock quantity', type: 'table', expected: 'Ranked items with warehouse and quantity' },
-      { text: 'Show stock movement for the last 30 days', type: 'chart', expected: 'In/out movements with ECharts multi-series bar chart' },
-      { text: 'Show stock ageing report', type: 'chart', expected: 'Items with age in days, aging buckets with bar chart' },
-      { text: 'Show stock balance for @item in @warehouse', type: 'table', expected: 'Filtered stock balance for specific item and warehouse' },
-    ],
-  },
-  {
-    category: 'Operations',
-    icon: Settings,
-    prompts: [
-      { text: 'Show pending purchase orders', type: 'table', expected: 'Open POs with supplier, amount, date' },
-      { text: 'Top suppliers by purchase amount this year', type: 'table', expected: 'Ranked suppliers with purchase totals' },
-      { text: 'Show the purchase trend for the last 12 months', type: 'chart', expected: 'ECharts line chart with monthly purchase amounts' },
-      { text: 'Break down purchases by item group', type: 'chart', expected: 'ECharts bar chart by item group' },
-      { text: 'What is the total purchase amount this quarter?', type: 'number', expected: 'Aggregate purchase value for the quarter' },
-      { text: 'Show consolidated revenue', type: 'number', expected: 'Aggregated revenue across subsidiary companies' },
-      { text: 'Search for customers matching "Acme"', type: 'table', expected: 'Matching customer records' },
-    ],
-  },
-]
+// Icon mapping — category heading (from markdown H2) → lucide icon component
+const categoryIcons = {
+  'sales': TrendingUp,
+  'selling': TrendingUp,
+  'finance': DollarSign,
+  'accounting': DollarSign,
+  'hr': Users,
+  'hrms': Users,
+  'crm': Target,
+  'stock': Package,
+  'inventory': Package,
+  'purchasing': ShoppingCart,
+  'buying': ShoppingCart,
+  'operations': Settings,
+  'general': Wrench,
+  'document processing': FileText,
+  'idp': FileText,
+  'predictive': BarChart3,
+  'predictive analytics': BarChart3,
+  'multi-company': Building2,
+}
 
+function getCategoryIcon(categoryName) {
+  const lower = categoryName.toLowerCase()
+  // Try exact match first, then check if any key is contained in the category name
+  for (const [key, icon] of Object.entries(categoryIcons)) {
+    if (lower.includes(key)) return icon
+  }
+  return Settings
+}
+
+// @Mention reference (static — these are UI-level docs, not data)
 const mentionReference = [
   {
     mention: '@company',
@@ -309,9 +263,39 @@ const typeBadgeClass = (type) => {
     chart: 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400',
     number: 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400',
     text: 'bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-400',
+    mixed: 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-400',
+    record: 'bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-400',
+    search: 'bg-cyan-100 dark:bg-cyan-900/40 text-cyan-700 dark:text-cyan-400',
   }
-  return classes[type] || 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
+  // Handle compound types like "table + record"
+  const primary = type.split('+')[0].split('/')[0].trim()
+  return classes[primary] || 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
 }
+
+async function fetchPrompts() {
+  loading.value = true
+  loadError.value = ''
+  try {
+    const result = await chatAPI.getSamplePrompts()
+    if (result?.success && result.categories) {
+      samplePrompts.value = result.categories
+      fetched = true
+    } else {
+      loadError.value = result?.error || 'Failed to load sample prompts'
+    }
+  } catch (err) {
+    loadError.value = 'Could not connect to server'
+  } finally {
+    loading.value = false
+  }
+}
+
+// Fetch prompts on first modal open
+watch(() => props.modelValue, (visible) => {
+  if (visible && !fetched) {
+    fetchPrompts()
+  }
+})
 
 const selectPrompt = (text) => {
   emit('select-prompt', text)

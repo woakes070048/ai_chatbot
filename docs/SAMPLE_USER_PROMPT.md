@@ -16,12 +16,15 @@ Output types:
 
 | Prompt | Output | Expected Result |
 |--------|--------|-----------------|
+| What is the total sales this month? | number | Revenue figure with currency symbol, date range, and company name |
 | Show top 10 customers by revenue this year | table | Ranked list of customers with revenue amounts in company currency |
 | Sales trend month by month for this fiscal year | chart | Line chart showing monthly revenue progression across the fiscal year |
-| What is the total sales amount this quarter? | number | Single aggregate sales figure for the current fiscal quarter |
 | Compare sales this month vs last month | table | Side-by-side comparison with absolute difference and percentage change |
-| Show sales breakdown by territory | chart | Pie or donut chart showing revenue distribution across territories |
-| Sales by item group for this year | chart | Bar chart with revenue broken down by item group |
+| Break down sales by territory | chart | Pie chart showing revenue distribution across territories |
+| Show sales by product category | chart | Bar chart with revenue broken down by item group |
+| Which products are most profitable? | chart | Items with revenue, cost, margin %, and ECharts chart |
+| Show profitability breakdown by territory | chart | Pie chart with territory-wise margin data |
+| Show sales for @company Acme Corp in @period Last Quarter | table | Filtered sales data scoped to specified company and period |
 | Who are our top 5 customers by order count? | table | Ranked list of customers sorted by number of sales orders placed |
 | Show monthly sales trend for last 6 months | chart | Line chart with six data points showing recent revenue trajectory |
 
@@ -31,16 +34,28 @@ Output types:
 
 | Prompt | Output | Expected Result |
 |--------|--------|-----------------|
+| Give me a financial overview | chart | Revenue, COGS, gross profit, net profit, cash position, AR/AP with bar chart |
+| Show me the CFO dashboard | mixed | Financial highlights, KPIs, cash flow, aging summaries, budget variance |
 | Show profit and loss summary for this fiscal year | table | Income, expense, and net profit/loss grouped by account hierarchy |
-| What are our outstanding receivables? | table | Receivables aging buckets (0-30, 30-60, 60-90, 90+ days) with totals |
-| Show expense breakdown by cost center | chart | Pie or bar chart of expenses distributed across cost centers |
-| What is the current cash balance? | number | Aggregate balance across all cash and bank accounts |
-| Show receivables aging report | table | Detailed aging with customer names, invoice references, and overdue amounts |
-| What are our key financial ratios? | table | Current ratio, quick ratio, debt-to-equity, gross margin, net margin, and similar |
-| Show payables aging summary | table | Supplier-wise payables grouped into aging buckets |
-| Budget vs actual for this quarter | table | Comparison of budgeted amounts against actual expenses with variance |
-| Show working capital analysis | table | Current assets, current liabilities, and net working capital breakdown |
-| Give me a CFO dashboard overview | mixed | Summary cards (revenue, expenses, profit, cash) plus key charts and ratios |
+| What are the current liquidity ratios? | number | Current ratio, quick ratio with component breakdown |
+| Show me profitability ratios for this fiscal year | number | Gross margin %, net margin %, ROA % with revenue and profit figures |
+| What are the efficiency ratios? | number | Inventory turnover, DSO, DPO with component breakdown |
+| Show accounts receivable aging | chart | Aging buckets (0-30, 31-60, 61-90, 90+ days) with ECharts bar chart |
+| Who are the top 10 debtors? | chart | Customers with outstanding amounts and horizontal bar chart |
+| Show accounts payable aging | chart | Supplier aging buckets with ECharts bar chart |
+| What is our working capital position? | number | Receivables, inventory, current assets, payables, net working capital |
+| What is the cash conversion cycle? | number | DSO, DIO, DPO, and CCC = DSO + DIO - DPO |
+| Show budget vs actual for this fiscal year | chart | Accounts with budget, actual, variance and multi-series bar chart |
+| Show monthly budget variance | chart | Monthly breakdown with ECharts multi-series line chart |
+| Generate a cash flow statement | table | Operating/financing activities with inflow, outflow, net cash flow |
+| Show cash flow trend for the last 12 months | chart | Multi-series line chart (inflow, outflow, net) |
+| What are the current bank balances? | number | Bank/cash accounts with individual and total balances |
+| Show month-over-month comparison for the last 3 months | chart | Revenue, expenses, net profit with MoM variance and line chart |
+| Show expense breakdown by @cost_center | chart | Expenses filtered by the specified cost center |
+| Show consolidated revenue including subsidiaries | number | Aggregated revenue from parent + all child companies |
+| Show CFO dashboard with subsidiary data | mixed | KPIs, cash flow, aging consolidated across all group companies |
+| Show receivable aging across all group companies | chart | Outstanding invoices from parent + subsidiaries with aging buckets |
+| Show financial ratios for the group | number | Liquidity, profitability, efficiency ratios from consolidated data |
 
 ---
 
@@ -48,14 +63,16 @@ Output types:
 
 | Prompt | Output | Expected Result |
 |--------|--------|-----------------|
-| How many employees do we have? | number | Total active employee count |
-| Show department-wise headcount | table | Department names with employee counts, sorted by headcount |
-| List employees on leave today | table | Names, departments, and leave types for employees on leave today |
-| Show attendance summary for this month | chart | Bar or stacked chart of present, absent, half-day, and on-leave counts |
-| What is the total payroll cost this month? | number | Sum of gross or net salary for the current month's payroll |
-| Show department-wise salary distribution | chart | Bar chart showing total salary expenditure per department |
-| Employee turnover rate this year | number | Percentage of employees who left relative to average headcount |
-| Show new hires vs exits for last 6 months | chart | Dual-bar or line chart comparing monthly joinings and separations |
+| How many active employees do we have? | chart | Total count with department-wise breakdown and pie chart |
+| Show employee distribution by department | chart | Pie chart with department segments and headcount |
+| Show attendance summary for this month | chart | Present, Absent, On Leave, Half Day, WFH counts with bar chart |
+| What is the leave balance for an employee? | table | Leave type breakdown: allocated, consumed, balance per type |
+| Show payroll summary for this month | chart | Gross pay, deductions, net pay totals with bar chart |
+| Show department-wise salary distribution | chart | Departments with gross/net pay and pie chart |
+| Show employee turnover for this year | chart | Hires, exits, turnover rate % with multi-series bar chart |
+| Show headcount by @department | table | Filtered count for the specified department |
+| Show new hires vs exits for last 6 months | chart | Dual-bar chart comparing monthly joinings and separations |
+| What is the total payroll cost this month? | number | Sum of gross or net salary for the current month payroll |
 
 ---
 
@@ -63,14 +80,16 @@ Output types:
 
 | Prompt | Output | Expected Result |
 |--------|--------|-----------------|
-| Show all open opportunities | table | List of opportunities with customer, amount, stage, and expected close date |
-| How many new leads this month? | number | Count of leads created in the current month |
-| Lead conversion rate this quarter | number | Percentage of leads converted to opportunities or customers this quarter |
-| Show opportunity pipeline by stage | chart | Bar chart with opportunity count or value grouped by sales stage |
-| Analyze leads by source | chart | Pie chart showing lead distribution by source (website, referral, etc.) |
-| Show sales funnel from leads to orders | chart | Funnel visualization from leads to opportunities to quotations to orders |
-| Opportunities grouped by sales stage | chart | Horizontal bar chart showing opportunity value at each pipeline stage |
+| Show me lead statistics | chart | Total leads, status breakdown with pie chart |
+| Show opportunity pipeline | chart | Opportunities with amounts by sales stage, bar chart |
+| What is our lead conversion rate? | number | Total leads, converted count, conversion rate percentage |
+| Which lead sources are performing best? | chart | Sources ranked by lead count with pie chart |
+| Show the sales funnel | chart | Leads > Opportunities > Quotations > Orders with conversion rates |
+| Show opportunities by sales stage | chart | Stages with count and total value per stage, bar chart |
+| Show all open opportunities | table | Filtered opportunities with status Open, amounts, expected close date |
+| List recent activities for @customer | table | Activity log for the specified customer |
 | Show top opportunities by value | table | Ranked list of the highest-value open opportunities with details |
+| Analyze leads by source | chart | Pie chart showing lead distribution by source (website, referral, etc.) |
 
 ---
 
@@ -78,14 +97,14 @@ Output types:
 
 | Prompt | Output | Expected Result |
 |--------|--------|-----------------|
-| Show low stock items below reorder level | table | Items where current stock is below configured reorder level |
 | What is the total stock value? | number | Aggregate valuation of all warehouse stock in company currency |
+| Show low stock items below reorder level | table | Items where current stock is below configured reorder level |
 | Top 10 items by stock quantity | table | Items ranked by quantity on hand across all warehouses |
-| Show stock movement for last 30 days | chart | Line or bar chart of stock receipts and issues over the past 30 days |
-| Stock ageing report for main warehouse | table | Items grouped by age brackets showing how long stock has been held |
-| Which items are running low? | table | Items approaching or below reorder level with current quantities |
+| Show stock movement for the last 30 days | chart | In/out movements with multi-series bar chart |
+| Show stock ageing report | chart | Items with age in days, aging buckets (0-30, 31-60, 61-90, 90+) with bar chart |
+| Show stock balance for @item in @warehouse | table | Filtered stock balance for specific item and warehouse |
 | Show warehouse-wise stock summary | table | Stock quantities and values broken down by warehouse |
-| Item-wise stock balance for all warehouses | table | Matrix of items vs. warehouses with quantities |
+| Which items are running low? | table | Items approaching or below reorder level with current quantities |
 
 ---
 
@@ -95,10 +114,9 @@ Output types:
 |--------|--------|-----------------|
 | Show pending purchase orders | table | Open purchase orders with supplier, amount, and expected delivery date |
 | Top suppliers by purchase amount this year | table | Ranked list of suppliers by total purchase value |
-| Total purchase amount this quarter | number | Aggregate purchase value for the current fiscal quarter |
-| Purchase trends month by month | chart | Line chart showing monthly purchase amounts over time |
-| Purchase breakdown by item group | chart | Pie or bar chart of purchase spend distributed across item groups |
-| Supplier performance analysis | table | Suppliers with delivery timeliness, order count, and rejection rates |
+| What is the total purchase amount this quarter? | number | Aggregate purchase value for the current fiscal quarter |
+| Show the purchase trend for the last 12 months | chart | Line chart showing monthly purchase amounts over time |
+| Break down purchases by item group | chart | Bar chart of purchase spend distributed across item groups |
 | Show overdue purchase orders | table | Purchase orders past their expected delivery date |
 | Compare purchase amounts: this quarter vs last quarter | table | Side-by-side quarterly comparison with variance |
 
@@ -148,7 +166,7 @@ Notes on Predictive Analytics:
 
 | Prompt | Output | Expected Result |
 |--------|--------|-----------------|
-| Show consolidated sales across all companies | table | Aggregated sales from parent and all subsidiary companies |
+| Show consolidated sales across all companies | number | Aggregated sales from parent and all subsidiary companies |
 | @company Tara Technologies show sales this quarter | table | Sales data scoped to the specified company only |
 | Include subsidiaries in the sales report | mixed | Toggles subsidiary inclusion for all subsequent queries in the session |
 | Show revenue breakdown by subsidiary | table | Revenue figures for each child company under the parent |

@@ -483,6 +483,86 @@ def get_settings() -> dict:
 
 
 @frappe.whitelist()
+def get_sample_prompts() -> dict:
+	"""Parse docs/SAMPLE_USER_PROMPT.md and return structured prompt categories.
+
+	The markdown file uses H2 headings for categories and pipe-delimited tables
+	with columns: Prompt | Output | Expected Result.
+
+	Returns:
+		dict with 'categories' list and 'mentions' list.
+	"""
+	import os
+	import re
+
+	try:
+		app_path = frappe.get_app_path("ai_chatbot")
+		md_path = os.path.join(app_path, "..", "docs", "SAMPLE_USER_PROMPT.md")
+		md_path = os.path.normpath(md_path)
+
+		if not os.path.isfile(md_path):
+			return {"success": False, "error": "SAMPLE_USER_PROMPT.md not found"}
+
+		with open(md_path) as f:
+			content = f.read()
+
+		categories = []
+		mentions = []
+		current_category = None
+		in_tips = False
+
+		for line in content.split("\n"):
+			stripped = line.strip()
+
+			# Detect H2 category headings: ## Sales / Selling
+			if stripped.startswith("## "):
+				heading = stripped[3:].strip()
+				in_tips = heading.lower() == "tips"
+				if not in_tips:
+					current_category = {"category": heading, "prompts": []}
+					categories.append(current_category)
+				continue
+
+			# Skip tips section, notes, and non-table lines
+			if in_tips or not current_category:
+				continue
+
+			# Detect table rows (skip header and separator rows)
+			if stripped.startswith("|") and stripped.endswith("|"):
+				cells = [c.strip() for c in stripped.split("|")[1:-1]]
+				# Skip header row and separator row (---|---|---)
+				if len(cells) >= 3 and not re.match(r"^-+$", cells[0]):
+					prompt_text = cells[0]
+					output_type = cells[1].lower()
+					expected = cells[2] if len(cells) > 2 else ""
+					if prompt_text and prompt_text.lower() != "prompt":
+						current_category["prompts"].append({
+							"text": prompt_text,
+							"type": output_type,
+							"expected": expected,
+						})
+
+		# Parse @mention reference from the Tips section
+		mention_pattern = re.compile(r"`(@\w+)`")
+		tips_section = content.split("## Tips")
+		if len(tips_section) > 1:
+			# Extract @mentions from the tips text
+			tips_text = tips_section[1]
+			for match in mention_pattern.finditer(tips_text):
+				mention_val = match.group(1)
+				if mention_val not in [m["mention"] for m in mentions]:
+					mentions.append({"mention": mention_val})
+
+		# Filter out empty categories
+		categories = [c for c in categories if c["prompts"]]
+
+		return {"success": True, "categories": categories, "mentions": mentions}
+	except Exception as e:
+		log_error(f"Error loading sample prompts: {e!s}", title="Chat API")
+		return {"success": False, "error": str(e)}
+
+
+@frappe.whitelist()
 def search_conversations(query: str, limit: int = 20) -> dict:
 	"""Search conversations by title or message content.
 

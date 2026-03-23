@@ -225,6 +225,14 @@ class ChatAPI {
   }
 
   /**
+   * Get sample prompts parsed from docs/SAMPLE_USER_PROMPT.md.
+   * Returns { success, categories: [...], mentions: [...] }.
+   */
+  async getSamplePrompts() {
+    return this.request('get_sample_prompts')
+  }
+
+  /**
    * Export a single assistant message as PDF.
    * Returns { success, file_url }.
    */
