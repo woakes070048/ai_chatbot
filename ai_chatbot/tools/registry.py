@@ -270,19 +270,11 @@ def _ensure_tools_loaded():
 	if is_erpnext_installed():
 		import ai_chatbot.tools.buying
 		import ai_chatbot.tools.crm
-		import ai_chatbot.tools.finance.account
-		import ai_chatbot.tools.finance.aging
 		import ai_chatbot.tools.finance.analytics
-		import ai_chatbot.tools.finance.budget
 		import ai_chatbot.tools.finance.cash_flow
 		import ai_chatbot.tools.finance.cfo
-		import ai_chatbot.tools.finance.consolidation
 		import ai_chatbot.tools.finance.gl_analytics
-		import ai_chatbot.tools.finance.payables
 		import ai_chatbot.tools.finance.profitability
-		import ai_chatbot.tools.finance.ratios
-		import ai_chatbot.tools.finance.receivables
-		import ai_chatbot.tools.finance.working_capital
 		import ai_chatbot.tools.idp
 		import ai_chatbot.tools.operations.create
 		import ai_chatbot.tools.operations.search
@@ -291,6 +283,12 @@ def _ensure_tools_loaded():
 		import ai_chatbot.tools.predictive.cash_flow_forecast
 		import ai_chatbot.tools.predictive.demand_forecast
 		import ai_chatbot.tools.predictive.sales_forecast
+
+		# Phase 12B: ERPNext Report Integration
+		import ai_chatbot.tools.reports.finance
+		import ai_chatbot.tools.reports.purchase
+		import ai_chatbot.tools.reports.sales
+		import ai_chatbot.tools.reports.stock
 		import ai_chatbot.tools.selling
 		import ai_chatbot.tools.session
 		import ai_chatbot.tools.stock

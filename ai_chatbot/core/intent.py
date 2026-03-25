@@ -112,6 +112,7 @@ INTENT_KEYWORDS: dict[str, list[tuple[str, float]]] = {
 	"balance sheet": [("finance", 1.0)],
 	"cfo dashboard": [("finance", 1.0)],
 	"budget": [("finance", 1.0)],
+	"budget variance": [("finance", 1.0)],
 	"receivable": [("finance", 1.0)],
 	"receivables": [("finance", 1.0)],
 	"payable": [("finance", 1.0)],
@@ -202,6 +203,20 @@ INTENT_KEYWORDS: dict[str, list[tuple[str, float]]] = {
 	"invoices": [("selling", 0.5), ("buying", 0.5), ("finance", 0.3)],
 	"item": [("selling", 0.5), ("inventory", 0.5)],
 	"items": [("selling", 0.5), ("inventory", 0.5)],
+	# ── report-specific keywords (Phase 12B) ──
+	"gl report": [("finance", 1.0)],
+	"accounts receivable": [("finance", 1.0)],
+	"accounts payable": [("finance", 1.0)],
+	"ar summary": [("finance", 1.0)],
+	"ap summary": [("finance", 1.0)],
+	"account balance": [("finance", 1.0)],
+	"consolidated financial": [("finance", 1.0)],
+	"consolidated trial": [("finance", 1.0)],
+	"sales register": [("selling", 1.0)],
+	"purchase register": [("buying", 1.0)],
+	"stock ledger": [("inventory", 1.0)],
+	"stock balance": [("inventory", 1.0)],
+	"stock aging": [("inventory", 1.0)],
 }
 
 # Pre-sort keywords by length descending so longer phrases match first

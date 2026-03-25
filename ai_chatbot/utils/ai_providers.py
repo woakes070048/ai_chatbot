@@ -273,6 +273,13 @@ class GeminiProvider(OpenAIProvider):
 	Gemini exposes an OpenAI-compatible /chat/completions API at
 	generativelanguage.googleapis.com, so we extend OpenAIProvider
 	and only override the base URL and defaults.
+
+	Known Gemini differences from OpenAI:
+	- Tool call streaming chunks may omit ``index`` field (handled by
+	  OpenAIProvider with fallback ``tc.get("index", i)``).
+	- After tool results are sent back, Gemini may occasionally return
+	  another tool call instead of text content — the multi-round loop
+	  in streaming.py handles this with ``max_tool_rounds``.
 	"""
 
 	def __init__(self, settings):
@@ -288,6 +295,40 @@ class GeminiProvider(OpenAIProvider):
 		if not self.api_key:
 			frappe.throw("API Key is required for Gemini")
 		return True
+
+	def chat_completion_stream(self, messages, tools=None):
+		"""Yield streaming events from Gemini (OpenAI-compatible).
+
+		Wraps parent with diagnostic logging so empty responses are visible
+		in the log file for debugging.
+		"""
+		from ai_chatbot.core.logger import log_error, log_info
+
+		has_content = False
+		has_tool_calls = False
+		has_error = False
+
+		for event in super().chat_completion_stream(messages, tools=tools):
+			etype = event.get("type")
+			if etype == "token":
+				has_content = True
+			elif etype == "tool_call":
+				has_tool_calls = True
+			elif etype == "error":
+				has_error = True
+				log_error(
+					f"Gemini stream error: {event.get('content', '')}",
+					title="Gemini Streaming",
+				)
+			yield event
+
+		if not has_content and not has_tool_calls and not has_error:
+			log_error(
+				"Gemini stream returned no content and no tool calls. "
+				f"Model={self.model}, messages={len(messages)}, "
+				f"tools={'yes' if tools else 'no'}",
+				title="Gemini Empty Stream",
+			)
 
 
 class ClaudeProvider(AIProvider):

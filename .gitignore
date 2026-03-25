@@ -64,5 +64,6 @@ package-lock.json
 .claude/
 docs/TEST*.md
 docs/ENHANCEMENT_ROADMAP*.md
+docs/ERPNEXT_REPORTS.md
 CLAUDE.md
 plan.md

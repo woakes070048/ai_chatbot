@@ -184,9 +184,28 @@ def _run_streaming_job(conversation_id: str, stream_id: str, ai_provider: str, u
 
 		_publish_process_step(conversation_id, stream_id, "Saving response...", user)
 
-		# Guard: if content is empty but tools were called, provide a fallback message
-		if not full_content.strip() and tool_calls_data:
-			full_content = "I processed your request and executed the required tools, but was unable to generate a summary. Please try rephrasing your question."
+		# Guard: if content is empty, provide a fallback message
+		if not full_content.strip():
+			if tool_calls_data:
+				log_error(
+					f"Empty content after tool execution. Provider={ai_provider}, "
+					f"tools={[tc.get('name') for tc in tool_calls_data]}",
+					title="Streaming Empty After Tools",
+				)
+				full_content = (
+					"I processed your request and executed the required tools, but was "
+					"unable to generate a summary. Please try rephrasing your question."
+				)
+			else:
+				log_error(
+					f"Empty stream response. Provider={ai_provider}, model={provider.model}, "
+					f"prompt_tokens={prompt_tokens}, completion_tokens={completion_tokens}",
+					title="Streaming Empty Response",
+				)
+				full_content = (
+					"I was unable to generate a response. This may be a temporary issue "
+					"with the AI provider. Please try again."
+				)
 			_publish(
 				"ai_chat_token",
 				{"conversation_id": conversation_id, "stream_id": stream_id, "content": full_content},
@@ -316,6 +335,16 @@ def _stream_with_tools(
 			user=user,
 		)
 
+		log_info(
+			"Streaming round completed",
+			conversation_id=conversation_id,
+			round=_round,
+			provider=ai_provider,
+			content_length=len(round_content),
+			tool_calls=len(round_tool_calls),
+			usage=round_usage,
+		)
+
 		# Accumulate real usage data from the provider
 		if round_usage:
 			total_prompt_tokens += round_usage.get("prompt_tokens", 0)
@@ -379,6 +408,10 @@ def _stream_with_tools(
 			try:
 				result = BaseTool.execute_tool(tc["name"], tc["arguments"])
 			except Exception as e:
+				log_error(
+					f"Tool execution failed: {tc['name']}: {e!s}",
+					title="Streaming Tool Error",
+				)
 				result = {"error": str(e)}
 
 			all_tool_results.append(result)

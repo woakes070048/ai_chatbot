@@ -2,10 +2,11 @@
 # For license information, please see license.txt
 """
 Cash Flow Tools
-Unified cash flow statement, trend, and analysis for AI Chatbot.
+Payment Entry-based cash flow analysis and trend for AI Chatbot.
 
-Phase 11D: Merged get_cash_flow_analysis (from account.py), get_cash_flow_statement,
-and get_cash_flow_trend into a single get_cash_flow tool.
+Phase 11D: Merged get_cash_flow_analysis and get_cash_flow_trend into get_cash_flow.
+Phase 12B: Removed statement view — replaced by report_cash_flow in tools/reports/finance.py
+which uses ERPNext's standard GL-based Cash Flow Statement for data consistency.
 """
 
 import frappe
@@ -61,54 +62,6 @@ def _cash_flow_analysis(months, company):
 		"net_cash_flow": inflow - outflow,
 		"period_months": months,
 		"period": {"from": start_date, "to": end_date},
-	}
-
-
-def _cash_flow_statement(from_date, to_date, company, cost_center, department, project):
-	"""Structured cash flow statement with operating and financing activities."""
-	pe = frappe.qb.DocType("Payment Entry")
-
-	def _pe_sum(payment_type, party_type=None, exclude_party_type=None):
-		q = (
-			frappe.qb.from_(pe)
-			.select(fn.Sum(pe.base_paid_amount).as_("total"))
-			.where(pe.docstatus == 1)
-			.where(pe.payment_type == payment_type)
-			.where(pe.posting_date >= from_date)
-			.where(pe.posting_date <= to_date)
-		)
-		if party_type:
-			q = q.where(pe.party_type == party_type)
-		if exclude_party_type:
-			q = q.where((pe.party_type != exclude_party_type) | (pe.party_type.isnull()))
-		q = apply_company_filter(q, pe, company)
-		q = apply_dimension_filters(q, pe, cost_center=cost_center, department=department, project=project)
-		r = q.run(as_dict=True)
-		return flt(r[0].total) if r else 0
-
-	operating_inflow = _pe_sum("Receive", party_type="Customer")
-	operating_outflow = _pe_sum("Pay", party_type="Supplier")
-	financing_inflow = _pe_sum("Receive", exclude_party_type="Customer")
-	financing_outflow = _pe_sum("Pay", exclude_party_type="Supplier")
-
-	operating_net = operating_inflow - operating_outflow
-	financing_net = financing_inflow - financing_outflow
-	total_net = operating_net + financing_net
-
-	return {
-		"view": "statement",
-		"operating": {
-			"inflow": flt(operating_inflow, 2),
-			"outflow": flt(operating_outflow, 2),
-			"net": flt(operating_net, 2),
-		},
-		"financing_and_other": {
-			"inflow": flt(financing_inflow, 2),
-			"outflow": flt(financing_outflow, 2),
-			"net": flt(financing_net, 2),
-		},
-		"total_net_cash_flow": flt(total_net, 2),
-		"period": {"from": from_date, "to": to_date},
 	}
 
 
@@ -178,27 +131,19 @@ def _cash_flow_trend(months, company, cost_center, department, project):
 	name="get_cash_flow",
 	category="finance",
 	description=(
-		"Get cash flow data. Use view='analysis' for simple inflow/outflow summary, "
-		"view='statement' for structured operating/financing breakdown, "
-		"or view='trend' for monthly trend with chart."
+		"Get Payment Entry-based cash flow data. Use view='analysis' for simple "
+		"inflow/outflow summary, or view='trend' for monthly trend with chart. "
+		"For the formal GL-based Cash Flow Statement, use report_cash_flow instead."
 	),
 	parameters={
 		"view": {
 			"type": "string",
-			"description": "Cash flow view: 'analysis', 'statement', or 'trend'",
-			"enum": ["analysis", "statement", "trend"],
+			"description": "Cash flow view: 'analysis' or 'trend'",
+			"enum": ["analysis", "trend"],
 		},
 		"months": {
 			"type": "integer",
-			"description": "Number of months (default 6 for analysis, 12 for trend). Not used for statement view.",
-		},
-		"from_date": {
-			"type": "string",
-			"description": "Start date (YYYY-MM-DD). Optional — omit to use current fiscal year start. Used only for statement view.",
-		},
-		"to_date": {
-			"type": "string",
-			"description": "End date (YYYY-MM-DD). Optional — omit to use current fiscal year end. Used only for statement view.",
+			"description": "Number of months (default 6 for analysis, 12 for trend).",
 		},
 		"company": {
 			"type": "string",
@@ -213,25 +158,18 @@ def _cash_flow_trend(months, company, cost_center, department, project):
 def get_cash_flow(
 	view="analysis",
 	months=None,
-	from_date=None,
-	to_date=None,
 	company=None,
 	cost_center=None,
 	department=None,
 	project=None,
 ):
-	"""Unified cash flow tool — replaces get_cash_flow_analysis, get_cash_flow_statement,
-	and get_cash_flow_trend (Phase 11D consolidation).
+	"""Payment Entry-based cash flow analysis and trend.
+
+	Phase 12B: statement view removed — use report_cash_flow for GL-based Cash Flow Statement.
 	"""
 	company = get_company_filter(company)
 
-	if view == "statement":
-		if not from_date or not to_date:
-			fy_from, fy_to = get_fiscal_year_dates(primary(company))
-			from_date = from_date or fy_from
-			to_date = to_date or fy_to
-		result = _cash_flow_statement(from_date, to_date, company, cost_center, department, project)
-	elif view == "trend":
+	if view == "trend":
 		result = _cash_flow_trend(months or 12, company, cost_center, department, project)
 	else:
 		result = _cash_flow_analysis(months or 6, company)
