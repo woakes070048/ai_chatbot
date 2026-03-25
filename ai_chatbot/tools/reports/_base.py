@@ -8,6 +8,7 @@ Core helpers used by all report wrapper tools:
 - normalize_columns(): handles ERPNext's mixed column format
 - strip_columns_for_ai(): removes hidden/all-zero columns to save tokens
 - get_fiscal_year_name(): resolves fiscal year name string
+- resolve_report_template(): looks up Financial Report Template by report type
 - build_financial_filters(): constructs the complex filter dict for P&L/BS/CF
 - erpnext_chart_to_echart(): converts ERPNext chart format to ECharts option
 - build_report_response(): assembles the final tool response dict
@@ -319,62 +320,50 @@ def _round_data(data: list[dict], precision: int = 2) -> list[dict]:
 # ═══════════════════════════════════════════════════════════════════
 
 
-# ── Report template resolution (reserved for future use) ──────────
-# When ERPNext's Financial Report Template and Account Category setup
-# is properly configured, the template-based FinancialReportEngine
-# code path can produce structured financial statements. Currently
-# disabled because:
-# 1. Account Category is a v17+ feature — may not be configured
-# 2. The template path returns a 4-tuple (no report_summary),
-#    while the standard path returns a 6-tuple (with report_summary)
-#    which we rely on for CFO dashboard KPIs
-#
-# To re-enable: uncomment the constants and function below, add
-# report_type parameter back to build_financial_filters(), and call
-# resolve_report_template(report_type) to set filters["report_template"].
-#
-# _REPORT_TYPE_MAP = {
-# 	"profit_and_loss": "Profit and Loss Statement",
-# 	"balance_sheet": "Balance Sheet",
-# 	"cash_flow": "Cash Flow",
-# }
-#
-# _TEMPLATE_FALLBACKS = {
-# 	"Profit and Loss Statement": "Default Profit and Loss Statement",
-# 	"Balance Sheet": "Default Balance Sheet",
-# 	"Cash Flow": "Default Cash Flow",
-# }
-#
-#
-# def resolve_report_template(report_type: str) -> str:
-# 	"""Resolve the Financial Report Template name for a given report type.
-#
-# 	Looks up the standard template from the DB. Falls back to hardcoded
-# 	default names if the DB lookup fails or returns nothing.
-#
-# 	Args:
-# 		report_type: One of "profit_and_loss", "balance_sheet", "cash_flow".
-#
-# 	Returns:
-# 		Financial Report Template name string, or empty string if not found.
-# 	"""
-# 	report_name = _REPORT_TYPE_MAP.get(report_type, "")
-# 	if not report_name:
-# 		return ""
-#
-# 	try:
-# 		templates = frappe.get_all(
-# 			"Financial Report Template",
-# 			filters={"report": report_name},
-# 			pluck="name",
-# 			limit=1,
-# 		)
-# 		if templates:
-# 			return templates[0]
-# 	except Exception:
-# 		pass
-#
-# 	return _TEMPLATE_FALLBACKS.get(report_name, "")
+# ── Report template resolution ────────────────────────────────────
+# Maps internal report type keys to the Financial Report Template
+# DocType's report_type Select values.  Used by build_financial_filters()
+# when "Use Financial Report Engine" is enabled in Chatbot Settings.
+
+_REPORT_TYPE_MAP = {
+	"profit_and_loss": "Profit and Loss Statement",
+	"balance_sheet": "Balance Sheet",
+	"cash_flow": "Cash Flow",
+}
+
+
+def resolve_report_template(report_type: str) -> str:
+	"""Resolve the Financial Report Template name for a given report type.
+
+	Queries the Financial Report Template DocType for an enabled template
+	matching the report_type.  Returns the template name (used as the
+	``report_template`` filter key that routes ERPNext through
+	``FinancialReportEngine``).
+
+	Args:
+		report_type: One of "profit_and_loss", "balance_sheet", "cash_flow".
+
+	Returns:
+		Financial Report Template name string, or empty string if none found.
+	"""
+	report_type_label = _REPORT_TYPE_MAP.get(report_type, "")
+	if not report_type_label:
+		return ""
+
+	try:
+		templates = frappe.get_all(
+			"Financial Report Template",
+			filters={"report_type": report_type_label, "disabled": 0},
+			pluck="name",
+			limit=1,
+			order_by="creation asc",
+		)
+		if templates:
+			return templates[0]
+	except Exception:
+		pass
+
+	return ""
 
 
 def get_fiscal_year_name(company: str | None = None) -> str:
@@ -403,13 +392,19 @@ def build_financial_filters(
 	periodicity: str = "Yearly",
 	cost_center: str | None = None,
 	project: str | None = None,
+	report_type: str | None = None,
 ) -> dict:
 	"""Build the complex filter dict required by P&L, Balance Sheet, Cash Flow reports.
 
-	Uses the standard (non-template) code path which works on all ERPNext versions
-	and does not require Account Category or Financial Report Template setup.
-	The standard path returns a 6-tuple including report_summary, which the
-	template-based FinancialReportEngine path (4-tuple) omits.
+	By default uses the standard (non-template) code path which works on all
+	ERPNext versions without any additional setup.
+
+	When ``report_type`` is provided **and** "Use Financial Report Engine" is
+	enabled in Chatbot Settings, the matching Financial Report Template is
+	resolved and added to the filters.  This routes the report through
+	ERPNext's ``FinancialReportEngine`` which produces template-structured
+	output.  Note: the template path returns a 4-tuple (no report_summary);
+	the standard path returns a 6-tuple including report_summary.
 
 	Args:
 		company: Company name.
@@ -418,6 +413,10 @@ def build_financial_filters(
 		periodicity: One of "Monthly", "Quarterly", "Half-Yearly", "Yearly".
 		cost_center: Optional cost center filter.
 		project: Optional project filter.
+		report_type: One of "profit_and_loss", "balance_sheet", "cash_flow".
+			When provided and the setting is enabled, resolves the matching
+			Financial Report Template.  Omit to always use the standard path
+			(e.g. CFO dashboard tools omit this to preserve report_summary).
 
 	Returns:
 		Dict of filters ready for the report's execute() function.
@@ -445,6 +444,16 @@ def build_financial_filters(
 		filters["cost_center"] = cost_center
 	if project:
 		filters["project"] = project
+
+	# Optionally route through FinancialReportEngine when the setting is enabled
+	if report_type:
+		from ai_chatbot.core.config import get_chatbot_settings
+
+		settings = get_chatbot_settings()
+		if settings.use_financial_report_engine:
+			template_name = resolve_report_template(report_type)
+			if template_name:
+				filters["report_template"] = template_name
 
 	return filters
 

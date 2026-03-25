@@ -20,6 +20,7 @@
   "enable_sales_tools",
   "enable_purchase_tools",
   "enable_finance_tools",
+  "use_financial_report_engine",
   "enable_inventory_tools",
   "enable_hrms_tools",
   "idp_section",
@@ -152,6 +153,14 @@
    "fieldname": "enable_finance_tools",
    "fieldtype": "Check",
    "label": "Enable Finance Tools"
+  },
+  {
+   "default": "0",
+   "depends_on": "eval:doc.enable_finance_tools",
+   "description": "Route Profit & Loss, Balance Sheet, and Cash Flow reports through ERPNext's Financial Report Engine (template-based) instead of the standard code path. This produces structured financial statements based on your configured Financial Report Templates and Account Categories in Chart of Accounts. When disabled (default), the standard code path is used \u2014 it works universally without any additional setup and is recommended for most users. Note: CFO Dashboard KPIs always use the standard path regardless of this setting, as the Financial Report Engine does not return the summary data needed for KPI calculations.",
+   "fieldname": "use_financial_report_engine",
+   "fieldtype": "Check",
+   "label": "Use Financial Report Engine"
   },
   {
    "default": "1",
