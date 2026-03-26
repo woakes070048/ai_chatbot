@@ -32,45 +32,18 @@ from ai_chatbot.tools.reports._base import (
 # ═══════════════════════════════════════════════════════════════════
 
 
-def _row_value(row: dict) -> float:
-	"""Extract the monetary value from a report row.
-
-	Standard path rows use a ``total`` column.  FinancialReportEngine rows
-	store values in period-named columns (e.g. ``mar_2026``) with ``total=0``.
-	This helper tries ``total`` first, then falls back to the last numeric
-	(non-boolean) column value.
-	"""
-	val = flt(row.get("total", 0))
-	if val:
-		return val
-	# Fallback: find the last numeric value that isn't metadata
-	_skip = {
-		"total", "indent", "is_group", "bold", "is_blank_line", "warn_if_negative",
-		"has_value", "opening_balance", "currency",
-	}
-	for key in reversed(list(row.keys())):
-		if key in _skip or key.startswith("_"):
-			continue
-		v = row.get(key)
-		if isinstance(v, bool):
-			continue
-		if isinstance(v, (int, float)) and v != 0:
-			return flt(v)
-	return 0
-
-
 def _pnl_totals(company: str, from_date: str, to_date: str) -> dict:
-	"""Extract income, expense, net profit from P&L report.
+	"""Extract income, expense, net profit from P&L report_summary.
 
-	Prefers report_summary (standard path).  Falls back to extracting from
-	row data when report_summary is absent (FinancialReportEngine path).
+	Always uses the standard code path (no report_type) to guarantee
+	report_summary is present — the FinancialReportEngine path returns
+	a 4-tuple without report_summary.
 	"""
 	filters = build_financial_filters(
 		company=company,
 		from_date=from_date,
 		to_date=to_date,
 		periodicity="Yearly",
-		report_type="profit_and_loss",
 	)
 
 	from erpnext.accounts.report.profit_and_loss_statement.profit_and_loss_statement import (
@@ -81,8 +54,6 @@ def _pnl_totals(company: str, from_date: str, to_date: str) -> dict:
 	summary = result.get("report_summary") or []
 
 	totals = {"income": 0, "expense": 0, "net_profit": 0}
-
-	# Primary: extract from report_summary (standard path)
 	for item in summary:
 		label = (item.get("label") or "").lower()
 		value = flt(item.get("value", 0))
@@ -92,33 +63,6 @@ def _pnl_totals(company: str, from_date: str, to_date: str) -> dict:
 			totals["expense"] = value
 		elif "profit" in label or "loss" in label:
 			totals["net_profit"] = value
-
-	# Fallback: extract from row data when report_summary is empty/incomplete
-	# Handles both standard path labels ("Total Income (Credit)") and
-	# FinancialReportEngine labels ("Sales Revenue", "NET PROFIT (NP)")
-	if not totals["income"] and not totals["expense"]:
-		for row in result.get("data", []):
-			account = (row.get("account_name", "") or row.get("account", "") or "").lower()
-			# Skip percentage / margin rows
-			if "margin" in account or account.endswith("%"):
-				continue
-			val = _row_value(row)
-			# Standard path
-			if "total income" in account:
-				totals["income"] = val
-			elif "total expense" in account:
-				totals["expense"] = val
-			elif "profit for" in account:
-				totals["net_profit"] = val
-			# Template engine path — bold summary rows
-			elif account in ("net profit (np)", "net profit"):
-				totals["net_profit"] = val
-			elif "sales revenue" in account or "revenue from operations" in account:
-				totals["income"] = abs(val)
-		# If we found income from template but not expense, derive it
-		if totals["income"] and not totals["expense"] and totals["net_profit"]:
-			totals["expense"] = flt(totals["income"] - totals["net_profit"])
-
 	return totals
 
 
@@ -161,17 +105,17 @@ def _ap_total(company: str) -> float:
 
 
 def _balance_sheet_totals(company: str, from_date: str, to_date: str) -> dict:
-	"""Extract asset, liability, equity totals from Balance Sheet report.
+	"""Extract asset, liability, equity totals from Balance Sheet report_summary.
 
-	Prefers report_summary (standard path).  Falls back to extracting from
-	row data when report_summary is absent (FinancialReportEngine path).
+	Always uses the standard code path (no report_type) to guarantee
+	report_summary is present — the FinancialReportEngine path returns
+	a 4-tuple without report_summary.
 	"""
 	filters = build_financial_filters(
 		company=company,
 		from_date=from_date,
 		to_date=to_date,
 		periodicity="Yearly",
-		report_type="balance_sheet",
 	)
 
 	from erpnext.accounts.report.balance_sheet.balance_sheet import execute
@@ -180,8 +124,6 @@ def _balance_sheet_totals(company: str, from_date: str, to_date: str) -> dict:
 	summary = result.get("report_summary") or []
 
 	totals = {"total_asset": 0, "total_liability": 0, "total_equity": 0}
-
-	# Primary: extract from report_summary (standard path)
 	for item in summary:
 		label = (item.get("label") or "").lower()
 		value = flt(item.get("value", 0))
@@ -191,21 +133,6 @@ def _balance_sheet_totals(company: str, from_date: str, to_date: str) -> dict:
 			totals["total_liability"] = value
 		elif "equity" in label:
 			totals["total_equity"] = value
-
-	# Fallback: extract from row data when report_summary is empty/incomplete
-	# Handles standard labels ("Total Asset (Debit)") and template labels
-	# ("TOTAL ASSETS", "TOTAL LIABILITIES", "Total Equity")
-	if not totals["total_asset"] and not totals["total_liability"]:
-		for row in result.get("data", []):
-			account = (row.get("account_name", "") or row.get("account", "") or "").lower()
-			val = _row_value(row)
-			if "total asset" in account or account == "total assets":
-				totals["total_asset"] = abs(val)
-			elif "total liabilit" in account and "equity" not in account:
-				totals["total_liability"] = abs(val)
-			elif "total equity" in account:
-				totals["total_equity"] = abs(val)
-
 	return totals
 
 
@@ -722,7 +649,6 @@ def get_monthly_comparison(months=6, company=None):
 		from_date=start_date,
 		to_date=end_date,
 		periodicity="Monthly",
-		report_type="profit_and_loss",
 	)
 
 	from erpnext.accounts.report.profit_and_loss_statement.profit_and_loss_statement import (
