@@ -70,9 +70,19 @@
    "link_type": "DocType",
    "onboard": 0,
    "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Chatbot Audit Log",
+   "link_count": 0,
+   "link_to": "Chatbot Audit Log",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
   }
  ],
- "modified": "2026-03-17 20:31:13.938485",
+ "modified": "2026-03-27 19:59:03.137341",
  "modified_by": "Administrator",
  "module": "Chatbot",
  "name": "Chatbot",
@@ -116,6 +126,12 @@
   {
    "label": "Chatbot Message",
    "link_to": "Chatbot Message",
+   "type": "DocType"
+  },
+  {
+   "doc_view": "",
+   "label": "Chatbot Audit Log",
+   "link_to": "Chatbot Audit Log",
    "type": "DocType"
   }
  ],

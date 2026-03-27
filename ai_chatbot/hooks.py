@@ -158,6 +158,10 @@ scheduler_events = {
 			"ai_chatbot.automation.scheduled_reports.run_scheduled_reports",
 		],
 	},
+	"daily": [
+		# Phase 13F: Purge audit log entries older than 90 days
+		"ai_chatbot.core.audit.cleanup_old_audit_logs",
+	],
 }
 
 # Testing

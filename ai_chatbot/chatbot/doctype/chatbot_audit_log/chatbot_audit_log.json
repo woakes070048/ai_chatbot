@@ -1,0 +1,204 @@
+{
+ "actions": [],
+ "autoname": "autoincrement",
+ "creation": "2026-03-27 12:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "event_type",
+  "status",
+  "user",
+  "ip_address",
+  "column_break_ctx",
+  "conversation",
+  "message",
+  "duration_ms",
+  "section_break_provider",
+  "provider",
+  "model",
+  "column_break_tokens",
+  "prompt_tokens",
+  "completion_tokens",
+  "cost",
+  "section_break_tool",
+  "tool_name",
+  "tool_args",
+  "column_break_tool_result",
+  "tool_result_summary",
+  "section_break_error",
+  "error_message"
+ ],
+ "fields": [
+  {
+   "fieldname": "event_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Event Type",
+   "options": "llm_request\ntool_call\ntool_result\ncrud_operation\nerror\nrate_limit_hit",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "success\nerror\ntimeout\nrate_limited",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "User",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "ip_address",
+   "fieldtype": "Data",
+   "label": "IP Address",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_ctx",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "conversation",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Conversation",
+   "options": "Chatbot Conversation",
+   "read_only": 1
+  },
+  {
+   "fieldname": "message",
+   "fieldtype": "Link",
+   "label": "Message",
+   "options": "Chatbot Message",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "duration_ms",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Duration (ms)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_break_provider",
+   "fieldtype": "Section Break",
+   "label": "Provider & Tokens"
+  },
+  {
+   "fieldname": "provider",
+   "fieldtype": "Data",
+   "in_standard_filter": 1,
+   "label": "Provider",
+   "read_only": 1
+  },
+  {
+   "fieldname": "model",
+   "fieldtype": "Data",
+   "label": "Model",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_tokens",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "prompt_tokens",
+   "fieldtype": "Int",
+   "label": "Prompt Tokens",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "completion_tokens",
+   "fieldtype": "Int",
+   "label": "Completion Tokens",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "cost",
+   "fieldtype": "Currency",
+   "label": "Cost (USD)",
+   "precision": "6",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_break_tool",
+   "fieldtype": "Section Break",
+   "label": "Tool Details"
+  },
+  {
+   "fieldname": "tool_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Tool Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "tool_args",
+   "fieldtype": "JSON",
+   "label": "Tool Arguments",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_tool_result",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "tool_result_summary",
+   "fieldtype": "Small Text",
+   "label": "Tool Result Summary",
+   "length": 500,
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_break_error",
+   "fieldtype": "Section Break",
+   "label": "Error Details"
+  },
+  {
+   "fieldname": "error_message",
+   "fieldtype": "Small Text",
+   "label": "Error Message",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-03-27 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Chatbot",
+ "name": "Chatbot Audit Log",
+ "naming_rule": "Autoincrement",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 0
+}

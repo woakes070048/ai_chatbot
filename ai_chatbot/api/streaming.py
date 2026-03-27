@@ -15,10 +15,11 @@ import uuid
 import frappe
 
 from ai_chatbot.api.history import get_conversation_history as _get_conversation_history
+from ai_chatbot.core.audit import log_audit_event
 from ai_chatbot.core.logger import log_error, log_info, log_request, timer
 from ai_chatbot.core.prompts import build_system_prompt
 from ai_chatbot.core.token_optimizer import optimize_history
-from ai_chatbot.core.token_tracker import track_token_usage
+from ai_chatbot.core.token_tracker import estimate_cost, track_token_usage
 from ai_chatbot.tools.base import BaseTool, get_tools_for_message
 from ai_chatbot.utils.ai_providers import get_ai_provider
 
@@ -208,6 +209,19 @@ def _run_streaming_job(conversation_id: str, stream_id: str, ai_provider: str, u
 			stream=True,
 		)
 
+		# Phase 13F: Audit the overall LLM streaming request
+		log_audit_event(
+			"llm_request",
+			conversation=conversation_id,
+			provider=ai_provider,
+			model=provider.model,
+			tokens=(prompt_tokens, completion_tokens),
+			cost=estimate_cost(provider.model, prompt_tokens, completion_tokens),
+			duration_ms=t.duration_ms,
+			status="success",
+			user=user,
+		)
+
 		_publish_process_step(conversation_id, stream_id, "Saving response...", user)
 
 		# Guard: if content is empty, provide a fallback message
@@ -301,6 +315,18 @@ def _run_streaming_job(conversation_id: str, stream_id: str, ai_provider: str, u
 
 	except Exception as e:
 		log_error(f"Streaming job error: {e!s}", title="Streaming")
+
+		# Phase 13F: Audit the error
+		error_status = "rate_limited" if "rate" in str(e).lower() and "limit" in str(e).lower() else "error"
+		log_audit_event(
+			"error",
+			conversation=conversation_id,
+			provider=ai_provider,
+			model=provider.model if provider else None,
+			status=error_status,
+			error_message=str(e),
+			user=user,
+		)
 
 		# Phase 13A.3: Save partial response as incomplete message
 		# so the user can see what was generated before the error.
@@ -519,6 +545,16 @@ def _stream_with_tools(
 						"content": json.dumps(loop_error),
 						"tool_call_id": tc["id"],
 					}
+				)
+				# Phase 13F: Audit loop-detected error
+				log_audit_event(
+					"error",
+					conversation=conversation_id,
+					tool_name=tc["name"],
+					tool_args=tc["arguments"],
+					status="error",
+					error_message=f"Tool call loop detected: {tc['name']}",
+					user=user,
 				)
 				continue
 

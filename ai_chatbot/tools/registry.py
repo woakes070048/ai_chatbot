@@ -136,9 +136,37 @@ def execute_tool(tool_name: str, arguments: dict) -> dict:
 			duration_ms=t.duration_ms,
 			conversation_id=conversation_id,
 		)
+
+		# Phase 13F: Audit successful tool call
+		from ai_chatbot.core.audit import log_audit_event
+
+		result_summary = str(result)[:500] if result else None
+		log_audit_event(
+			"tool_call",
+			conversation=conversation_id,
+			tool_name=tool_name,
+			tool_args=arguments,
+			tool_result_summary=result_summary,
+			duration_ms=t.duration_ms,
+			status="success",
+		)
+
 		return {"success": True, "data": result}
 	except Exception as e:
 		log_tool_error(tool_name, e, arguments)
+
+		# Phase 13F: Audit tool error
+		from ai_chatbot.core.audit import log_audit_event
+
+		log_audit_event(
+			"tool_call",
+			conversation=conversation_id,
+			tool_name=tool_name,
+			tool_args=arguments,
+			status="error",
+			error_message=str(e),
+		)
+
 		from ai_chatbot.core.resilience import classify_tool_error
 
 		return classify_tool_error(e, tool_name, arguments)

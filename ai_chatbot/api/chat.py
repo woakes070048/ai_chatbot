@@ -11,10 +11,11 @@ import frappe
 
 from ai_chatbot.api.history import get_conversation_history
 from ai_chatbot.core.ai_utils import extract_response, extract_tool_info
+from ai_chatbot.core.audit import log_audit_event
 from ai_chatbot.core.logger import log_error, log_info, log_warning
 from ai_chatbot.core.prompts import build_system_prompt
 from ai_chatbot.core.token_optimizer import optimize_history
-from ai_chatbot.core.token_tracker import track_token_usage
+from ai_chatbot.core.token_tracker import estimate_cost, track_token_usage
 from ai_chatbot.tools.base import BaseTool, get_tools_for_message
 from ai_chatbot.utils.ai_providers import get_ai_provider
 
@@ -297,7 +298,10 @@ def generate_ai_response(conversation, provider, history, tools) -> dict:
 		completion_tokens = 0
 
 		for _round in range(max_tool_rounds):
-			response = retry_wrapper.call(history, tools=tools, stream=False)
+			from ai_chatbot.core.logger import timer as _timer
+
+			with _timer() as llm_t:
+				response = retry_wrapper.call(history, tools=tools, stream=False)
 
 			round_content, tool_calls, round_prompt, round_completion = extract_response(
 				ai_provider, response
@@ -305,6 +309,18 @@ def generate_ai_response(conversation, provider, history, tools) -> dict:
 			content = round_content
 			prompt_tokens += round_prompt
 			completion_tokens += round_completion
+
+			# Phase 13F: Audit the LLM request
+			log_audit_event(
+				"llm_request",
+				conversation=conversation.name,
+				provider=ai_provider,
+				model=provider.model,
+				tokens=(round_prompt, round_completion),
+				cost=estimate_cost(provider.model, round_prompt, round_completion),
+				duration_ms=llm_t.duration_ms,
+				status="success",
+			)
 
 			if not tool_calls:
 				# No tool calls — we're done
@@ -343,6 +359,15 @@ def generate_ai_response(conversation, provider, history, tools) -> dict:
 							"content": json.dumps(loop_error),
 							"tool_call_id": tool_call.get("id", f"tool_{i}"),
 						}
+					)
+					# Phase 13F: Audit loop-detected error
+					log_audit_event(
+						"error",
+						conversation=conversation.name,
+						tool_name=func_name,
+						tool_args=func_args,
+						status="error",
+						error_message=f"Tool call loop detected: {func_name}",
 					)
 					continue
 
@@ -418,6 +443,15 @@ def generate_ai_response(conversation, provider, history, tools) -> dict:
 
 	except Exception as e:
 		log_error(f"Error generating response: {e!s}", title="Chat API")
+		# Phase 13F: Audit the error
+		log_audit_event(
+			"error",
+			conversation=conversation.name,
+			provider=ai_provider,
+			model=provider.model,
+			status="error",
+			error_message=str(e),
+		)
 		return {"success": False, "error": str(e)}
 
 
