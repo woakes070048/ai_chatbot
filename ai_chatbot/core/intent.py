@@ -4,8 +4,11 @@
 Intent Classifier for AI Chatbot Tool Router
 
 Deterministic (no LLM) classification of user queries into tool categories
-using keyword matching with weighted scoring. Part of Phase 12A — System
-Tool Discovery Layer.
+using keyword matching with weighted scoring.
+
+Phase 12A — keyword-based category matching
+Phase 14A — enhanced query-type detection (write vs read, ambiguity scoring,
+             complexity classification) for smarter tool routing and prompt injection.
 
 The classifier maps user messages to one or more tool categories
 (e.g. "selling", "finance", "hrms") so the tool router can send only
@@ -43,6 +46,16 @@ class IntentResult:
 
 	entities: dict
 	"""Extracted entities (dates, companies, items, etc.)."""
+
+	# Phase 14A — extended classification metadata
+	is_write_request: bool = False
+	"""True if the query involves creating, updating, or deleting records."""
+
+	is_ambiguous: bool = False
+	"""True if multiple categories scored similarly (no clear winner)."""
+
+	complexity: str = "simple"
+	"""Query complexity: 'simple', 'multi_step', 'comparative'. Helps the LLM decide how many tools to call."""
 
 
 # ── Keyword → Category mapping ──────────────────────────────────────
@@ -300,6 +313,42 @@ CONVERSATIONAL_SIGNALS = re.compile(
 	re.IGNORECASE,
 )
 
+# ── Write-request signals (Phase 14A) ──────────────────────────────
+
+WRITE_REQUEST_SIGNALS = re.compile(
+	r"\b("
+	r"create|make|add|new|insert|register|"
+	r"update|change|edit|modify|set|rename|"
+	r"delete|remove|drop|"
+	r"submit|cancel|amend|"
+	r"propose|draft"
+	r")\b",
+	re.IGNORECASE,
+)
+
+# ── Multi-step / comparative complexity signals (Phase 14A) ────────
+
+MULTI_STEP_SIGNALS = re.compile(
+	r"\b("
+	r"and then|also show|additionally|as well as|along with|"
+	r"then|afterwards|after that|followed by|"
+	r"both|all of|each of"
+	r")\b",
+	re.IGNORECASE,
+)
+
+COMPARATIVE_SIGNALS = re.compile(
+	r"\b("
+	r"compare|comparison|versus|vs\.?|"
+	r"difference between|better|worse|"
+	r"higher|lower|more than|less than|"
+	r"this (?:month|quarter|year) (?:vs|versus|compared)|"
+	r"last (?:month|quarter|year) (?:vs|versus|compared)|"
+	r"month[- ]over[- ]month|year[- ]over[- ]year|yoy|mom|qoq"
+	r")\b",
+	re.IGNORECASE,
+)
+
 # ── Thresholds ──────────────────────────────────────────────────────
 
 # Minimum score for a category to be included in results
@@ -307,6 +356,10 @@ CATEGORY_THRESHOLD = 0.5
 
 # Maximum number of categories to return (prevents overly broad routing)
 MAX_CATEGORIES = 3
+
+# Phase 14A: When the top two category scores are within this ratio,
+# the query is considered ambiguous (no clear winner).
+AMBIGUITY_RATIO_THRESHOLD = 0.75
 
 
 # ── Public API ──────────────────────────────────────────────────────
@@ -412,6 +465,15 @@ def classify_intent(
 	# 6. Entity extraction
 	entities = extract_entities(user_message)
 
+	# 7. Phase 14A — write-request detection
+	is_write_request = bool(WRITE_REQUEST_SIGNALS.search(msg_lower)) and query_type == "action"
+
+	# 8. Phase 14A — ambiguity detection
+	is_ambiguous = _detect_ambiguity(scores)
+
+	# 9. Phase 14A — complexity classification
+	complexity = _detect_complexity(msg_lower, categories)
+
 	return IntentResult(
 		categories=categories,
 		query_type=query_type,
@@ -419,6 +481,9 @@ def classify_intent(
 		is_followup=is_followup,
 		matched_keywords=tuple(matched_kws),
 		entities=entities,
+		is_write_request=is_write_request,
+		is_ambiguous=is_ambiguous,
+		complexity=complexity,
 	)
 
 
@@ -434,6 +499,53 @@ def _detect_query_type(msg_lower: str) -> str:
 		if pattern.search(msg_lower):
 			return qtype
 	return "unknown"
+
+
+def _detect_ambiguity(scores: dict[str, float]) -> bool:
+	"""Detect whether the query is ambiguous (multiple categories scored similarly).
+
+	When the top two category scores are within AMBIGUITY_RATIO_THRESHOLD of
+	each other and both above CATEGORY_THRESHOLD, the router should include a
+	broader tool set and the prompt should instruct the LLM to ask for
+	clarification if unsure.
+
+	Args:
+		scores: Category → score mapping from keyword scan.
+
+	Returns:
+		True if query is ambiguous.
+	"""
+	if len(scores) < 2:
+		return False
+
+	ranked = sorted(scores.values(), reverse=True)
+	top, second = ranked[0], ranked[1]
+
+	if top < CATEGORY_THRESHOLD or second < CATEGORY_THRESHOLD:
+		return False
+
+	# If the second-best score is close to the top score, it's ambiguous
+	return (second / top) >= AMBIGUITY_RATIO_THRESHOLD
+
+
+def _detect_complexity(msg_lower: str, categories: tuple[str, ...]) -> str:
+	"""Classify query complexity to help the LLM plan tool calls.
+
+	Args:
+		msg_lower: Lowercased user message.
+		categories: Matched categories from keyword scan.
+
+	Returns:
+		One of: 'simple', 'multi_step', 'comparative'.
+	"""
+	if COMPARATIVE_SIGNALS.search(msg_lower):
+		return "comparative"
+
+	# Multi-step: explicit chaining signals or 3+ categories matched
+	if MULTI_STEP_SIGNALS.search(msg_lower) or len(categories) >= 3:
+		return "multi_step"
+
+	return "simple"
 
 
 def _extract_followup_categories(history: list[dict]) -> tuple[str, ...]:

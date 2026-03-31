@@ -17,7 +17,7 @@ import frappe
 from ai_chatbot.api.history import get_conversation_history as _get_conversation_history
 from ai_chatbot.core.audit import log_audit_event
 from ai_chatbot.core.logger import log_error, log_info, log_request, timer
-from ai_chatbot.core.prompts import build_system_prompt
+from ai_chatbot.core.prompts import build_system_prompt, inject_routing_context
 from ai_chatbot.core.token_optimizer import optimize_history
 from ai_chatbot.core.token_tracker import estimate_cost, track_token_usage
 from ai_chatbot.tools.base import BaseTool, get_tools_for_message
@@ -178,7 +178,13 @@ def _run_streaming_job(conversation_id: str, stream_id: str, ai_provider: str, u
 			tool_count=routing.tool_count,
 			is_fallback=routing.is_fallback,
 			query_type=routing.intent.query_type,
+			is_write=routing.intent.is_write_request,
+			is_ambiguous=routing.intent.is_ambiguous,
+			complexity=routing.intent.complexity,
 		)
+
+		# Phase 14A: Inject routing context hint into system prompt
+		inject_routing_context(history[0], routing.routing_hint)
 
 		# Run the streaming loop
 		with timer() as t:

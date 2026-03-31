@@ -315,6 +315,16 @@ def build_system_prompt_blocks(conversation_id: str | None = None, company: str 
 			}
 		)
 
+	# ── Few-shot examples block (Phase 14A — cacheable) ──
+	# 300-500 tokens that dramatically improve tool selection on ambiguous queries.
+	blocks.append(
+		{
+			"tag": "examples",
+			"content": _build_few_shot_examples(enabled, write_enabled),
+			"cacheable": True,
+		}
+	)
+
 	# ── IDP block (cacheable, conditional) ──
 	if getattr(settings, "enable_idp_tools", False):
 		idp_output_language = (getattr(settings, "idp_output_language", "") or "").strip()
@@ -423,6 +433,137 @@ def build_system_prompt_blocks(conversation_id: str | None = None, company: str 
 		)
 
 	return blocks
+
+
+def _build_few_shot_examples(enabled_categories: list[str], write_enabled: bool) -> str:
+	"""Build few-shot examples showing ideal tool selection for ambiguous queries.
+
+	Phase 14A: These examples cost ~300-500 tokens but prevent expensive
+	wrong-tool-call-then-retry loops. Only includes examples for enabled
+	categories.
+
+	Args:
+		enabled_categories: List of enabled tool category keys.
+		write_enabled: Whether write operations are enabled.
+
+	Returns:
+		Formatted few-shot examples string.
+	"""
+	examples = []
+
+	examples.append(
+		"## Tool Selection Examples\n"
+		"Below are examples of how to pick the right tool(s) for common queries:\n"
+	)
+
+	# Core analytics examples (always relevant)
+	if "selling" in enabled_categories or "finance" in enabled_categories:
+		examples.append(
+			'**Q: "How are we doing this quarter?"**\n'
+			"→ Call `get_sales_analytics` (omit dates — server defaults to current fiscal year), "
+			"then optionally `get_financial_overview` for a full picture. Present both revenue "
+			"and profitability."
+		)
+
+	if "selling" in enabled_categories:
+		examples.append(
+			'**Q: "Compare last month\'s sales with this month"**\n'
+			"→ Call `get_sales_analytics` twice: once with last month's date range, once with "
+			"this month's. Then present a side-by-side comparison with growth percentages."
+		)
+
+	if "finance" in enabled_categories:
+		examples.append(
+			'**Q: "What\'s our cash position?"**\n'
+			"→ Call `get_cash_flow_analysis` for cash inflows/outflows, and "
+			"`get_financial_overview` for the balance sheet cash position. Don't confuse "
+			"cash flow (period movement) with cash balance (point-in-time)."
+		)
+
+	if "hrms" in enabled_categories:
+		examples.append(
+			'**Q: "Show me John\'s leave balance"**\n'
+			'→ Call `get_leave_balance` with employee search for "John". Don\'t ask for the '
+			"employee ID — the tool accepts partial name matches."
+		)
+
+	if "inventory" in enabled_categories:
+		examples.append(
+			'**Q: "Which items are running low?"**\n'
+			"→ Call `get_low_stock_items`. Don't ask for warehouse unless the user specified one."
+		)
+
+	if "predictive" in enabled_categories:
+		examples.append(
+			'**Q: "What will our revenue look like next quarter?"**\n'
+			"→ Call `forecast_revenue` with the desired forecast period. Present the forecast "
+			"with confidence intervals and mention that it's a statistical projection."
+		)
+
+	if write_enabled:
+		examples.append(
+			'**Q: "Create a new lead for John from Acme Corp"**\n'
+			'→ Call `propose_create_document` with doctype="Lead", values containing the lead '
+			"name and company. Never use the old typed tools (create_lead, etc.) — always use "
+			"propose_* tools so the user gets a confirmation card."
+		)
+
+	# Cross-category / ambiguous example
+	if "selling" in enabled_categories and "buying" in enabled_categories:
+		examples.append(
+			'**Q: "How are our margins trending?"**\n'
+			"→ This is about profitability, not just sales. Call `get_profitability_analysis` "
+			"or `get_financial_overview` rather than `get_sales_analytics` — margins require "
+			"both revenue and cost data."
+		)
+
+	return "\n\n".join(examples)
+
+
+def inject_routing_context(
+	system_msg: dict,
+	routing_hint: str,
+) -> dict:
+	"""Inject a routing context hint into a system message.
+
+	Phase 14A: After tool routing runs, the routing hint is appended to the
+	system prompt as a non-cacheable ``<routing>`` block.  This tells the
+	LLM which categories were detected and provides guidance for tool
+	selection without adding to the cached prompt prefix.
+
+	Works for both string-based system messages (OpenAI/Gemini) and
+	block-based messages (Claude prompt caching).
+
+	Args:
+		system_msg: The system message dict (``{"role": "system", "content": ...}``).
+		routing_hint: The routing hint string from ``ToolRoutingResult.routing_hint``.
+
+	Returns:
+		The mutated system_msg dict (same reference, modified in place).
+	"""
+	if not routing_hint:
+		return system_msg
+
+	routing_block_content = f"## Routing Context (auto-detected)\n{routing_hint}"
+	routing_xml = f"\n\n<routing>\n{routing_block_content}\n</routing>"
+
+	# Append to the string content
+	content = system_msg.get("content", "")
+	if isinstance(content, str):
+		system_msg["content"] = content + routing_xml
+
+	# Also append to _prompt_blocks if present (for Claude prompt caching)
+	blocks = system_msg.get("_prompt_blocks")
+	if isinstance(blocks, list):
+		blocks.append(
+			{
+				"tag": "routing",
+				"content": routing_block_content,
+				"cacheable": False,
+			}
+		)
+
+	return system_msg
 
 
 def build_system_prompt(conversation_id: str | None = None, company: str | None = None) -> str:
