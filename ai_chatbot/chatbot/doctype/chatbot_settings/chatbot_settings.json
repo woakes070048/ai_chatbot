@@ -23,13 +23,15 @@
   "enable_crm_tools",
   "enable_sales_tools",
   "enable_purchase_tools",
-  "enable_finance_tools",
-  "use_financial_report_engine",
   "enable_inventory_tools",
   "enable_hrms_tools",
+  "column_break_bjva",
+  "enable_finance_tools",
+  "use_financial_report_engine",
   "idp_section",
   "enable_idp_tools",
   "enable_strict_idp_validation",
+  "column_break_nvku",
   "auto_create_idp_masters",
   "idp_output_language",
   "predictive_section",
@@ -89,8 +91,7 @@
   {
    "description": "API key for the selected provider. Stored encrypted.",
    "fieldname": "api_key",
-   "fieldtype": "Data",
-   "in_list_view": 1,
+   "fieldtype": "Password",
    "label": "API Key",
    "reqd": 1
   },
@@ -464,18 +465,26 @@
    "label": "Max Tokens (Legacy)"
   },
   {
-   "description": "Per-user learned preferences (Phase 14B). Managed programmatically — do not edit manually.",
+   "description": "Per-user learned preferences (Phase 14B). Managed programmatically \u2014 do not edit manually.",
    "fieldname": "user_preferences",
    "fieldtype": "JSON",
    "hidden": 1,
    "label": "User Preferences",
    "read_only": 1
+  },
+  {
+   "fieldname": "column_break_bjva",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "column_break_nvku",
+   "fieldtype": "Column Break"
   }
  ],
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-04-01 10:00:00.000000",
+ "modified": "2026-04-01 20:50:06.411980",
  "modified_by": "Administrator",
  "module": "Chatbot",
  "name": "Chatbot Settings",
