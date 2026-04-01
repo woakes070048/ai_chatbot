@@ -125,6 +125,109 @@ def build_forecast_chart(
 	}
 
 
+def build_trend_analysis_chart(
+	title: str,
+	labels: list[str],
+	values: list[float],
+	trend_line: list[float],
+	ma3: list[float],
+	ma6: list[float],
+	y_axis_name: str = "",
+) -> dict:
+	"""Build a trend analysis chart with actual data, regression line, and moving averages.
+
+	Shows:
+	- Actual values as a solid line with data points
+	- Linear regression trend line (dashed)
+	- 3-period moving average (dotted, if available)
+	- 6-period moving average (dotted, if available)
+
+	Args:
+		title: Chart title.
+		labels: Period labels (e.g. months).
+		values: Actual data values.
+		trend_line: Fitted linear regression values (same length as labels).
+		ma3: 3-period moving average (shorter by 2 elements, right-aligned).
+		ma6: 6-period moving average (shorter by 5 elements, right-aligned).
+		y_axis_name: Y-axis label.
+
+	Returns:
+		Complete ECharts option dict.
+	"""
+	n = len(labels)
+
+	# Pad moving averages with None on the left to align with labels
+	ma3_padded = [None] * (n - len(ma3)) + [flt(v, 2) for v in ma3] if ma3 else []
+	ma6_padded = [None] * (n - len(ma6)) + [flt(v, 2) for v in ma6] if ma6 else []
+
+	series = [
+		{
+			"name": "Actual",
+			"type": "line",
+			"data": [flt(v, 2) for v in values],
+			"smooth": False,
+			"itemStyle": {"color": CHART_COLORS[0]},
+			"lineStyle": {"width": 2},
+			"symbol": "circle",
+			"symbolSize": 4,
+		},
+		{
+			"name": "Trend (Linear)",
+			"type": "line",
+			"data": [flt(v, 2) for v in trend_line],
+			"smooth": False,
+			"itemStyle": {"color": CHART_COLORS[3]},
+			"lineStyle": {"width": 2, "type": "dashed"},
+			"symbol": "none",
+		},
+	]
+
+	legend_data = ["Actual", "Trend (Linear)"]
+
+	if ma3_padded:
+		series.append(
+			{
+				"name": "MA-3",
+				"type": "line",
+				"data": ma3_padded,
+				"smooth": True,
+				"itemStyle": {"color": CHART_COLORS[1]},
+				"lineStyle": {"width": 1.5, "type": "dotted"},
+				"symbol": "none",
+			}
+		)
+		legend_data.append("MA-3")
+
+	if ma6_padded:
+		series.append(
+			{
+				"name": "MA-6",
+				"type": "line",
+				"data": ma6_padded,
+				"smooth": True,
+				"itemStyle": {"color": CHART_COLORS[7]},
+				"lineStyle": {"width": 1.5, "type": "dotted"},
+				"symbol": "none",
+			}
+		)
+		legend_data.append("MA-6")
+
+	return {
+		"color": CHART_COLORS,
+		"title": {"text": title, "left": "center", "textStyle": {"fontSize": 14}},
+		"tooltip": {"trigger": "axis"},
+		"legend": {"bottom": 0, "data": legend_data},
+		"grid": {"left": "15%", "right": "5%", "bottom": "15%", "top": "22%"},
+		"xAxis": {
+			"type": "category",
+			"data": labels,
+			"axisLabel": {"fontSize": 11, "rotate": 30 if len(labels) > 12 else 0},
+		},
+		"yAxis": {"type": "value", "name": y_axis_name, "nameGap": 10},
+		"series": series,
+	}
+
+
 def build_cash_flow_forecast_chart(
 	historical_labels: list[str],
 	historical_inflows: list[float],

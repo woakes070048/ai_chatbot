@@ -10,6 +10,8 @@ have pure-Python fallbacks.
 Algorithms:
 - Simple Moving Average (SMA)
 - Exponential Moving Average (EMA) / Exponential Smoothing
+- Holt's Double Exponential Smoothing (trend-aware)
+- Holt-Winters Triple Exponential Smoothing (trend + seasonality)
 - Linear Regression (least squares) for trend detection
 - Additive/Multiplicative Seasonal Decomposition
 - Confidence Intervals (based on historical residual std dev)
@@ -112,6 +114,100 @@ def exponential_moving_average(values: list[float], alpha: float = 0.3) -> list[
 	return ema
 
 
+def holt_double_exponential(
+	values: list[float],
+	alpha: float = 0.3,
+	beta: float = 0.1,
+) -> tuple[list[float], float, float]:
+	"""Holt's double exponential smoothing (level + trend).
+
+	Decomposes the series into a level and a trend component,
+	updating both with exponential smoothing at each step.
+
+	Args:
+		values: Historical time series (at least 2 data points).
+		alpha: Level smoothing factor (0 < alpha <= 1).
+		beta: Trend smoothing factor (0 < beta <= 1).
+
+	Returns:
+		(fitted, final_level, final_trend) — fitted values and the
+		last level/trend used for forecasting.
+	"""
+	if len(values) < 2:
+		return list(values), values[0] if values else 0.0, 0.0
+
+	# Initialise level and trend
+	level = values[0]
+	trend = values[1] - values[0]
+	fitted = [level + trend]
+
+	for i in range(1, len(values)):
+		prev_level = level
+		level = alpha * values[i] + (1 - alpha) * (level + trend)
+		trend = beta * (level - prev_level) + (1 - beta) * trend
+		fitted.append(level + trend)
+
+	return fitted, level, trend
+
+
+def holt_winters_triple_exponential(
+	values: list[float],
+	period: int = SEASONALITY_PERIOD,
+	alpha: float = 0.3,
+	beta: float = 0.1,
+	gamma: float = 0.15,
+) -> tuple[list[float], float, float, list[float]]:
+	"""Holt-Winters triple exponential smoothing (additive seasonality).
+
+	Extends Holt's method with a seasonal component. Uses additive
+	decomposition (suitable when seasonal swings are roughly constant
+	regardless of the series level).
+
+	Args:
+		values: Historical time series (at least 2 full seasons recommended).
+		period: Season length (default 12 for monthly data).
+		alpha: Level smoothing factor.
+		beta: Trend smoothing factor.
+		gamma: Seasonal smoothing factor.
+
+	Returns:
+		(fitted, final_level, final_trend, final_seasonals) — fitted
+		values plus the state needed for out-of-sample forecasting.
+	"""
+	n = len(values)
+	if n < period:
+		# Fall back to Holt if not enough data for one full season
+		fitted, level, trend = holt_double_exponential(values, alpha, beta)
+		return fitted, level, trend, [0.0] * period
+
+	# Initialise seasonal indices from first full season
+	first_season_mean = _mean(values[:period])
+	if abs(first_season_mean) < 1e-9:
+		first_season_mean = 1e-9
+	seasonals = [values[i] - first_season_mean for i in range(period)]
+
+	# Initialise level and trend from first two periods if available
+	if n >= 2 * period:
+		level = _mean(values[:period])
+		trend = (_mean(values[period : 2 * period]) - _mean(values[:period])) / period
+	else:
+		level = values[0]
+		trend = (values[min(period, n - 1)] - values[0]) / max(period, 1)
+
+	fitted = []
+	for i in range(n):
+		seasonal_idx = i % period
+		forecast_val = level + trend + seasonals[seasonal_idx]
+		fitted.append(forecast_val)
+
+		prev_level = level
+		level = alpha * (values[i] - seasonals[seasonal_idx]) + (1 - alpha) * (level + trend)
+		trend = beta * (level - prev_level) + (1 - beta) * trend
+		seasonals[seasonal_idx] = gamma * (values[i] - level) + (1 - gamma) * seasonals[seasonal_idx]
+
+	return fitted, level, trend, list(seasonals)
+
+
 def linear_regression(values: list[float]) -> tuple[float, float]:
 	"""Least-squares linear regression on sequential indices.
 
@@ -197,7 +293,8 @@ def forecast_time_series(
 	Args:
 		values: Monthly historical values (oldest first).
 		months_ahead: Number of future months to predict.
-		method: "sma", "ema", "linear", "seasonal", or "auto".
+		method: "sma", "ema", "holt", "holt_winters", "linear",
+			"seasonal", or "auto".
 
 	Returns:
 		Dict with forecast, confidence bands, method info, and trend.
@@ -227,12 +324,12 @@ def forecast_time_series(
 		max_deviation = max(abs(sf - 1.0) for sf in seasonal_factors)
 		has_seasonality = max_deviation > 0.10  # >10% seasonal swing
 
-	# Method selection
+	# Method selection — prefer Holt-Winters/Holt over simpler methods
 	if method == "auto":
 		if has_seasonality and n >= 24:
-			method = "seasonal"
+			method = "holt_winters"
 		elif has_trend and n >= 6:
-			method = "linear"
+			method = "holt"
 		elif n >= 6:
 			method = "ema"
 		else:
@@ -288,12 +385,26 @@ def _generate_forecast(
 	n = len(values)
 	forecast = []
 
-	if method == "seasonal" and seasonal_factors:
-		# Linear trend + seasonal factors
+	if method == "holt_winters":
+		# Triple exponential smoothing — level + trend + seasonality
+		_, level, trend, seasonals = holt_winters_triple_exponential(values)
+		period = len(seasonals)
+		for i in range(months_ahead):
+			seasonal_idx = (n + i) % period
+			forecast.append(level + trend * (i + 1) + seasonals[seasonal_idx])
+
+	elif method == "seasonal" and seasonal_factors:
+		# Linear trend + seasonal factors (legacy path)
 		for i in range(months_ahead):
 			base = slope * (n + i) + intercept
 			season_idx = (n + i) % len(seasonal_factors)
 			forecast.append(base * seasonal_factors[season_idx])
+
+	elif method == "holt":
+		# Double exponential smoothing — level + trend
+		_, level, trend = holt_double_exponential(values)
+		for i in range(months_ahead):
+			forecast.append(level + trend * (i + 1))
 
 	elif method == "linear":
 		for i in range(months_ahead):
@@ -341,7 +452,11 @@ def compute_confidence_intervals(
 	n = len(historical_values)
 
 	# Compute residuals from the fitted model
-	if method == "linear" or method == "seasonal":
+	if method == "holt_winters":
+		fitted, _, _, _ = holt_winters_triple_exponential(historical_values)
+	elif method == "holt":
+		fitted, _, _ = holt_double_exponential(historical_values)
+	elif method in ("linear", "seasonal"):
 		fitted = [slope * i + intercept for i in range(n)]
 	elif method == "ema":
 		alpha = 2.0 / (min(n, 6) + 1)
@@ -369,6 +484,131 @@ def compute_confidence_intervals(
 			bands.append((round(low, 2), round(high, 2)))
 		result[level] = bands
 
+	return result
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Trend Analysis
+# ──────────────────────────────────────────────────────────────────────
+
+
+def analyse_trend(values: list[float], labels: list[str] | None = None) -> dict:
+	"""Perform comprehensive trend analysis on a time series.
+
+	Computes linear regression, period-over-period growth rates,
+	moving averages, and summary statistics.
+
+	Args:
+		values: Historical time series (oldest first).
+		labels: Optional parallel list of period labels (e.g. months).
+
+	Returns:
+		Dict with slope, intercept, growth rates, moving averages,
+		trend direction, R-squared, and summary stats.
+	"""
+	n = len(values)
+	if n < 2:
+		return {
+			"data_points": n,
+			"trend": "insufficient_data",
+			"slope": 0.0,
+			"intercept": values[0] if values else 0.0,
+		}
+
+	slope, intercept = linear_regression(values)
+	mean = _mean(values)
+	std = _std(values)
+
+	# R-squared — goodness of fit
+	fitted = [slope * i + intercept for i in range(n)]
+	ss_res = sum((values[i] - fitted[i]) ** 2 for i in range(n))
+	ss_tot = sum((values[i] - mean) ** 2 for i in range(n))
+	r_squared = 1 - (ss_res / ss_tot) if ss_tot > 1e-9 else 0.0
+
+	# Period-over-period growth rates (percentage)
+	growth_rates = []
+	for i in range(1, n):
+		if abs(values[i - 1]) > 1e-9:
+			pct = ((values[i] - values[i - 1]) / abs(values[i - 1])) * 100
+		else:
+			pct = 0.0
+		entry = {"growth_pct": round(pct, 2)}
+		if labels and i < len(labels):
+			entry["period"] = labels[i]
+		growth_rates.append(entry)
+
+	avg_growth = _mean([g["growth_pct"] for g in growth_rates]) if growth_rates else 0.0
+
+	# Moving averages (3-period and 6-period)
+	ma3 = _rolling_mean(values, 3)
+	ma6 = _rolling_mean(values, 6) if n >= 6 else []
+
+	# Trend direction
+	trend_strength = abs(slope) / (abs(mean) + 1e-9) if mean != 0 else 0.0
+	if trend_strength <= 0.02:
+		trend_direction = "stable"
+	elif slope > 0:
+		trend_direction = "increasing"
+	else:
+		trend_direction = "decreasing"
+
+	# Recent vs earlier comparison (split in half)
+	mid = n // 2
+	first_half_mean = _mean(values[:mid]) if mid > 0 else 0.0
+	second_half_mean = _mean(values[mid:])
+	if abs(first_half_mean) > 1e-9:
+		half_change_pct = ((second_half_mean - first_half_mean) / abs(first_half_mean)) * 100
+	else:
+		half_change_pct = 0.0
+
+	result = {
+		"data_points": n,
+		"trend": trend_direction,
+		"slope_per_period": round(slope, 4),
+		"intercept": round(intercept, 2),
+		"r_squared": round(r_squared, 4),
+		"mean": round(mean, 2),
+		"std_dev": round(std, 2),
+		"min": round(min(values), 2),
+		"max": round(max(values), 2),
+		"first_value": round(values[0], 2),
+		"last_value": round(values[-1], 2),
+		"total_change_pct": round(
+			((values[-1] - values[0]) / abs(values[0])) * 100 if abs(values[0]) > 1e-9 else 0.0, 2
+		),
+		"average_growth_pct": round(avg_growth, 2),
+		"first_half_mean": round(first_half_mean, 2),
+		"second_half_mean": round(second_half_mean, 2),
+		"half_change_pct": round(half_change_pct, 2),
+		"growth_rates": growth_rates,
+		"moving_average_3": [round(v, 2) for v in ma3],
+		"moving_average_6": [round(v, 2) for v in ma6],
+	}
+
+	# Seasonality check
+	seasonal_factors = detect_seasonality(values)
+	if seasonal_factors:
+		max_deviation = max(abs(sf - 1.0) for sf in seasonal_factors)
+		result["seasonality_detected"] = max_deviation > 0.10
+		if result["seasonality_detected"]:
+			result["seasonal_factors"] = [round(sf, 3) for sf in seasonal_factors]
+	else:
+		result["seasonality_detected"] = False
+
+	return result
+
+
+def _rolling_mean(values: list[float], window: int) -> list[float]:
+	"""Compute rolling mean over a window.
+
+	Returns a list shorter than input by (window - 1) elements.
+	Each element is the mean of the preceding `window` values.
+	"""
+	if len(values) < window:
+		return []
+	result = []
+	for i in range(window - 1, len(values)):
+		result.append(_mean(values[i - window + 1 : i + 1]))
 	return result
 
 

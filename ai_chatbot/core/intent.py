@@ -197,6 +197,12 @@ INTENT_KEYWORDS: dict[str, list[tuple[str, float]]] = {
 	"anomalies": [("predictive", 1.0)],
 	"projection": [("predictive", 1.0)],
 	"trend": [("predictive", 0.6), ("selling", 0.4)],
+	"trend analysis": [("predictive", 1.0)],
+	"analyse trend": [("predictive", 1.0)],
+	"analyze trend": [("predictive", 1.0)],
+	"growth rate": [("predictive", 0.8), ("selling", 0.2)],
+	"growth trend": [("predictive", 0.9)],
+	"holt winters": [("predictive", 1.0)],
 	# ── operations (action verbs + entity) ──
 	"change status": [("operations", 1.0)],
 	"look up": [("operations", 0.9)],

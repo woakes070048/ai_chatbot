@@ -327,6 +327,7 @@ def _ensure_tools_loaded():
 		import ai_chatbot.tools.predictive.cash_flow_forecast
 		import ai_chatbot.tools.predictive.demand_forecast
 		import ai_chatbot.tools.predictive.sales_forecast
+		import ai_chatbot.tools.predictive.trends
 		import ai_chatbot.tools.reports.finance
 		import ai_chatbot.tools.reports.purchase
 		import ai_chatbot.tools.reports.sales
