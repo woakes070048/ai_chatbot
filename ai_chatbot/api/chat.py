@@ -13,7 +13,7 @@ from ai_chatbot.api.history import get_conversation_history
 from ai_chatbot.core.ai_utils import extract_response, extract_tool_info
 from ai_chatbot.core.audit import log_audit_event
 from ai_chatbot.core.logger import log_error, log_info, log_warning
-from ai_chatbot.core.prompts import build_system_prompt, inject_routing_context
+from ai_chatbot.core.prompts import build_system_prompt, inject_recall_context, inject_routing_context
 from ai_chatbot.core.token_optimizer import optimize_history
 from ai_chatbot.core.token_tracker import estimate_cost, track_token_usage
 from ai_chatbot.tools.base import BaseTool, get_tools_for_message
@@ -259,6 +259,27 @@ def send_message(
 
 		# Phase 14A: Inject routing context hint into system prompt
 		inject_routing_context(history[0], routing.routing_hint)
+
+		# Phase 14B.3: Cross-conversation recall
+		try:
+			from ai_chatbot.core.recall import (
+				build_recall_context,
+				detect_recall_intent,
+				find_relevant_conversations,
+			)
+
+			if detect_recall_intent(message):
+				matches = find_relevant_conversations(message, conversation_id)
+				recall_ctx = build_recall_context(matches)
+				if recall_ctx:
+					inject_recall_context(history[0], recall_ctx)
+					log_info(
+						"Cross-conversation recall",
+						conversation_id=conversation_id,
+						matches=len(matches),
+					)
+		except Exception:
+			pass  # Non-critical
 
 		# Generate non-streaming response
 		return generate_ai_response(conversation, provider, history, tools)

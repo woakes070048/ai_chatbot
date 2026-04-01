@@ -51,12 +51,17 @@ _KEEP_ZERO_KEYS = frozenset(
 	}
 )
 
-# Prompt used to summarise dropped conversation messages
+# Prompt used to summarise dropped conversation messages (Phase 14B enhanced)
 _SUMMARISATION_PROMPT = (
-	"Summarise the following conversation history into a concise paragraph. "
-	"Focus on: (1) the key topics discussed, (2) any specific data points or "
-	"numbers mentioned, (3) decisions made or preferences expressed by the user, "
-	"(4) the current state of the conversation. Keep it under 200 words."
+	"Summarise the following conversation history. Return a JSON object with exactly "
+	"two keys:\n"
+	'1. "summary" — a concise paragraph (under 200 words) covering: key topics discussed, '
+	"specific data points or numbers mentioned, decisions made, and the user's preferences "
+	"or requests.\n"
+	'2. "topics" — an array of 1-5 short topic labels (2-4 words each) that describe what '
+	'the conversation was about. Example: ["Q3 sales analytics", "North region revenue", '
+	'"leave balance"].\n\n'
+	"Return ONLY the JSON object, no other text."
 )
 
 
@@ -427,6 +432,10 @@ def generate_conversation_summary(
 ) -> str:
 	"""Generate a summary of dropped messages using a cheap/fast model.
 
+	Phase 14B enhanced: the summarisation prompt returns structured JSON with
+	both a summary paragraph and topic labels. Topics are cached separately
+	for cross-conversation recall (14B.3).
+
 	Checks the cached summary in session_context first. Only re-summarises
 	when new messages push beyond the context window again.
 
@@ -472,17 +481,66 @@ def generate_conversation_summary(
 		# Extract text from response (provider-agnostic)
 		from ai_chatbot.core.ai_utils import extract_response
 
-		summary_text, _, _, _ = extract_response(provider_name, response)
+		raw_text, _, _, _ = extract_response(provider_name, response)
+
+		# Phase 14B: Parse structured JSON response (summary + topics)
+		summary_text, topics = _parse_summary_response(raw_text)
 
 		# Cache in session_context
 		set_session_context(conversation_id, "conversation_summary", summary_text)
 		set_session_context(conversation_id, "summary_through_message_count", current_total)
+
+		# Phase 14B: Cache topics for cross-conversation recall
+		if topics:
+			existing_topics = ctx.get("conversation_topics", [])
+			# Merge and deduplicate topics (keep latest at front)
+			merged = list(dict.fromkeys(topics + existing_topics))[:10]
+			set_session_context(conversation_id, "conversation_topics", merged)
+
+			# Also record topics in user preferences for cross-conversation learning
+			try:
+				from ai_chatbot.core.user_preferences import record_topic
+
+				for topic in topics:
+					record_topic(topic)
+			except Exception:
+				pass  # Non-critical
 
 		return summary_text
 
 	except Exception as e:
 		frappe.log_error(f"Summarisation error: {e}", "AI Chatbot")
 		return cached_summary or ""
+
+
+def _parse_summary_response(raw_text: str) -> tuple[str, list[str]]:
+	"""Parse the structured JSON response from the summarisation LLM.
+
+	Expected format: {"summary": "...", "topics": ["...", "..."]}
+	Falls back to treating the entire response as the summary if JSON
+	parsing fails (backward compatible with non-JSON responses).
+
+	Args:
+		raw_text: Raw LLM response text.
+
+	Returns:
+		Tuple of (summary_text, topics_list).
+	"""
+	try:
+		# Try to parse as JSON first
+		parsed = json.loads(raw_text.strip())
+		if isinstance(parsed, dict):
+			summary = parsed.get("summary", "")
+			topics = parsed.get("topics", [])
+			if isinstance(summary, str) and summary:
+				if isinstance(topics, list):
+					topics = [t for t in topics if isinstance(t, str)]
+				return summary, topics
+	except (json.JSONDecodeError, TypeError):
+		pass
+
+	# Fallback: treat entire response as summary, no topics
+	return raw_text.strip(), []
 
 
 # ═══════════════════════════════════════════════════════════════════════

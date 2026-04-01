@@ -67,7 +67,8 @@
   "claude_api_key",
   "claude_model",
   "claude_temperature",
-  "claude_max_tokens"
+  "claude_max_tokens",
+  "user_preferences"
  ],
  "fields": [
   {
@@ -461,12 +462,20 @@
    "fieldtype": "Int",
    "hidden": 1,
    "label": "Max Tokens (Legacy)"
+  },
+  {
+   "description": "Per-user learned preferences (Phase 14B). Managed programmatically — do not edit manually.",
+   "fieldname": "user_preferences",
+   "fieldtype": "JSON",
+   "hidden": 1,
+   "label": "User Preferences",
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-03-27 10:00:00.000000",
+ "modified": "2026-04-01 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "Chatbot",
  "name": "Chatbot Settings",

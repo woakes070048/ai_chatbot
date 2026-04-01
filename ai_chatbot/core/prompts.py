@@ -142,6 +142,22 @@ def build_system_prompt_blocks(conversation_id: str | None = None, company: str 
 		}
 	)
 
+	# ── User preferences block (Phase 14B — NOT cacheable, per-user) ──
+	try:
+		from ai_chatbot.core.user_preferences import build_preferences_prompt_block
+
+		prefs_content = build_preferences_prompt_block()
+		if prefs_content:
+			blocks.append(
+				{
+					"tag": "user_preferences",
+					"content": prefs_content,
+					"cacheable": False,
+				}
+			)
+	except Exception:
+		pass  # Non-critical — skip if preferences unavailable
+
 	# ── Rules block (cacheable — guidelines are static) ──
 	rules_parts = []
 
@@ -559,6 +575,45 @@ def inject_routing_context(
 			{
 				"tag": "routing",
 				"content": routing_block_content,
+				"cacheable": False,
+			}
+		)
+
+	return system_msg
+
+
+def inject_recall_context(
+	system_msg: dict,
+	recall_context: str,
+) -> dict:
+	"""Inject cross-conversation recall context into a system message.
+
+	Phase 14B.3: When the user references a prior conversation, relevant
+	summaries from past conversations are appended as a non-cacheable
+	``<recall>`` block.
+
+	Args:
+		system_msg: The system message dict.
+		recall_context: Formatted recall context from ``build_recall_context()``.
+
+	Returns:
+		The mutated system_msg dict.
+	"""
+	if not recall_context:
+		return system_msg
+
+	recall_xml = f"\n\n<recall>\n{recall_context}\n</recall>"
+
+	content = system_msg.get("content", "")
+	if isinstance(content, str):
+		system_msg["content"] = content + recall_xml
+
+	blocks = system_msg.get("_prompt_blocks")
+	if isinstance(blocks, list):
+		blocks.append(
+			{
+				"tag": "recall",
+				"content": recall_context,
 				"cacheable": False,
 			}
 		)

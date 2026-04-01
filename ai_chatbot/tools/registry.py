@@ -151,6 +151,14 @@ def execute_tool(tool_name: str, arguments: dict) -> dict:
 			status="success",
 		)
 
+		# Phase 14B: Record tool usage for user preference learning
+		try:
+			from ai_chatbot.core.user_preferences import record_tool_usage
+
+			record_tool_usage(tool_name)
+		except Exception:
+			pass  # Non-critical — don't break tool execution
+
 		return {"success": True, "data": result}
 	except Exception as e:
 		log_tool_error(tool_name, e, arguments)
