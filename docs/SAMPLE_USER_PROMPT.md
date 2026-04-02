@@ -151,17 +151,35 @@ Notes on IDP:
 
 ## Predictive Analytics
 
+### Trend Analysis
+
+| Prompt | Output | Expected Result |
+|--------|--------|-----------------|
+| Analyse the revenue trend for the last 12 months | chart | Trend direction, slope per month, R-squared, growth rates, moving averages, chart with regression line overlay |
+| Show expense trend for the last 24 months | chart | Purchase-based expense trend with MA-3, MA-6 bands and seasonality detection |
+| Analyse demand trend for [Item Name] | chart | Item-level quantity trend with linear regression and period-over-period growth rates |
+| What is the revenue trend this year? | chart | Current-year revenue trend with first-half vs second-half comparison |
+| Is there any seasonality in our sales? | chart | Trend analysis highlighting seasonality_detected flag and seasonal patterns |
+
+### Forecasting
+
 | Prompt | Output | Expected Result |
 |--------|--------|-----------------|
 | Forecast sales revenue for next 3 months | chart | Line chart with predicted revenue, confidence intervals, and trend direction |
 | Predict demand for [Item Name] for next quarter | chart | Item-level demand forecast with upper and lower bounds |
 | Cash flow projection for next 3 months | chart | Projected cash inflows and outflows with net position |
-| Detect any anomalies in our recent transactions | table | Flagged transactions with unusually large amounts or atypical patterns |
 | Revenue forecast by territory for next quarter | chart | Territory-wise revenue predictions with confidence bands |
+
+### Anomaly Detection
+
+| Prompt | Output | Expected Result |
+|--------|--------|-----------------|
+| Detect any anomalies in our recent transactions | table | Flagged transactions with unusually large amounts or atypical patterns |
 | Show anomalies in purchase transactions | table | Unusual purchase amounts, new suppliers with large first orders |
 
 Notes on Predictive Analytics:
-- Forecasts use statistical methods (exponential smoothing, linear regression) on historical data
+- **Trend analysis** uses linear regression, moving averages, and seasonality detection on historical data. It is retrospective (looks backward), not predictive.
+- **Forecasting** uses Holt-Winters (triple exponential smoothing) when 12+ months of seasonal data are available, Holt's method for trend-only data, and EMA as fallback.
 - At least 6 months of historical data is recommended for reliable forecasts
 - Confidence intervals widen further into the future, reflecting increasing uncertainty
 - Anomaly detection flags statistical outliers, not necessarily errors

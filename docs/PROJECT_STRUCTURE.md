@@ -423,12 +423,14 @@ ai_chatbot/tools/
 |   +-- search.py                             # Search/find ERPNext records
 |   +-- update.py                             # Update ERPNext records (with confirmation)
 |
-+-- predictive/                               # Forecasting and anomaly detection (4 modules)
-    +-- sales_forecast.py                     # Revenue forecasting (exponential smoothing,
-    |                                           trend analysis, confidence intervals)
++-- predictive/                               # Forecasting and anomaly detection (5 modules, 6 tools)
+    +-- sales_forecast.py                     # Revenue forecasting (Holt-Winters, exponential
+    |                                           smoothing, trend analysis, confidence intervals)
     +-- demand_forecast.py                    # Item demand forecasting
     +-- cash_flow_forecast.py                 # Cash flow projection
     +-- anomaly_detection.py                  # Statistical anomaly detection (z-score, IQR)
+    +-- trends.py                             # Trend analysis: linear regression, growth rates,
+                                                moving averages, seasonality detection (1 tool)
 ```
 
 **Tool loading order**: Tools are loaded lazily on first access via `_ensure_tools_loaded()` in `registry.py`. ERPNext tools load only if ERPNext is installed; HRMS tools load only if HRMS is installed. External plugin tools are discovered via the `ai_chatbot_tool_modules` Frappe hook.
@@ -484,16 +486,20 @@ ai_chatbot/data/
 |                                               Returns complete option dicts that the
 |                                               frontend passes to echarts.setOption().
 |
-+-- forecast_charts.py                        # Specialized chart builders for forecasting
-|                                               output (confidence bands, trend lines)
++-- forecast_charts.py                        # Specialized chart builders: build_forecast_chart
+|                                               (confidence bands), build_trend_analysis_chart
+|                                               (regression + MA overlay),
+|                                               build_cash_flow_forecast_chart (multi-series)
 |
 +-- currency.py                               # Multi-currency utilities: exchange rate
 |                                               lookup via ERPNext, currency formatting,
 |                                               amount conversion helpers
 |
-+-- forecasting.py                            # Statistical forecasting engine: moving
-|                                               averages, exponential smoothing, trend
-|                                               decomposition, confidence intervals
++-- forecasting.py                            # Statistical forecasting engine: SMA, EMA,
+|                                               Holt's double exponential smoothing,
+|                                               Holt-Winters triple exponential smoothing,
+|                                               linear regression, trend analysis,
+|                                               seasonality detection, confidence intervals
 |
 +-- operations.py                             # CRUD operation helpers: document creation,
 |                                               validation, and update utilities
@@ -576,10 +582,12 @@ ai_chatbot/templates/                         # Jinja templates (reserved for fu
 
 ```
 docs/
-+-- PROJECT_OVERVIEW.md                       # Technical overview with architecture diagrams
++-- PROJECT_OVERVIEW.md                       # Technical overview with Mermaid diagrams
 +-- PROJECT_STRUCTURE.md                      # This file
-+-- API.md                                    # API endpoint reference
++-- API.md                                    # API endpoint reference (15 endpoints)
++-- TOOLS_REFERENCE.md                        # Complete reference for all 71 tools
 +-- SAMPLE_USER_PROMPT.md                     # Sample prompts with expected output
++-- AT_MENTION_GUIDE.md                       # @mention system usage guide
 +-- ENHANCEMENT_ROADMAP.md                    # Future phases roadmap
 ```
 
@@ -916,4 +924,4 @@ A typical user message flows through the system as follows:
 
 ---
 
-*This document reflects the AI Chatbot v1.0 release. For the planned enhancement roadmap, see `docs/ENHANCEMENT_ROADMAP.md`.*
+*This document reflects the AI Chatbot through Phase 19. For the planned enhancement roadmap, see `docs/ENHANCEMENT_ROADMAP.md`.*

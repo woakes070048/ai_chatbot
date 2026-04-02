@@ -1,6 +1,6 @@
 # AI Chatbot — Tools Reference
 
-Complete reference for all 70 registered business intelligence tools. Each tool is callable by the AI through natural language prompts.
+Complete reference for all 71 registered business intelligence tools. Each tool is callable by the AI through natural language prompts.
 
 All parameters are optional unless marked **(required)**. Date parameters default to the current fiscal year. Company defaults to the user's default company.
 
@@ -598,10 +598,20 @@ Compare an uploaded document with an existing ERPNext record and highlight diffe
 
 ---
 
-## Predictive Analytics (5 tools)
+## Predictive Analytics (6 tools)
+
+### analyse_trend
+Analyse historical trends in revenue, expenses, or item demand over time. Returns linear regression, growth rates, moving averages, seasonality detection, and a chart with trend line overlay.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| metric | string | What to analyse: 'revenue' (Sales Invoice totals), 'expenses' (Purchase Invoice totals), 'demand' (item quantity — requires item_code). Default: 'revenue' |
+| months | integer | Number of months of history to analyse (default 12, max 36) |
+| item_code | string | Item code for demand trend analysis (only used when metric='demand') |
+| company | string | Company name |
 
 ### forecast_revenue
-Forecast future revenue based on historical sales invoice data. Uses statistical methods (moving average, exponential smoothing, trend analysis). Returns predictions with confidence intervals and chart.
+Forecast future revenue based on historical sales invoice data. Uses statistical methods (moving average, exponential smoothing, Holt-Winters, trend analysis). Returns predictions with confidence intervals and chart.
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
@@ -764,9 +774,9 @@ Update an existing ToDo task.
 | Inventory / Stock (custom + report) | 7 |
 | HRMS | 6 |
 | IDP (Document Processing) | 3 |
-| Predictive Analytics | 5 |
+| Predictive Analytics | 6 |
 | Operations (Create, Search, Update) | 9 |
-| **Total** | **70** |
+| **Total** | **71** |
 
 ### Phase 12B Changes
 
@@ -784,3 +794,14 @@ The following tools were **removed** in Phase 12B and replaced by ERPNext standa
 - `get_consolidated_report` → replaced by `report_consolidated_financial_statement`, `report_consolidated_trial_balance`
 - `get_cash_flow_statement`, `get_cash_flow_trend` → `get_cash_flow` retained (Payment Entry-based), GL-based statement replaced by `report_cash_flow`
 - `get_profitability_by_customer`, `get_profitability_by_item`, `get_profitability_by_territory` → consolidated into `get_profitability`
+
+### Phase 17 Changes
+
+Added **Holt-Winters forecasting** (double and triple exponential smoothing) to the statistical engine. Revenue, demand, and cash flow forecasts now auto-select Holt-Winters when sufficient history and seasonality are detected.
+
+New tool added:
+- `analyse_trend` — trend analysis using linear regression, growth rates, moving averages, and seasonality detection. Supports revenue, expenses, and item demand metrics.
+
+### Phase 19 Changes
+
+**CFO dashboard FinancialReportEngine (FRE) consistency.** When "Use Financial Report Engine" is enabled in Chatbot Settings, the CFO dashboard tools (`get_cfo_dashboard`, `get_financial_overview`, `get_monthly_comparison`) now route through the FRE template path and extract KPIs from report data rows. A fallback chain ensures data is always returned: FRE template path → standard report_summary path → data row extraction.

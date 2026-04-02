@@ -1,12 +1,14 @@
-# AI Chatbot - API Documentation
+# AI Chatbot — API Documentation
 
 Complete API reference for the AI Chatbot application.
 
-## Base URL
+## Base URLs
 
-All API endpoints are prefixed with:
 ```
-/api/method/ai_chatbot.api.chat
+/api/method/ai_chatbot.api.chat          # Core chat endpoints
+/api/method/ai_chatbot.api.streaming     # Streaming endpoint
+/api/method/ai_chatbot.api.files         # File upload endpoint
+/api/method/ai_chatbot.api.export        # PDF export endpoints
 ```
 
 ## Authentication
@@ -15,27 +17,27 @@ All endpoints require Frappe session authentication. Include CSRF token in POST 
 
 ```javascript
 headers: {
+  'Content-Type': 'application/json',
   'X-Frappe-CSRF-Token': window.csrf_token
 }
 ```
 
-## Endpoints
+---
 
-### 1. Create Conversation
+## Chat Endpoints (`api.chat`)
+
+### 1. create_conversation
 
 Creates a new chat conversation.
-
-**Endpoint**: `create_conversation`
 
 **Method**: POST
 
 **Parameters**:
-```json
-{
-  "title": "string",           // Conversation title
-  "ai_provider": "string"      // "OpenAI" or "Claude"
-}
-```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| title | string | No | Conversation title (default: "New Chat") |
+| ai_provider | string | No | "OpenAI", "Claude", or "Gemini" (default: from settings) |
 
 **Response**:
 ```json
@@ -48,45 +50,27 @@ Creates a new chat conversation.
     "user": "user@example.com",
     "ai_provider": "OpenAI",
     "status": "Active",
-    "created_at": "2024-01-29 12:00:00",
-    "updated_at": "2024-01-29 12:00:00",
+    "created_at": "2026-01-29 12:00:00",
+    "updated_at": "2026-01-29 12:00:00",
     "message_count": 0,
     "total_tokens": 0
   }
 }
 ```
 
-**Example**:
-```javascript
-const response = await fetch('/api/method/ai_chatbot.api.chat.create_conversation', {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-    'X-Frappe-CSRF-Token': window.csrf_token
-  },
-  body: JSON.stringify({
-    title: 'My New Chat',
-    ai_provider: 'OpenAI'
-  })
-});
-```
-
 ---
 
-### 2. Get Conversations
+### 2. get_conversations
 
-Retrieves all conversations for the current user.
-
-**Endpoint**: `get_conversations`
+Retrieves all conversations for the current user, ordered by last activity.
 
 **Method**: POST
 
 **Parameters**:
-```json
-{
-  "limit": 20  // Optional, default: 20
-}
-```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| limit | integer | No | Maximum results (default: 20) |
 
 **Response**:
 ```json
@@ -98,8 +82,8 @@ Retrieves all conversations for the current user.
       "title": "Product Discussion",
       "ai_provider": "OpenAI",
       "status": "Active",
-      "created_at": "2024-01-29 12:00:00",
-      "updated_at": "2024-01-29 12:30:00",
+      "created_at": "2026-01-29 12:00:00",
+      "updated_at": "2026-01-29 12:30:00",
       "message_count": 15
     }
   ]
@@ -108,20 +92,17 @@ Retrieves all conversations for the current user.
 
 ---
 
-### 3. Get Conversation Messages
+### 3. get_conversation_messages
 
-Retrieves all messages for a specific conversation.
-
-**Endpoint**: `get_conversation_messages`
+Retrieves all messages for a specific conversation. Validates conversation ownership.
 
 **Method**: POST
 
 **Parameters**:
-```json
-{
-  "conversation_id": "string"  // Conversation ID
-}
-```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| conversation_id | string | Yes | Conversation ID (e.g. "CHAT-00001") |
 
 **Response**:
 ```json
@@ -131,18 +112,22 @@ Retrieves all messages for a specific conversation.
     {
       "name": "MSG-00001",
       "role": "user",
-      "content": "Hello, how are you?",
-      "timestamp": "2024-01-29 12:00:00",
+      "content": "What are our sales this month?",
+      "timestamp": "2026-01-29 12:00:00",
       "tokens_used": 0,
-      "tool_calls": null
+      "tool_calls": null,
+      "tool_results": null,
+      "attachments": null
     },
     {
       "name": "MSG-00002",
       "role": "assistant",
-      "content": "I'm doing well, thank you!",
-      "timestamp": "2024-01-29 12:00:05",
-      "tokens_used": 150,
-      "tool_calls": null
+      "content": "Based on the sales data...",
+      "timestamp": "2026-01-29 12:00:05",
+      "tokens_used": 450,
+      "tool_calls": "[{\"function\": {\"name\": \"get_sales_analytics\", ...}}]",
+      "tool_results": "[{\"success\": true, \"data\": {...}}]",
+      "attachments": null
     }
   ]
 }
@@ -150,65 +135,70 @@ Retrieves all messages for a specific conversation.
 
 ---
 
-### 4. Send Message
+### 4. send_message
 
-Sends a message and gets AI response.
-
-**Endpoint**: `send_message`
+Sends a message and gets an AI response. Supports both synchronous and streaming modes.
 
 **Method**: POST
 
 **Parameters**:
-```json
-{
-  "conversation_id": "string",  // Conversation ID
-  "message": "string",          // User message
-  "stream": false               // Optional, default: false
-}
-```
 
-**Response**:
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| conversation_id | string | Yes | Conversation ID |
+| message | string | Yes | User message text |
+| stream | boolean | No | Enable streaming (default: false). When true, delegates to the streaming API. |
+
+**Response (non-streaming)**:
 ```json
 {
   "success": true,
-  "message": "AI response text here...",
-  "tokens_used": 350
-}
-```
-
-**With Tool Calls**:
-```json
-{
-  "success": true,
-  "message": "Based on the sales data, here's the analysis...",
+  "message": "Based on the sales data, your total revenue this month is ₹5,00,000...",
   "tokens_used": 450,
   "tool_calls": [
     {
       "function": {
         "name": "get_sales_analytics",
-        "arguments": "{\"from_date\":\"2024-01-01\",\"to_date\":\"2024-01-31\"}"
+        "arguments": "{\"from_date\":\"2026-01-01\",\"to_date\":\"2026-01-31\"}"
+      }
+    }
+  ],
+  "tool_results": [
+    {
+      "success": true,
+      "data": {
+        "total_revenue": 500000,
+        "invoice_count": 120,
+        "company": "My Company",
+        "currency": "INR",
+        "echart_option": {...}
       }
     }
   ]
 }
 ```
 
+**Response (streaming)**: Returns immediately with `stream_id`. Tokens delivered via Socket.IO (see Streaming section below).
+```json
+{
+  "success": true,
+  "stream_id": "abc12345"
+}
+```
+
 ---
 
-### 5. Delete Conversation
+### 5. delete_conversation
 
-Deletes a conversation and all its messages.
-
-**Endpoint**: `delete_conversation`
+Deletes a conversation and all its messages. Validates ownership.
 
 **Method**: POST
 
 **Parameters**:
-```json
-{
-  "conversation_id": "string"  // Conversation ID
-}
-```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| conversation_id | string | Yes | Conversation ID |
 
 **Response**:
 ```json
@@ -219,21 +209,18 @@ Deletes a conversation and all its messages.
 
 ---
 
-### 6. Update Conversation Title
+### 6. update_conversation_title
 
 Updates the title of a conversation.
 
-**Endpoint**: `update_conversation_title`
-
 **Method**: POST
 
 **Parameters**:
-```json
-{
-  "conversation_id": "string",  // Conversation ID
-  "title": "string"             // New title
-}
-```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| conversation_id | string | Yes | Conversation ID |
+| title | string | Yes | New title |
 
 **Response**:
 ```json
@@ -244,11 +231,31 @@ Updates the title of a conversation.
 
 ---
 
-### 7. Get Settings
+### 7. set_conversation_language
 
-Retrieves chatbot configuration settings.
+Sets or resets the response language for a specific conversation.
 
-**Endpoint**: `get_settings`
+**Method**: POST
+
+**Parameters**:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| conversation_id | string | Yes | Conversation ID |
+| language | string | No | Language name (e.g. "Hindi", "Spanish"). Empty to reset to default. |
+
+**Response**:
+```json
+{
+  "success": true
+}
+```
+
+---
+
+### 8. get_settings
+
+Retrieves chatbot configuration settings (public-facing subset).
 
 **Method**: POST
 
@@ -259,212 +266,214 @@ Retrieves chatbot configuration settings.
 {
   "success": true,
   "settings": {
-    "openai_enabled": true,
-    "claude_enabled": true,
-    "tools_enabled": {
-      "crm": true,
-      "sales": true,
-      "purchase": true,
-      "finance": true,
-      "inventory": true
-    }
+    "ai_provider": "OpenAI",
+    "model": "gpt-4o",
+    "enable_streaming": true,
+    "enable_crm_tools": true,
+    "enable_sales_tools": true,
+    "enable_purchase_tools": true,
+    "enable_finance_tools": true,
+    "enable_inventory_tools": true,
+    "enable_hrms_tools": true,
+    "enable_write_operations": false,
+    "enable_idp_tools": true,
+    "enable_predictive_tools": true,
+    "enable_agent_orchestration": true,
+    "response_language": "English"
   }
 }
 ```
 
 ---
 
-## ERPNext Tools
+### 9. get_sample_prompts
 
-The chatbot can automatically call these tools when relevant to the conversation.
+Returns categorized sample prompts for the Help Modal.
 
-### CRM Tools
+**Method**: POST
 
-#### get_lead_statistics
-Get statistics about leads including count, status breakdown, and conversion rates.
+**Parameters**: None
 
-**Parameters**:
+**Response**:
 ```json
 {
-  "from_date": "2024-01-01",  // Optional
-  "to_date": "2024-01-31"     // Optional
-}
-```
-
-**Returns**:
-```json
-{
-  "total_leads": 150,
-  "status_breakdown": {
-    "Open": 50,
-    "Converted": 80,
-    "Lost": 20
-  },
-  "period": {
-    "from": "2024-01-01",
-    "to": "2024-01-31"
+  "success": true,
+  "prompts": {
+    "Sales": ["What is the total sales this month?", "Show top 10 customers by revenue", ...],
+    "Finance": ["Show me the CFO dashboard", "Show profit and loss for this fiscal year", ...],
+    ...
   }
 }
 ```
 
-#### get_opportunity_pipeline
-Get sales opportunity pipeline with stages and values.
+---
+
+### 10. search_conversations
+
+Searches conversations by title or content.
+
+**Method**: POST
 
 **Parameters**:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| query | string | Yes | Search text |
+| limit | integer | No | Maximum results (default: 20) |
+
+**Response**:
 ```json
 {
-  "status": "Open"  // Optional: "Open", "Converted", "Lost"
+  "success": true,
+  "conversations": [...]
 }
 ```
 
-**Returns**:
-```json
-{
-  "opportunities": [...],
-  "total_value": 1250000,
-  "count": 45
-}
-```
+---
 
-### Sales Tools
+### 11. get_mention_values
 
-#### get_sales_analytics
-Get sales analytics including revenue, orders, and growth trends.
+Returns autocomplete values for the @mention system.
+
+**Method**: POST
 
 **Parameters**:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| mention_type | string | Yes | Category: company, period, cost_center, department, warehouse, customer, item, accounting_dimension |
+| search_term | string | No | Filter text |
+| company | string | No | Company context (for cost_center, department, warehouse filtering) |
+
+**Response**:
 ```json
 {
-  "from_date": "2024-01-01",
-  "to_date": "2024-01-31",
-  "customer": "ABC Corp"  // Optional
-}
-```
-
-**Returns**:
-```json
-{
-  "total_revenue": 500000,
-  "invoice_count": 120,
-  "average_order_value": 4166.67,
-  "period": {
-    "from": "2024-01-01",
-    "to": "2024-01-31"
-  }
-}
-```
-
-#### get_top_customers
-Get top customers by revenue.
-
-**Parameters**:
-```json
-{
-  "limit": 10,
-  "from_date": "2024-01-01"  // Optional
-}
-```
-
-**Returns**:
-```json
-{
-  "top_customers": [
-    {
-      "customer": "ABC Corp",
-      "total_revenue": 150000,
-      "order_count": 25
-    }
+  "success": true,
+  "values": [
+    {"value": "Tara Technologies", "description": "Default company"},
+    {"value": "Tara Technologies (Demo)", "description": ""}
   ]
 }
 ```
 
-### Purchase Tools
+---
 
-#### get_purchase_analytics
-Get purchase analytics including spending, orders, and supplier performance.
+## Streaming Endpoint (`api.streaming`)
 
-**Parameters**:
-```json
-{
-  "from_date": "2024-01-01",
-  "to_date": "2024-01-31"
-}
-```
+### send_message_streaming
 
-#### get_supplier_performance
-Analyze supplier performance metrics.
+Enqueues a background job that streams AI response tokens via Frappe Realtime (Socket.IO). The HTTP response returns immediately with a `stream_id`.
+
+**Method**: POST
 
 **Parameters**:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| conversation_id | string | Yes | Conversation ID |
+| message | string | Yes | User message text |
+
+**HTTP Response** (immediate):
 ```json
 {
-  "supplier": "XYZ Supplies"  // Optional
+  "success": true,
+  "stream_id": "abc12345"
 }
 ```
 
-### Finance Tools
+**Socket.IO Events** (delivered asynchronously):
 
-#### get_financial_summary
-Get financial summary including P&L, balance sheet highlights.
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `ai_chat_stream_start` | `{conversation_id, stream_id}` | Stream has started |
+| `ai_chat_token` | `{conversation_id, stream_id, content}` | Text token chunk |
+| `ai_chat_tool_call` | `{conversation_id, stream_id, tool_name, tool_arguments}` | Tool call initiated |
+| `ai_chat_tool_result` | `{conversation_id, stream_id, tool_name, result}` | Tool execution result |
+| `ai_chat_process_step` | `{conversation_id, stream_id, step}` | Processing status label |
+| `ai_chat_stream_end` | `{conversation_id, stream_id, content, tokens_used, tool_calls}` | Stream complete |
+| `ai_chat_error` | `{conversation_id, stream_id, error}` | Error during streaming |
+| `ai_chat_agent_plan` | `{conversation_id, stream_id, plan}` | Multi-agent plan steps |
+| `ai_chat_agent_step_start` | `{conversation_id, stream_id, step_id, description}` | Agent step started |
+| `ai_chat_agent_step_result` | `{conversation_id, stream_id, step_id, status, summary}` | Agent step completed |
+
+---
+
+## File Upload Endpoint (`api.files`)
+
+### upload_chat_file
+
+Uploads a file attached to a conversation. Files are stored as private Frappe File documents.
+
+**Method**: POST (multipart/form-data)
 
 **Parameters**:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| conversation_id | string | Yes | Conversation ID |
+| file | File | Yes | The file to upload (via form data) |
+
+**Allowed MIME types**: JPEG, PNG, GIF, WebP, PDF, plain text, CSV, XLSX, DOCX
+
+**Max file size**: 10 MB
+
+**Response**:
 ```json
 {
-  "from_date": "2024-01-01",
-  "to_date": "2024-01-31"
+  "success": true,
+  "file_url": "/private/files/invoice.pdf",
+  "file_name": "invoice.pdf",
+  "mime_type": "application/pdf",
+  "is_image": false,
+  "base64": null
 }
 ```
 
-**Returns**:
-```json
-{
-  "revenue": 500000,
-  "expenses": 350000,
-  "profit": 150000,
-  "period": {
-    "from": "2024-01-01",
-    "to": "2024-01-31"
-  }
-}
-```
+For image files, `is_image` is true and `base64` contains the data URI for Vision API use.
 
-#### get_cash_flow_analysis
-Analyze cash flow patterns and trends.
+---
+
+## PDF Export Endpoints (`api.export`)
+
+### export_message_pdf
+
+Exports a single assistant message as a styled PDF.
+
+**Method**: POST
 
 **Parameters**:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| message_name | string | Yes | Message ID (e.g. "MSG-00001") |
+
+**Response**:
 ```json
 {
-  "months": 6  // Number of months to analyze
+  "success": true,
+  "file_url": "/private/files/chat_export_20260129.pdf"
 }
 ```
 
-### Inventory Tools
+---
 
-#### get_inventory_summary
-Get inventory summary including stock levels, valuation.
+### export_conversation_pdf
+
+Exports an entire conversation as a styled PDF transcript.
+
+**Method**: POST
 
 **Parameters**:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| conversation_id | string | Yes | Conversation ID |
+
+**Response**:
 ```json
 {
-  "warehouse": "Main Warehouse"  // Optional
-}
-```
-
-**Returns**:
-```json
-{
-  "unique_items": 500,
-  "total_quantity": 15000,
-  "total_value": 2500000,
-  "warehouse": "Main Warehouse"
-}
-```
-
-#### get_low_stock_items
-Get items with low stock levels.
-
-**Parameters**:
-```json
-{
-  "threshold_days": 30  // Days of stock threshold
+  "success": true,
+  "file_url": "/private/files/conversation_CHAT-00001.pdf"
 }
 ```
 
@@ -482,26 +491,17 @@ All endpoints return errors in this format:
 ```
 
 **Common Error Codes**:
-- `400` - Bad Request (invalid parameters)
-- `401` - Unauthorized (not logged in)
-- `403` - Forbidden (insufficient permissions)
-- `404` - Not Found (conversation/message doesn't exist)
-- `500` - Internal Server Error
-
----
-
-## Rate Limiting
-
-API requests are rate-limited per user:
-- **Conversations**: 60 per hour
-- **Messages**: 120 per hour
-- **Tool Calls**: 300 per hour
+- `400` — Bad Request (invalid parameters)
+- `401` — Unauthorized (not logged in)
+- `403` — Forbidden (insufficient permissions or conversation not owned by user)
+- `404` — Not Found (conversation/message does not exist)
+- `500` — Internal Server Error
 
 ---
 
 ## Best Practices
 
-### 1. Error Handling
+### Error Handling
 Always wrap API calls in try-catch:
 
 ```javascript
@@ -512,11 +512,10 @@ try {
   }
 } catch (error) {
   console.error('API Error:', error);
-  // Show user-friendly error message
 }
 ```
 
-### 2. Loading States
+### Loading States
 Show loading indicators during API calls:
 
 ```javascript
@@ -528,87 +527,51 @@ try {
 }
 ```
 
-### 3. Optimistic Updates
+### Optimistic Updates
 Update UI immediately, then sync with server:
 
 ```javascript
-// Add message to UI
 messages.value.push(userMessage);
-
-// Send to server
 const response = await chatAPI.sendMessage(...);
-
-// Update with server response
 messages.value.push(response.message);
-```
-
-### 4. Caching
-Cache conversation lists and settings:
-
-```javascript
-const conversationsCache = ref(null);
-const cacheTimeout = 5 * 60 * 1000; // 5 minutes
-
-async function getConversations() {
-  if (conversationsCache.value && Date.now() - conversationsCache.timestamp < cacheTimeout) {
-    return conversationsCache.value;
-  }
-  
-  const response = await chatAPI.getConversations();
-  conversationsCache.value = response.conversations;
-  conversationsCache.timestamp = Date.now();
-  
-  return response.conversations;
-}
-```
-
----
-
-## Webhooks (Future)
-
-Webhook support for real-time updates (planned):
-
-```json
-{
-  "event": "message.created",
-  "data": {
-    "conversation_id": "CHAT-00001",
-    "message": {...}
-  },
-  "timestamp": "2024-01-29T12:00:00Z"
-}
 ```
 
 ---
 
 ## SDK Examples
 
-### JavaScript/TypeScript
+### JavaScript (Frontend)
 
 ```javascript
 import { chatAPI } from './utils/api';
 
 // Create conversation
-const conversation = await chatAPI.createConversation('My Chat', 'OpenAI');
+const conv = await chatAPI.createConversation('My Chat', 'OpenAI');
 
-// Send message
-const response = await chatAPI.sendMessage(
-  conversation.conversation_id,
-  'What are my sales figures?'
-);
+// Send message (non-streaming)
+const response = await chatAPI.sendMessage(conv.conversation_id, 'What are my sales?');
 
-// Get messages
-const messages = await chatAPI.getConversationMessages(conversation.conversation_id);
+// Send message (streaming) — tokens arrive via Socket.IO
+await chatAPI.sendMessageStreaming(conv.conversation_id, 'Show the CFO dashboard');
+
+// Upload a file
+const fileData = await chatAPI.uploadFile(conv.conversation_id, fileObject);
+
+// Export message as PDF
+const pdf = await chatAPI.exportMessagePdf('MSG-00001');
+
+// Get @mention values
+const companies = await chatAPI.getMentionValues('company', 'Tara');
 ```
 
-### Python
+### Python (Server-side)
 
 ```python
 import frappe
 
 # Create conversation
 conversation = frappe.get_doc({
-    "doctype": "AI Chat Conversation",
+    "doctype": "Chatbot Conversation",
     "title": "My Chat",
     "user": frappe.session.user,
     "ai_provider": "OpenAI"
@@ -617,19 +580,10 @@ conversation.insert()
 
 # Send message
 from ai_chatbot.api.chat import send_message
-response = send_message(conversation.name, "Hello!")
+response = send_message(conversation.name, "What are the current bank balances?")
 ```
 
 ---
 
-## Support
-
-For API issues or questions:
-- **Documentation**: See README.md
-- **GitHub Issues**: Report bugs
-- **Email**: api-support@yourcompany.com
-
----
-
-**API Version**: 1.0.0
-**Last Updated**: January 2026
+**API Version**: 2.0
+**Last Updated**: April 2026

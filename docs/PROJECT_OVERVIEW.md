@@ -5,7 +5,7 @@
 **Framework:** Python backend on Frappe Framework, Vue 3 frontend (Vite + Tailwind CSS)
 **AI Providers:** OpenAI (GPT-4o, GPT-4-Turbo, GPT-3.5-Turbo), Anthropic Claude (Opus 4.5, Sonnet 4.5, Haiku 4.5), Google Gemini (2.5 Flash, 2.5 Pro)
 **Charts:** Apache ECharts
-**Business Intelligence Tools:** 70
+**Business Intelligence Tools:** 71
 
 ---
 
@@ -37,7 +37,7 @@
 
 AI Chatbot is a Frappe framework application that provides a modern, real-time chat interface powered by large language models (OpenAI, Claude, Gemini) with deep integration into ERPNext business data. It allows users to query, analyze, and manipulate their ERP data through natural language conversation.
 
-The application ships 70 business intelligence tools spanning sales, purchasing, inventory, finance, CRM, HRMS, and predictive analytics. Tools query ERPNext data via Frappe's ORM (frappe.qb and frappe.get_all) or by calling ERPNext's standard report `execute()` functions directly, generate ECharts visualizations, and return structured results that the AI synthesizes into natural language responses.
+The application ships 71 business intelligence tools spanning sales, purchasing, inventory, finance, CRM, HRMS, and predictive analytics. Tools query ERPNext data via Frappe's ORM (frappe.qb and frappe.get_all) or by calling ERPNext's standard report `execute()` functions directly, generate ECharts visualizations, and return structured results that the AI synthesizes into natural language responses.
 
 Key capabilities:
 
@@ -114,11 +114,12 @@ ai_chatbot/                          # Python package (Frappe app backend)
 |   |   +-- create.py                #   Create lead, opportunity, todo
 |   |   +-- update.py                #   Update lead/opportunity status, update todo
 |   |   +-- search.py                #   Search documents, customers, items
-|   +-- predictive/                  # Predictive analytics (5 tools)
+|   +-- predictive/                  # Predictive analytics (6 tools)
 |       +-- sales_forecast.py        #   Revenue forecast, forecast by territory
 |       +-- demand_forecast.py       #   Demand forecast
 |       +-- cash_flow_forecast.py    #   Cash flow forecast
 |       +-- anomaly_detection.py     #   Anomaly detection
+|       +-- trends.py                #   Trend analysis (revenue, expenses, demand)
 |
 +-- ai/                              # Multi-agent orchestration
 |   +-- agents/
@@ -251,7 +252,7 @@ frontend/                            # Vue 3 SPA source
 |  |  |  |                                              |
 |  |  |  |  +-- Tool Registry (registry.py) -----------+
 |  |  |  |  |   @register_tool decorator               |
-|  |  |  |  |   70 registered tool functions            |
+|  |  |  |  |   71 registered tool functions            |
 |  |  |  |  |   Category-based enable/disable           |
 |  |  |  |  |   DocType permission checks               |
 |  |  |  |  |   Plugin hook: ai_chatbot_tool_modules    |
@@ -259,7 +260,7 @@ frontend/                            # Vue 3 SPA source
 |  |  |  |  |   selling (7)    buying (4)    stock (7)  |
 |  |  |  |  |   crm (5)        hrms (6)     idp (3)    |
 |  |  |  |  |   finance/ (8)   reports/ (21)            |
-|  |  |  |  |   operations/ (9) predictive/ (5)         |
+|  |  |  |  |   operations/ (9) predictive/ (6)         |
 |  |  |  |  |   session (2)                              |
 |  |  |  |  +------------------------------------------+
 |  |  |  |                                              |
@@ -298,7 +299,95 @@ frontend/                            # Vue 3 SPA source
               +---------------------+
 ```
 
-### 2.3 Request Flow (Non-Streaming)
+### 2.3 Architecture Diagram
+
+```mermaid
+graph TB
+    subgraph Browser["Browser (Vue 3 SPA)"]
+        CV[ChatView.vue]
+        CI[ChatInput.vue]
+        CM[ChatMessage.vue]
+        EC[EChartRenderer.vue]
+        BC[BiCards.vue]
+        HT[HierarchicalTable.vue]
+        US[useStreaming.js]
+    end
+
+    subgraph Frappe["Frappe Web Server"]
+        subgraph API["API Layer"]
+            CHAT[chat.py]
+            STREAM[streaming.py]
+            FILES[files.py]
+            EXPORT[export.py]
+        end
+
+        subgraph Core["Core Layer"]
+            PROM[prompts.py]
+            SESS[session_context.py]
+            TOK[token_optimizer.py]
+            TRACK[token_tracker.py]
+        end
+
+        subgraph Providers["AI Providers"]
+            OAI[OpenAIProvider]
+            CLA[ClaudeProvider]
+            GEM[GeminiProvider]
+        end
+
+        subgraph Tools["Tool Registry — 71 tools"]
+            REG[registry.py]
+            SELL[selling 7]
+            BUY[buying 4]
+            STK[stock 7]
+            CRM[crm 5]
+            FIN[finance 8]
+            RPT[reports 21]
+            OPS[operations 9]
+            PRD[predictive 6]
+            HRM[hrms 6]
+            IDP_T[idp 3]
+        end
+
+        subgraph Agents["Multi-Agent Orchestration"]
+            CLAS[classifier.py]
+            PLAN[planner.py]
+            ANAL[analyst.py]
+        end
+
+        subgraph Data["Data Layer"]
+            CHART[charts.py]
+            GRP[grouping.py]
+            CURR[currency.py]
+            FCST[forecasting.py]
+        end
+
+        DT[(DocTypes<br/>Settings, Conversation,<br/>Message, Token Usage)]
+    end
+
+    DB[(MariaDB)]
+    REDIS[(Redis Pub/Sub)]
+
+    CI -->|HTTP POST| CHAT
+    CI -->|HTTP POST| STREAM
+    CI -->|multipart| FILES
+    CM -->|HTTP POST| EXPORT
+    CHAT --> Core
+    STREAM --> Core
+    Core --> Providers
+    Providers -->|function calling| REG
+    REG --> Tools
+    Tools --> Data
+    CHAT --> Agents
+    STREAM --> Agents
+    Agents --> REG
+    STREAM -->|publish_realtime| REDIS
+    REDIS -->|Socket.IO| US
+    US --> CM
+    Data --> DB
+    DT --> DB
+```
+
+### 2.4 Request Flow (Non-Streaming)
 
 ```
 User types message
@@ -367,7 +456,53 @@ ChatMessage.vue renders:
        +-- HierarchicalTable (grouped data with indentation)
 ```
 
-### 2.4 Request Flow (Streaming)
+### 2.5 Decision Flow Diagram
+
+```mermaid
+flowchart TD
+    A[User sends message] --> B{stream=true?}
+    B -->|Yes| C[send_message_streaming]
+    B -->|No| D[generate_ai_response]
+
+    C --> E[Generate stream_id]
+    E --> F[Save user message]
+    F --> G[Enqueue background job]
+    G --> H[Return stream_id immediately]
+    G --> I[_run_streaming_job]
+
+    I --> J[Build prompt & optimize history]
+    J --> K{should_orchestrate?}
+    K -->|Yes| L[run_orchestrated_streaming]
+    K -->|No| M[_stream_with_tools]
+
+    D --> N[Build prompt & optimize history]
+    N --> O{should_orchestrate?}
+    O -->|Yes| P[run_orchestrated]
+    O -->|No| Q[Standard tool loop]
+
+    Q --> R{Round < 5?}
+    R -->|Yes| S[provider.chat_completion]
+    S --> T{tool_calls?}
+    T -->|Yes| U[Execute tools]
+    U --> R
+    T -->|No| V[Save & return response]
+    R -->|No| V
+
+    M --> W{Round < 5?}
+    W -->|Yes| X[_stream_single_round]
+    X --> Y{tool_calls?}
+    Y -->|Yes| Z[Execute tools + publish events]
+    Z --> W
+    Y -->|No| AA[Save & publish stream_end]
+    W -->|No| AA
+
+    P --> AB[Planner -> Analyst -> Synthesis]
+    AB --> V
+    L --> AC[Planner -> Analyst -> Stream Synthesis]
+    AC --> AA
+```
+
+### 2.6 Request Flow (Streaming)
 
 ```
 User types message
@@ -447,7 +582,32 @@ ChatMessage.vue renders progressively:
        +-- Agent plan progress displayed for orchestrated queries
 ```
 
-### 2.5 Tool Execution Flow
+### 2.7 Tool Execution Flow
+
+```mermaid
+flowchart TD
+    A[AI returns tool_calls] --> B[registry.execute_tool]
+    B --> C[_ensure_tools_loaded]
+    C --> D{Tool in registry?}
+    D -->|No| E[Return: tool not found]
+    D -->|Yes| F{Permission check}
+    F -->|For each declared DocType| G{All pass?}
+    G -->|No| H[Return: permission denied]
+    G -->|Yes| I[Execute tool function]
+    I --> J[Tool queries ERPNext<br/>frappe.qb / frappe.get_all / report execute]
+    J --> K[Build ECharts option<br/>charts.py]
+    K --> L[Wrap with currency<br/>build_currency_response]
+    L --> M[Log audit + record usage]
+    M --> N["Return {success, data}"]
+    N --> O[Result added to<br/>conversation history]
+    O --> P[AI synthesizes<br/>natural language response]
+
+    I -->|Exception| Q[Classify error]
+    Q --> R[Log error + audit]
+    R --> S["Return {error, error_type}"]
+```
+
+### 2.7.1 Tool Execution Flow (Detail)
 
 ```
 AI response contains tool_calls
@@ -489,7 +649,7 @@ Result returned to AI as tool message in conversation history
 AI synthesizes natural language response from tool data
 ```
 
-### 2.6 Multi-Company Flow
+### 2.8 Multi-Company Flow
 
 ```
 User query mentioning "consolidated" or "group-wide"
@@ -703,7 +863,9 @@ When building tool schemas for the AI:
 |-------------------------------|------------------|-------------------------------------------------|
 | get_financial_overview        | cfo.py           | Financial overview with KPIs (from P&L/BS/AR/AP reports) |
 | get_cfo_dashboard             | cfo.py           | CFO-level executive dashboard with BI cards     |
-| get_monthly_comparison        | cfo.py           | Month-over-month financial comparison            |
+| get_monthly_comparison        | cfo.py           | Month-over-month financial comparison           |
+
+**FinancialReportEngine (FRE) Consistency (Phase 19):** When "Use Financial Report Engine" is enabled in Chatbot Settings, the CFO dashboard tools (`_pnl_totals`, `_balance_sheet_totals`, `get_monthly_comparison`) route through ERPNext's template path and extract KPIs from report data rows. A dual-path fallback chain ensures data is always returned: FRE template path -> standard `report_summary` path -> data row extraction. Helper functions for FRE support are in `tools/reports/_base.py` (`is_fre_enabled()`, `extract_kpis_from_report_data()`, `_row_value()`).
 | get_cash_flow                 | cash_flow.py     | Payment Entry-based cash flow analysis/trend     |
 | get_bank_balance              | cash_flow.py     | Current bank/cash balances from GL               |
 | get_gl_summary                | gl_analytics.py  | GL summary with flexible grouping                |
@@ -774,10 +936,11 @@ These tools are thin wrappers around ERPNext's standard report `execute()` funct
 | create_from_extracted_data    | Create ERPNext records from extracted data   | (various)           |
 | compare_document_with_record  | Compare uploaded document vs ERPNext record  | (various)           |
 
-**Predictive (5 tools) -- category: `predictive`, toggle: `enable_predictive_tools`**
+**Predictive (6 tools) -- category: `predictive`, toggle: `enable_predictive_tools`**
 
 | Tool Name                | Description                                      | DocTypes            |
 |--------------------------|--------------------------------------------------|---------------------|
+| analyse_trend            | Trend analysis with regression, growth rates, MA | Sales Invoice, Purchase Invoice |
 | forecast_revenue         | Sales revenue forecast with confidence intervals | Sales Invoice       |
 | forecast_by_territory    | Revenue forecast broken down by territory        | Sales Invoice       |
 | forecast_demand          | Item demand forecast using historical data       | Stock Ledger Entry  |
@@ -859,7 +1022,13 @@ Backend functions that construct complete ECharts option dicts. The frontend pas
 | `build_stacked_bar_chart`     | Stacked bar        |
 | `build_horizontal_bar`        | Horizontal bar     |
 
-Additional builders in `data/forecast_charts.py` for forecast-specific visualizations with confidence intervals.
+Additional builders in `data/forecast_charts.py`:
+
+| Builder                          | Chart Type                       |
+|----------------------------------|----------------------------------|
+| `build_forecast_chart`           | Forecast line with confidence band |
+| `build_trend_analysis_chart`     | Actual + regression + MA overlays |
+| `build_cash_flow_forecast_chart` | Multi-series inflow/outflow forecast |
 
 All charts use a consistent 10-color palette defined in `CHART_COLORS`.
 
@@ -1063,6 +1232,40 @@ For complex queries that require multiple data sources, the system uses a multi-
 
 ### 9.1 Pipeline
 
+```mermaid
+flowchart TD
+    A[User query] --> B{enable_agent_orchestration?}
+    B -->|No| C[Standard tool loop]
+    B -->|Yes| D{Tools available?}
+    D -->|No| C
+    D -->|Yes| E[Classifier: classify_query]
+    E --> F{Complex query?}
+    F -->|No| C
+    F -->|Yes| G[Planner: create_plan]
+    G --> H{Plan generated?}
+    H -->|No| C
+    H -->|Yes| I[Execute steps]
+
+    I --> J{For each step}
+    J --> K{Dependencies met?}
+    K -->|No| L[Skip step]
+    K -->|Yes| M[Analyst: execute_step<br/>AI selects + calls tools]
+    M --> N{Step succeeded?}
+    N -->|Yes| O[Aggregate results<br/>into AgentContext]
+    N -->|No| P[Record error]
+    L --> Q{More steps?}
+    O --> Q
+    P --> Q
+    Q -->|Yes| J
+    Q -->|No| R{"Over 50% steps failed?"}
+
+    R -->|Yes| C
+    R -->|No| S[Synthesis: final AI call<br/>with all step results]
+    S --> T[Unified response to user]
+```
+
+### 9.1.1 Pipeline (Detail)
+
 ```
 User query
     |
@@ -1128,7 +1331,45 @@ The IDP subsystem extracts structured data from uploaded documents and creates E
 | CSV    | `excel_extractor.py`   | Parsed as tabular data          |
 | Word   | `docx_extractor.py`    | Paragraph and table extraction  |
 
-### 10.3 Workflow
+### 10.3 IDP Pipeline Diagram
+
+```mermaid
+flowchart TD
+    A[User uploads document<br/>PDF / Image / Excel / Word] --> B[upload_chat_file<br/>Store as Frappe File]
+    B --> C[AI collects preferences<br/>language, is_stock_item,<br/>is_fixed_asset, item_group]
+    C --> D[extract_document_data]
+    D --> E[Resolve extractor<br/>by MIME type]
+    E --> F[Extract via LLM Vision<br/>or file parser]
+    F --> G[Map to ERPNext schema<br/>mapper.py]
+
+    G --> H{Strict validation<br/>enabled?}
+    H -->|Yes| I[Validate fields<br/>validators.py]
+    I --> J{Valid?}
+    J -->|No| K[Return validation errors]
+    H -->|No| L[Present extracted data<br/>to user for review]
+    J -->|Yes| L
+
+    L --> M{User confirms?}
+    M -->|No| N[End — no record created]
+    M -->|Yes| O[create_from_extracted_data]
+
+    O --> P{Write operations<br/>enabled?}
+    P -->|No| Q[Return: disabled error]
+    P -->|Yes| R{Missing masters?<br/>Supplier / Customer / Item}
+
+    R -->|None missing| S[Create ERPNext document]
+    R -->|Masters missing| T{Auto-create enabled?}
+    T -->|Yes| U[_auto_create_missing_masters<br/>Create parties, items, UOMs]
+    U --> S
+    T -->|No| V[Return missing list<br/>Ask user to confirm creation]
+    V --> W{User confirms?}
+    W -->|Yes| U
+    W -->|No| N
+
+    S --> X[Return created document<br/>with name and link]
+```
+
+### 10.4 Workflow
 
 1. User uploads a document (via ChatInput file upload).
 2. AI collects user preferences: output language, is_stock_item, is_fixed_asset, item_group.
@@ -1138,7 +1379,7 @@ The IDP subsystem extracts structured data from uploaded documents and creates E
 6. If master records are missing (e.g., new suppliers, items), the tool reports them and the user is asked whether to create them.
 7. On confirmation, `create_from_extracted_data` is called again with `create_missing_masters='true'` and `item_defaults_json`.
 
-### 10.4 Document Comparison
+### 10.5 Document Comparison
 
 The `compare_document_with_record` tool compares an uploaded document against an existing ERPNext record, identifying discrepancies in quantities, amounts, dates, and other fields.
 
@@ -1155,12 +1396,33 @@ The `compare_document_with_record` tool compares an uploaded document against an
 | `forecast_demand`  | Item demand (quantities)       | Stock Ledger Entry  |
 | `forecast_cash_flow` | Cash inflows, outflows, net  | GL Entry            |
 
-### 11.2 Methods
+### 11.2 Trend Analysis Tool
 
-Forecasting uses statistical methods:
-- Moving averages
-- Exponential smoothing
-- Trend analysis (linear regression)
+The `analyse_trend` tool provides retrospective trend analysis (as opposed to forward-looking forecasts):
+
+| Parameter  | Description |
+|------------|-------------|
+| `metric`   | "revenue" (Sales Invoice totals), "expenses" (Purchase Invoice totals), or "demand" (item quantity, requires `item_code`) |
+| `months`   | History length: 3-36 months (default 12) |
+| `item_code`| Required for demand metric |
+| `company`  | Optional, defaults to user's company |
+
+Returns: trend direction (increasing/decreasing/stable), slope per period, R-squared, total change %, average growth %, first-half vs second-half comparison, seasonality detection, moving averages (3 and 6 period), and an ECharts chart with linear regression trend line overlay.
+
+### 11.3 Methods
+
+The statistical forecasting engine (`data/forecasting.py`) supports:
+- Simple Moving Average (SMA)
+- Exponential Moving Average (EMA)
+- Holt's Double Exponential Smoothing (level + trend)
+- Holt-Winters Triple Exponential Smoothing (level + trend + seasonality)
+- Linear regression (with pure-Python fallback when numpy is unavailable)
+- Seasonal decomposition (multiplicative)
+
+The engine auto-selects the method based on data characteristics:
+- **Holt-Winters** when 12+ months of data with detectable seasonality
+- **Holt's method** when trend is present but data is insufficient for seasonality
+- **EMA** as the default fallback
 
 Results include:
 - Point forecasts for each future period
@@ -1171,7 +1433,7 @@ Results include:
 **Minimum data requirement:** 3 months of historical data (`MIN_FORECAST_HISTORY`).
 **Maximum forecast horizon:** 12 months (`MAX_FORECAST_MONTHS`).
 
-### 11.3 Anomaly Detection
+### 11.4 Anomaly Detection
 
 The `detect_anomalies` tool identifies unusual transactions using:
 - Z-score method (statistical standard deviations)
@@ -1467,4 +1729,4 @@ register_tool_category("manufacturing", settings_field="enable_manufacturing_too
 
 ---
 
-*This document reflects the state of AI Chatbot version 01. For the full phase-wise enhancement plan, see `docs/ENHANCEMENT_ROADMAP.md`.*
+*This document reflects the state of AI Chatbot through Phase 19. For the full phase-wise enhancement plan, see `docs/ENHANCEMENT_ROADMAP.md`.*
