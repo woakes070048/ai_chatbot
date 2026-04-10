@@ -347,9 +347,10 @@ def build_system_prompt_blocks(conversation_id: str | None = None, company: str 
 
 		if idp_output_language:
 			output_lang_instruction = (
-				f"   **a. Output Language: {idp_output_language} (configured in settings)**\n"
-				f"   Use {idp_output_language} as the output language. Only ask if the user "
-				"explicitly requests a different language.\n\n"
+				f"   **a. Output Language: {idp_output_language} (pre-configured — DO NOT ask)**\n"
+				f"   Always use {idp_output_language}. This is already configured in settings, "
+				"so do NOT ask the user about it. Only change if the user explicitly "
+				"requests a different language (e.g., 'extract in French').\n\n"
 			)
 		else:
 			output_lang_instruction = (
@@ -371,9 +372,10 @@ def build_system_prompt_blocks(conversation_id: str | None = None, company: str 
 					"**Workflow:**\n"
 					"1. **Collect preferences (MANDATORY before extraction):**\n"
 					"   When the user uploads a document and asks to extract or process it, you MUST "
-					"collect ALL of the following preferences before calling `extract_document_data`. "
+					"collect the following preferences before calling `extract_document_data`. "
 					"Scan the user's message — if a preference is already stated, memorize it. "
-					"For ALL preferences NOT explicitly stated, you MUST ask the user.\n\n"
+					"For preferences marked 'DO NOT ask', use the pre-configured value silently. "
+					"For ALL other preferences NOT explicitly stated, you MUST ask the user.\n\n"
 					+ output_lang_instruction
 					+ "   **b. Is Stock Item? (yes/no):**\n"
 					"   Are these physical inventory items? Only skip if user says e.g. 'stock items', "
