@@ -20,7 +20,7 @@ from ai_chatbot.core.config import get_default_company
 from ai_chatbot.data.currency import build_currency_response
 from ai_chatbot.data.operations import create_document
 from ai_chatbot.idp.comparison import compare_with_record
-from ai_chatbot.idp.mapper import extract_and_map
+from ai_chatbot.idp.mapper import extract_and_map, extract_raw
 from ai_chatbot.idp.validators import validate_extraction
 from ai_chatbot.tools.registry import register_tool
 
@@ -35,7 +35,7 @@ from ai_chatbot.tools.registry import register_tool
 		"Handles non-uniform headers, inconsistent formats, and naming discrepancies. "
 		"Returns the extracted fields for user review BEFORE creating any record. "
 		"IMPORTANT: After extraction, ALWAYS present the results to the user for "
-		"confirmation before calling create_from_extracted_data."
+		"confirmation, then call propose_create_document to show a confirmation card."
 	),
 	parameters={
 		"file_url": {
@@ -151,57 +151,70 @@ def extract_document_data(file_url=None, target_doctype=None, company=None, outp
 
 
 @register_tool(
-	name="create_from_extracted_data",
+	name="extract_document_raw",
 	category="idp",
 	description=(
-		"Create an ERPNext record from previously extracted document data. "
-		"IMPORTANT: Only call this AFTER extract_document_data has been called "
-		"and the user has confirmed the extracted data is correct. "
-		"When Items/Customer/Supplier are missing in ERPNext, ask the user: "
-		"(1) Should I create the missing masters? "
-		"(2) For Items: Is Stock Item?, Is Fixed Asset?, Item Group? "
-		"Then set create_missing_masters='true' and pass item_defaults_json. "
-		"Do NOT call this tool repeatedly with the same data if it fails — "
-		"ask the user for guidance instead."
+		"Extract all structured data from an uploaded document WITHOUT mapping to any "
+		"ERPNext DocType schema. Use this for document types that are NOT supported by "
+		"extract_document_data — e.g., salary slips, bank statements, tax certificates, "
+		"customs declarations, or any other non-standard document. "
+		"Returns the raw extracted data (header fields + tables) exactly as found in "
+		"the document, for the user to review. "
+		"This tool does NOT create any ERPNext records."
 	),
 	parameters={
-		"extracted_data_json": {
+		"file_url": {
 			"type": "string",
 			"description": (
-				"JSON string of the extracted data from extract_document_data. "
-				"Pass the full extracted_data object as a JSON string."
+				"Frappe file URL of the uploaded document "
+				"(e.g., '/private/files/salary_slip.pdf')."
 			),
 		},
-		"target_doctype": {
-			"type": "string",
-			"description": "ERPNext DocType to create (must match the extraction target).",
-		},
-		"company": {
-			"type": "string",
-			"description": "Company name. Optional — omit to use user's default company.",
-		},
-		"create_missing_masters": {
+		"output_language": {
 			"type": "string",
 			"description": (
-				"Set to 'true' to auto-create missing Customer, Supplier, Item, and UOM "
-				"records during document creation. Only set this after the user explicitly "
-				"confirms they want masters created. Default: uses Chatbot Settings toggle."
-			),
-		},
-		"item_defaults_json": {
-			"type": "string",
-			"description": (
-				"JSON string with defaults for creating missing Item masters. "
-				'Example: {"is_stock_item": 1, "is_fixed_asset": 0, "item_group": "Consumable"}. '
-				"Ask the user for these values before calling. "
-				"is_stock_item: 1 for physical inventory items, 0 otherwise. "
-				"is_fixed_asset: 1 for fixed assets, 0 otherwise. "
-				"item_group: ERPNext Item Group name."
+				"Language for the extracted output values (e.g., 'English', 'Spanish'). "
+				"Default: from Chatbot Settings."
 			),
 		},
 	},
 	doctypes=[],
 )
+def extract_document_raw(file_url=None, output_language=None):
+	"""Extract all structured data from a document without ERPNext schema mapping.
+
+	For documents that don't match any supported ERPNext DocType.
+	Extracts header fields, tabular data, and a summary.
+	"""
+	if not file_url:
+		return {"error": "file_url is required — specify the uploaded file URL"}
+
+	if not output_language:
+		settings = frappe.get_single("Chatbot Settings")
+		output_language = getattr(settings, "idp_output_language", "") or "English"
+
+	result = extract_raw(file_url, output_language=output_language)
+	if not result.get("success"):
+		return {"error": result.get("error", "Extraction failed")}
+
+	return {
+		"document_type": result.get("document_type", "Unknown"),
+		"headers": result.get("headers", {}),
+		"tables": result.get("tables", []),
+		"summary": result.get("summary", ""),
+		"source_file": file_url,
+		"message": (
+			"Data extracted successfully. The extracted fields and tables are shown above. "
+			"Note: This is a raw extraction — no ERPNext record will be created from this data."
+		),
+	}
+
+
+# NOTE: create_from_extracted_data is deprecated — record creation from IDP
+# extraction now goes through propose_create_document (CRUD confirmation card)
+# which handles missing masters automatically via detect_prerequisites /
+# execute_prerequisites.  The function is kept for backward compatibility but
+# is no longer registered as an LLM-callable tool.
 def create_from_extracted_data(
 	extracted_data_json=None,
 	target_doctype=None,

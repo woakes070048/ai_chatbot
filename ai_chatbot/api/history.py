@@ -72,13 +72,21 @@ def get_conversation_history(conversation_id: str) -> list[dict]:
 					history.append({"role": msg.role, "content": content})
 				else:
 					# Non-image attachments (PDF, Excel, etc.): append file refs
-					# so the LLM knows the file_url for IDP tools
+					# and extract inline text so the LLM sees actual document content
 					text = msg.content or ""
 					for att in atts:
 						file_url = att.get("file_url", "")
 						file_name = att.get("file_name", "unknown")
 						mime_type = att.get("mime_type", "")
 						text += f"\n[Attached file: {file_name} ({mime_type}), file_url: {file_url}]"
+						# Inline raw text extraction so LLM sees actual content
+						inline_text = _extract_inline_text(file_url, mime_type)
+						if inline_text:
+							text += (
+								f"\n\n--- Document Content ({file_name}) ---\n"
+								f"{inline_text}\n"
+								f"--- End Document Content ---"
+							)
 					history.append({"role": msg.role, "content": text})
 				continue
 
@@ -124,3 +132,36 @@ def get_conversation_history(conversation_id: str) -> list[dict]:
 		history.append(message_dict)
 
 	return history
+
+
+# Maximum characters of inline document text to include in the message.
+# Keeps context window usage reasonable for large documents.
+_MAX_INLINE_TEXT_CHARS = 15000
+
+
+def _extract_inline_text(file_url: str, mime_type: str) -> str:
+	"""Extract raw text from a file attachment for inline inclusion.
+
+	Reads the file and extracts selectable text using the IDP extractors.
+	Returns empty string on any failure (non-critical — the LLM can still
+	use the file_url with IDP tools as a fallback).
+
+	Args:
+		file_url: Frappe file URL (e.g., "/private/files/invoice.pdf").
+		mime_type: MIME type of the file.
+
+	Returns:
+		Extracted text (truncated to _MAX_INLINE_TEXT_CHARS), or empty string.
+	"""
+	try:
+		from ai_chatbot.idp.extractors.base import extract_content
+
+		result = extract_content(file_url)
+		if result.get("content_type") == "text" and result.get("text"):
+			text = result["text"].strip()
+			if len(text) > _MAX_INLINE_TEXT_CHARS:
+				text = text[:_MAX_INLINE_TEXT_CHARS] + "\n\n[... truncated ...]"
+			return text
+	except Exception:
+		pass
+	return ""

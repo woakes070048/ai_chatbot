@@ -51,6 +51,9 @@ def validate_mandatory_fields(doctype, values):
 		"tc_name",
 		"taxes_and_charges",
 		"set_warehouse",
+		# Accounting fields auto-populated by ERPNext controllers
+		"credit_to",  # Purchase Invoice: from supplier's default payable account
+		"debit_to",  # Sales Invoice: from customer's default receivable account
 	}
 
 	for df in meta.fields:
@@ -204,6 +207,7 @@ def _resolve_link_value(target_doctype, fieldname, value):
 		"Supplier": "supplier_name",
 		"Lead": "lead_name",
 		"Employee": "employee_name",
+		"Account": "account_name",
 	}
 
 	# Strategy 1: look up by the DocType's human-readable name field
@@ -228,6 +232,62 @@ def _resolve_link_value(target_doctype, fieldname, value):
 	matches = frappe.get_all(
 		target_doctype,
 		filters={"name": ["like", f"%{value}%"]},
+		fields=["name"],
+		limit=2,
+	)
+	if len(matches) == 1:
+		return matches[0].name
+
+	# Strategy 3: Account-specific — strip company abbreviation suffix and
+	# search by the core account name.  ERPNext Account names follow the
+	# pattern "Account Name - ABBR" (e.g., "IGST - TT").  The LLM may
+	# extract just "IGST" or the full "IGST - TT" where the real name is
+	# "Input Tax IGST - TT".  Try stripping the suffix and searching.
+	if target_doctype == "Account":
+		resolved = _resolve_account(value)
+		if resolved:
+			return resolved
+
+	return None
+
+
+def _resolve_account(value: str) -> str | None:
+	"""Try to resolve a tax/GL account name to an actual Account document.
+
+	ERPNext Account ``name`` follows the pattern ``Account Name - ABBR``
+	(e.g., ``Input Tax IGST - TT``).  The ``account_name`` field stores
+	just the human-readable part (e.g., ``Input Tax IGST``).
+
+	The LLM may extract values like:
+	- ``"IGST - TT"`` — includes abbreviation but uses a short name
+	- ``"IGST"`` — just the tax type keyword
+	- ``"Input Tax IGST"`` — the full account_name
+
+	Resolution uses ``account_name`` (not ``name``) to avoid abbreviation
+	mismatches, then returns the actual ``name`` for ERPNext.
+
+	Args:
+		value: The account name/value extracted by the LLM.
+
+	Returns:
+		Resolved Account ``name`` (with abbreviation) or None.
+	"""
+	# Strip the company abbreviation suffix if present (e.g., "IGST - TT" → "IGST")
+	core_name = value.rsplit(" - ", 1)[0].strip() if " - " in value else value.strip()
+
+	if not core_name:
+		return None
+
+	# Try 1: exact match on account_name
+	match = frappe.db.get_value("Account", {"account_name": core_name, "is_group": 0}, "name")
+	if match:
+		return match
+
+	# Try 2: account_name contains the core name
+	# (e.g., "Input Tax IGST" contains "IGST")
+	matches = frappe.get_all(
+		"Account",
+		filters={"account_name": ["like", f"%{core_name}%"], "is_group": 0},
 		fields=["name"],
 		limit=2,
 	)

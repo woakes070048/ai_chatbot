@@ -100,6 +100,148 @@ def extract_and_map(
 	}
 
 
+def extract_raw(
+	file_url: str,
+	output_language: str = "English",
+) -> dict:
+	"""Extract all structured data from a document without ERPNext schema mapping.
+
+	For documents that don't match any supported ERPNext DocType (e.g., salary
+	slips, bank statements, tax certificates). Extracts whatever structured data
+	the document contains and returns it as-is.
+
+	Args:
+		file_url: Frappe file URL of the uploaded document.
+		output_language: Language for extracted output values (default "English").
+
+	Returns:
+		dict with keys:
+			success: bool
+			document_type: str — detected document type
+			headers: dict — key-value pairs from the document header
+			tables: list[list[dict]] — tabular data sections found
+			summary: str — brief description of the document
+	"""
+	# Step 1: Extract content
+	content = extract_content(file_url)
+
+	# Step 2: Build generic extraction messages (no schema)
+	messages = _build_raw_extraction_messages(content, output_language)
+
+	# Step 3: Call AI provider
+	settings = frappe.get_single("Chatbot Settings")
+	provider_name = settings.ai_provider or "OpenAI"
+	provider = get_ai_provider(provider_name)
+
+	try:
+		response = provider.chat_completion(messages)
+	except Exception as e:
+		frappe.log_error(f"IDP raw extraction LLM error: {e!s}", "AI Chatbot IDP")
+		return {"success": False, "error": f"AI provider error: {e!s}"}
+
+	# Step 4: Parse response
+	extracted_json = _parse_llm_response(response, provider_name)
+	if not extracted_json:
+		return {"success": False, "error": "Could not parse structured data from AI response"}
+
+	return {
+		"success": True,
+		"document_type": extracted_json.get("document_type", "Unknown"),
+		"headers": extracted_json.get("headers", {}),
+		"tables": extracted_json.get("tables", []),
+		"summary": extracted_json.get("summary", ""),
+		"source_file": file_url,
+	}
+
+
+def _build_raw_extraction_messages(
+	content: dict,
+	output_language: str = "English",
+) -> list[dict]:
+	"""Build LLM messages for generic (schema-free) document extraction."""
+	system_message = (
+		"You are an expert data extraction specialist. Your task is to extract ALL "
+		"structured data from the uploaded document. Do NOT map to any specific ERP "
+		"schema — extract the data exactly as it appears in the document.\n\n"
+		"CRITICAL RULES:\n"
+		"1. Respond ONLY with valid JSON. No markdown fences, no explanations.\n"
+		"2. Extract ALL fields — header/metadata fields as key-value pairs, and any "
+		"tabular data as arrays of objects.\n"
+		"3. Convert dates to YYYY-MM-DD format.\n"
+		"4. Strip currency symbols from numbers but preserve the currency code.\n"
+		"5. Preserve the original field names/labels from the document as JSON keys.\n"
+		"6. NEVER include boilerplate text like 'This is a computer generated document'.\n"
+	)
+
+	if output_language and output_language.lower() != "original":
+		system_message += (
+			f"\nOUTPUT LANGUAGE: {output_language}\n"
+			f"Translate all text values to {output_language}. Keep numbers, dates, "
+			f"currency codes, and proper nouns (names) unchanged.\n"
+		)
+
+	user_parts = [
+		"Extract ALL structured data from the following document.\n\n"
+		"## Required JSON Output Format\n\n"
+		"```json\n"
+		"{\n"
+		'  "document_type": "detected type (e.g., Salary Slip, Bank Statement, Tax Certificate)",\n'
+		'  "headers": {\n'
+		'    "field_label": "value",\n'
+		"    ...\n"
+		"  },\n"
+		'  "tables": [\n'
+		"    [\n"
+		'      {"column1": "value", "column2": "value", ...},\n'
+		"      ...\n"
+		"    ]\n"
+		"  ],\n"
+		'  "summary": "Brief one-line description of the document"\n'
+		"}\n"
+		"```\n\n"
+		"**Rules:**\n"
+		"- `headers`: All non-tabular key-value pairs (dates, names, IDs, totals, etc.)\n"
+		"- `tables`: Each distinct table in the document as a separate array of row objects. "
+		"If the document has an earnings table and a deductions table, return them as two "
+		"separate arrays within `tables`.\n"
+		"- If there are no tables, set `tables` to an empty array.\n"
+		"- Use the field labels from the document as JSON keys (cleaned up for readability).\n\n"
+		"Respond ONLY with the JSON object."
+	]
+
+	if content["content_type"] == "text":
+		text = content["text"]
+		if len(text) > MAX_CONTENT_LENGTH:
+			text = text[:MAX_CONTENT_LENGTH] + "\n\n[... content truncated ...]"
+
+		user_parts.append(f"\n\n## Document Content\n\n```\n{text}\n```")
+
+		return [
+			{"role": "system", "content": system_message},
+			{"role": "user", "content": "\n".join(user_parts)},
+		]
+
+	# Image content — use Vision API format
+	user_text = "\n".join(user_parts)
+	user_text += "\n\n## Document\n\nSee the attached image of the document."
+
+	return [
+		{"role": "system", "content": system_message},
+		{
+			"role": "user",
+			"content": [
+				{"type": "text", "text": user_text},
+				{
+					"type": "image_url",
+					"image_url": {
+						"url": f"data:{content['mime_type']};base64,{content['base64']}",
+					},
+				},
+			],
+		},
+	]
+
+
 def _build_extraction_messages(
 	content: dict,
 	schema_prompt: str,
@@ -161,7 +303,17 @@ def _build_extraction_messages(
 		f"8. For Link fields, use the most likely matching name from ERPNext "
 		f"(e.g., a customer name, supplier name, or item code).\n"
 		f"9. If a field cannot be identified, set it to null — do NOT guess.\n"
-		f"10. Include any source fields you could not map in `unmapped_fields`.\n\n"
+		f"10. Include any source fields you could not map in `unmapped_fields`.\n"
+		f"11. **Party identification (CRITICAL for invoices):** The company/entity "
+		f"shown in the document header/letterhead/logo is the **issuer** of the "
+		f"document. The entity listed under 'Customer', 'Bill To', 'Ship To', "
+		f"'Buyer', or 'M/S' is the **recipient**.\n"
+		f"   - For **Purchase Invoice**: the issuer is the `supplier`; the "
+		f"recipient is YOUR company (ignore it — ERPNext sets `company` separately).\n"
+		f"   - For **Sales Invoice**: the issuer is YOUR company (ignore it); the "
+		f"recipient is the `customer`.\n"
+		f"   - For **Purchase Order**: the recipient/addressee is the `supplier`.\n"
+		f"   - For **Quotation/Sales Order**: the recipient is the `customer`.\n\n"
 		f"## Content Filtering (CRITICAL)\n\n"
 		f"You MUST completely discard the following boilerplate text. It is NOT part of "
 		f"the document's terms, conditions, or any other field:\n"
