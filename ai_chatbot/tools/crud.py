@@ -100,6 +100,9 @@ def propose_create_document(doctype, values, company=None):
 	resolved_company = values.get("company") or get_default_company(company)
 	prerequisites = detect_prerequisites(doctype, values, resolved_company)
 
+	# Extract item_mapping before passing prerequisites to the card
+	item_mapping = prerequisites.pop("item_mapping", [])
+
 	# Collect names of all missing prerequisite values so we can filter
 	# them out of the link/child validation errors (they will be created).
 	prereq_values = _collect_prerequisite_values(prerequisites)
@@ -137,6 +140,7 @@ def propose_create_document(doctype, values, company=None):
 		"previous_values": None,
 		"is_submittable": is_submittable,
 		"prerequisites": prerequisites if has_prereqs else None,
+		"item_mapping": item_mapping if item_mapping else None,
 		"warnings": warnings,
 		"errors": errors,
 		"message": _build_create_message(doctype, errors, prerequisites),

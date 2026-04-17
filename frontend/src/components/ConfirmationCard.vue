@@ -100,6 +100,52 @@
         </div>
       </div>
 
+      <!-- Item Mapping Table (read-only: extracted vs resolved items) -->
+      <div v-if="itemMapping.length > 0 && state === 'pending'" class="mt-3">
+        <div class="text-xs font-semibold text-indigo-700 dark:text-indigo-400 uppercase tracking-wide mb-1.5">
+          Item Mapping
+        </div>
+        <div class="overflow-x-auto rounded border border-indigo-200 dark:border-indigo-700">
+          <table class="min-w-full text-xs">
+            <thead>
+              <tr class="bg-indigo-50 dark:bg-indigo-900/30">
+                <th class="px-2 py-1.5 text-left font-medium text-indigo-700 dark:text-indigo-300 w-8">#</th>
+                <th class="px-2 py-1.5 text-left font-medium text-indigo-700 dark:text-indigo-300">Extracted Item</th>
+                <th class="px-2 py-1.5 text-left font-medium text-indigo-700 dark:text-indigo-300">ERPNext Item</th>
+                <th class="px-2 py-1.5 text-left font-medium text-indigo-700 dark:text-indigo-300">Extracted UOM</th>
+                <th class="px-2 py-1.5 text-left font-medium text-indigo-700 dark:text-indigo-300">ERPNext UOM</th>
+                <th class="px-2 py-1.5 text-left font-medium text-indigo-700 dark:text-indigo-300">Item Group</th>
+                <th class="px-2 py-1.5 text-left font-medium text-indigo-700 dark:text-indigo-300">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="item in itemMapping"
+                :key="item.idx"
+                class="border-t border-indigo-100 dark:border-indigo-800"
+              >
+                <td class="px-2 py-1.5 text-gray-500 dark:text-gray-400">{{ item.idx }}</td>
+                <td class="px-2 py-1.5 text-gray-700 dark:text-gray-300">{{ item.extracted_item }}</td>
+                <td class="px-2 py-1.5 text-gray-700 dark:text-gray-300 font-medium">{{ item.resolved_item }}</td>
+                <td class="px-2 py-1.5 text-gray-600 dark:text-gray-400">{{ item.extracted_uom || '—' }}</td>
+                <td class="px-2 py-1.5 text-gray-600 dark:text-gray-400">{{ item.resolved_uom || '—' }}</td>
+                <td class="px-2 py-1.5 text-gray-600 dark:text-gray-400">{{ item.item_group || '—' }}</td>
+                <td class="px-2 py-1.5">
+                  <span
+                    class="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium"
+                    :class="item.is_new
+                      ? 'bg-amber-100 dark:bg-amber-800/40 text-amber-700 dark:text-amber-300'
+                      : 'bg-green-100 dark:bg-green-800/40 text-green-700 dark:text-green-300'"
+                  >
+                    {{ item.is_new ? 'New' : 'Matched' }}
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <!-- Prerequisites Section (missing party/items to auto-create) -->
       <div v-if="prerequisites?.has_prerequisites && state === 'pending'" class="mt-4 space-y-3">
         <div class="text-xs font-semibold text-amber-700 dark:text-amber-400 uppercase tracking-wide">
@@ -388,6 +434,7 @@ const props = defineProps({
   errors: { type: Array, default: () => [] },
   isSubmittable: { type: Boolean, default: false },
   prerequisites: { type: Object, default: null },
+  itemMapping: { type: Array, default: () => [] },
   expiresAt: { type: String, default: null },
   // Pre-populated from persisted confirmation_state (page reload)
   initialState: { type: String, default: 'pending' },

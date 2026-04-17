@@ -72,7 +72,7 @@ def detect_prerequisites(doctype: str, values: dict, company: str | None = None)
 	"""
 	company = company or frappe.defaults.get_user_default("Company")
 	missing_parties = _detect_missing_parties(doctype, values, company)
-	missing_items, missing_uoms = _detect_missing_items(doctype, values, company)
+	missing_items, missing_uoms, item_mapping = _detect_missing_items(doctype, values, company)
 	missing_accounts = _detect_missing_accounts(doctype, values, company)
 
 	has_prereqs = bool(missing_parties or missing_items or missing_uoms or missing_accounts)
@@ -83,6 +83,7 @@ def detect_prerequisites(doctype: str, values: dict, company: str | None = None)
 		"missing_items": missing_items,
 		"missing_uoms": missing_uoms,
 		"missing_accounts": missing_accounts,
+		"item_mapping": item_mapping,
 	}
 
 
@@ -197,16 +198,30 @@ def _detect_missing_parties(doctype: str, values: dict, company: str) -> list[di
 	return missing
 
 
-def _detect_missing_items(doctype: str, values: dict, company: str) -> tuple[list[dict], list[dict]]:
+def _detect_missing_items(
+	doctype: str, values: dict, company: str
+) -> tuple[list[dict], list[dict], list[dict]]:
 	"""Find item_code / uom values in child tables that don't exist.
 
-	Returns (missing_items, missing_uoms).
+	Also builds an ``item_mapping`` list that tracks every unique item's
+	original extracted name alongside its resolved ERPNext match (or lack
+	thereof).  This mapping is displayed read-only in the ConfirmationCard
+	so the user can see what was extracted vs what was matched.
+
+	Returns (missing_items, missing_uoms, item_mapping).
 	"""
 	meta = frappe.get_meta(doctype)
 	missing_items: list[dict] = []
 	missing_uoms: list[dict] = []
 	seen_items: set[str] = set()
 	seen_uoms: set[str] = set()
+
+	# Item mapping: tracks ALL items (matched, fuzzy-resolved, missing)
+	item_mapping: list[dict] = []
+	seen_mapping: set[str] = set()
+
+	# Supplier context for Item Supplier resolution (purchase documents)
+	supplier = values.get("supplier", "")
 
 	for df in meta.fields:
 		if df.fieldtype != "Table" or df.fieldname not in values:
@@ -233,19 +248,93 @@ def _detect_missing_items(doctype: str, values: dict, company: str) -> tuple[lis
 			# --- Items ---
 			for ifield in item_fields:
 				val = row.get(ifield)
-				if not val or val in seen_items:
+				if not val:
 					continue
 
+				# Already processed as missing — skip
+				if val in seen_items:
+					continue
+
+				extracted_uom = _get_row_uom(row, uom_fields)
+
+				# Case A: Exact match exists in ERPNext
 				if frappe.db.exists("Item", val):
+					if val not in seen_mapping:
+						seen_mapping.add(val)
+						item_group = frappe.get_cached_value("Item", val, "item_group") or ""
+						item_mapping.append(
+							{
+								"idx": len(item_mapping) + 1,
+								"extracted_item": val,
+								"resolved_item": val,
+								"extracted_uom": extracted_uom,
+								"resolved_uom": extracted_uom,
+								"item_group": item_group,
+								"is_new": False,
+							}
+						)
 					continue
 
-				# Fuzzy
+				# Case B: Fuzzy resolution by item_name / LIKE match
 				resolved = _resolve_link_value("Item", ifield, val)
 				if resolved:
+					extracted_name = val
 					row[ifield] = resolved
+					if extracted_name not in seen_mapping:
+						seen_mapping.add(extracted_name)
+						item_group = frappe.get_cached_value("Item", resolved, "item_group") or ""
+						item_mapping.append(
+							{
+								"idx": len(item_mapping) + 1,
+								"extracted_item": extracted_name,
+								"resolved_item": resolved,
+								"extracted_uom": extracted_uom,
+								"resolved_uom": extracted_uom,
+								"item_group": item_group,
+								"is_new": False,
+							}
+						)
 					continue
 
+				# Case B2: Item Supplier resolution (supplier_part_no → item_code)
+				supplier_match = _resolve_via_item_supplier(val, supplier)
+				if supplier_match:
+					extracted_name = val
+					row[ifield] = supplier_match
+					if extracted_name not in seen_mapping:
+						seen_mapping.add(extracted_name)
+						item_group = frappe.get_cached_value("Item", supplier_match, "item_group") or ""
+						item_mapping.append(
+							{
+								"idx": len(item_mapping) + 1,
+								"extracted_item": extracted_name,
+								"resolved_item": supplier_match,
+								"extracted_uom": extracted_uom,
+								"resolved_uom": extracted_uom,
+								"item_group": item_group,
+								"is_new": False,
+							}
+						)
+					continue
+
+				# Case C: Item doesn't exist — add to missing list
 				seen_items.add(val)
+
+				if val not in seen_mapping:
+					seen_mapping.add(val)
+					default_group = frappe.db.get_single_value("Stock Settings", "item_group") or "Products"
+					item_mapping.append(
+						{
+							"idx": len(item_mapping) + 1,
+							"extracted_item": val,
+							"resolved_item": val,
+							"extracted_uom": extracted_uom,
+							"resolved_uom": extracted_uom,
+							"item_group": default_group,
+							"is_new": True,
+						}
+					)
+
 				# Infer UOM from the row if present
 				row_uom = None
 				for uf in uom_fields:
@@ -271,6 +360,16 @@ def _detect_missing_items(doctype: str, values: dict, company: str) -> tuple[lis
 					continue
 				if frappe.db.exists("UOM", val):
 					continue
+
+				# Try fuzzy resolution for UOM
+				resolved_uom = _resolve_link_value("UOM", ufield, val)
+				if resolved_uom:
+					extracted_uom_name = val
+					row[ufield] = resolved_uom
+					# Update item_mapping entry's resolved_uom if applicable
+					_update_mapping_uom(item_mapping, extracted_uom_name, resolved_uom)
+					continue
+
 				seen_uoms.add(val)
 				missing_uoms.append(
 					{
@@ -283,7 +382,7 @@ def _detect_missing_items(doctype: str, values: dict, company: str) -> tuple[lis
 	# duplicate value (append row_indices)
 	_deduplicate_items(missing_items)
 
-	return missing_items, missing_uoms
+	return missing_items, missing_uoms, item_mapping
 
 
 def _detect_missing_accounts(doctype: str, values: dict, company: str) -> list[dict]:
@@ -358,6 +457,55 @@ def _deduplicate_items(missing_items: list[dict]) -> None:
 
 	for idx in reversed(to_remove):
 		missing_items.pop(idx)
+
+
+def _get_row_uom(row: dict, uom_fields: list[str]) -> str:
+	"""Return the first non-empty UOM value from a child table row."""
+	for uf in uom_fields:
+		val = row.get(uf)
+		if val:
+			return val
+	return ""
+
+
+def _resolve_via_item_supplier(val: str, supplier: str) -> str | None:
+	"""Try to resolve an extracted item name via the Item Supplier child table.
+
+	ERPNext's Item master has a child table ``supplier_items`` (DocType:
+	``Item Supplier``) with fields ``supplier`` and ``supplier_part_no``.
+	For purchase documents the extracted item name often matches the
+	supplier's own part number rather than the ERPNext item_code.
+
+	Returns the parent ``item_code`` if a match is found, else ``None``.
+	"""
+	if not val:
+		return None
+
+	filters = {"supplier_part_no": val}
+	if supplier:
+		filters["supplier"] = supplier
+
+	# Exact match on supplier_part_no
+	parent = frappe.db.get_value("Item Supplier", filters, "parent")
+	if parent and frappe.db.exists("Item", parent):
+		return parent
+
+	# Without supplier filter (any supplier)
+	if supplier:
+		parent = frappe.db.get_value("Item Supplier", {"supplier_part_no": val}, "parent")
+		if parent and frappe.db.exists("Item", parent):
+			return parent
+
+	return None
+
+
+def _update_mapping_uom(item_mapping: list[dict], extracted_uom: str, resolved_uom: str) -> None:
+	"""Update ``resolved_uom`` in item_mapping entries whose extracted_uom matches."""
+	if not extracted_uom or not resolved_uom:
+		return
+	for entry in item_mapping:
+		if entry.get("extracted_uom") == extracted_uom:
+			entry["resolved_uom"] = resolved_uom
 
 
 # ---------------------------------------------------------------------------

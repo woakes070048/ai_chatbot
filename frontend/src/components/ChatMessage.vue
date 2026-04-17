@@ -101,6 +101,7 @@
               :errors="conf.errors || []"
               :is-submittable="conf.is_submittable || false"
               :prerequisites="conf.prerequisites || null"
+              :item-mapping="conf.item_mapping || []"
               :expires-at="conf.expires_at || null"
               :initial-state="getConfirmationInitialState(conf.confirmation_id)"
               :initial-result="getConfirmationInitialResult(conf.confirmation_id)"
