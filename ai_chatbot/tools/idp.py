@@ -93,13 +93,31 @@ def extract_document_data(file_id=None, target_doctype=None, company=None, outpu
 			"stop_processing": True,
 		}
 
-	company = get_default_company(company)
+	# Resolve company with an extra guard for IDP:
+	# The LLM may pass a `company` argument derived from the document body
+	# (e.g., the invoice recipient's name). `get_default_company` would
+	# fuzzy-LIKE-match that against the Company doctype and silently pick
+	# an unrelated record. For IDP we require an EXACT Company match for
+	# any explicit argument; otherwise we fall back to the user's session
+	# default. This prevents a PDF-sourced string from overriding the
+	# user's own company identity.
+	company = _resolve_idp_company(company)
 	if not output_language:
 		settings = frappe.get_single("Chatbot Settings")
 		output_language = getattr(settings, "idp_output_language", "") or "English"
 
-	# Step 1 & 2: Extract and map via LLM
-	result = extract_and_map(file_url, target_doctype, company=company, output_language=output_language)
+	# Step 1 & 2: Extract and map via LLM.
+	# enforce_context_company=True: this is the record-creation path, so the
+	# `company` field must come from the session context, not from the
+	# document body (the LLM occasionally mis-identifies the invoice
+	# recipient as the company).
+	result = extract_and_map(
+		file_url,
+		target_doctype,
+		company=company,
+		output_language=output_language,
+		enforce_context_company=True,
+	)
 	if not result.get("success"):
 		return {"error": result.get("error", "Extraction failed")}
 
@@ -399,7 +417,7 @@ def compare_document_with_record(file_id=None, doctype=None, docname=None, compa
 			"stop_processing": True,
 		}
 
-	company = get_default_company(company)
+	company = _resolve_idp_company(company)
 
 	# Step 1: Extract data from the uploaded document
 	extraction = extract_and_map(file_url, doctype, company=company)
@@ -419,6 +437,30 @@ def compare_document_with_record(file_id=None, doctype=None, docname=None, compa
 		"compared_with": f"{doctype}: {docname}",
 		"message": comparison.get("summary", "Comparison complete."),
 	}
+
+
+def _resolve_idp_company(company: str | None) -> str:
+	"""Resolve the Company for an IDP extraction call.
+
+	Unlike `get_default_company`, this helper does NOT fuzzy-LIKE-match an
+	explicit argument against the Company doctype. The LLM may pass a
+	`company` value that was derived from the document body (e.g., the
+	invoice recipient's name), and fuzzy-matching such a value can
+	silently pick an unrelated Company record.
+
+	Policy:
+	- If an explicit `company` is given and exists as an exact Company
+	  record name, use it.
+	- Otherwise fall back to the user's session default via
+	  `get_default_company()` (with `None`), which consults the user
+	  default and then the global default.
+
+	Returns:
+		Company name string.
+	"""
+	if company and frappe.db.exists("Company", company):
+		return company
+	return get_default_company(None)
 
 
 def _resolve_file_id(file_id: str) -> str | None:

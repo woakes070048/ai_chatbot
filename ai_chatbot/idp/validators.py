@@ -80,6 +80,15 @@ def _validate_required_fields(
 			errors.append(f"Required field '{field['label']}' ({fieldname}) is missing")
 
 
+#: Fields whose value MUST come from the user/session context (Chatbot Settings
+#: default or explicit user-supplied company), never from the document body.
+#: The LLM sometimes mis-identifies the recipient block on an invoice as the
+#: ERPNext "company", which then gets fuzzy-matched to an unrelated existing
+#: Company record. Excluding these fields from fuzzy resolution prevents that
+#: class of bug.
+_CONTEXT_ONLY_LINK_FIELDS = frozenset({"company"})
+
+
 def _resolve_link_fields(
 	data: dict,
 	schema: dict,
@@ -95,12 +104,19 @@ def _resolve_link_fields(
 	2. Exact match on the name field (customer_name, supplier_name, item_name, etc.)
 	3. LIKE match on the name field
 	If a unique match is found, resolve it. Otherwise, report a warning.
+
+	The `company` field (and any other context-only field) is intentionally
+	excluded — it is authoritative from the user's session context and must
+	never be inferred from document content.
 	"""
 	for field in schema.get("fields", []):
 		if field.get("fieldtype") != "Link":
 			continue
 
 		fieldname = field["fieldname"]
+		if fieldname in _CONTEXT_ONLY_LINK_FIELDS:
+			continue
+
 		value = data.get(fieldname)
 		if not value:
 			continue

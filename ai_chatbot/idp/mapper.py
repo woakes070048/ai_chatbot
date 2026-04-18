@@ -33,11 +33,29 @@ _FIELD_ALIASES = {
 }
 
 
+#: Transaction DocTypes where `company` must come from the session context.
+#: The LLM occasionally mis-identifies the recipient block on an invoice as
+#: the ERPNext "company" field, which then gets fuzzy-matched to an unrelated
+#: Company record. For record-creation flows we overwrite `company` with the
+#: session value to prevent that. The comparison flow intentionally leaves
+#: the LLM value intact so mismatches remain visible.
+_CONTEXT_COMPANY_DOCTYPES = frozenset({
+	"Sales Invoice",
+	"Purchase Invoice",
+	"Sales Order",
+	"Purchase Order",
+	"Quotation",
+	"Delivery Note",
+	"Purchase Receipt",
+})
+
+
 def extract_and_map(
 	file_url: str,
 	target_doctype: str,
 	company: str | None = None,
 	output_language: str = "English",
+	enforce_context_company: bool = False,
 ) -> dict:
 	"""Extract data from a document and map it to an ERPNext DocType schema.
 
@@ -53,6 +71,11 @@ def extract_and_map(
 		target_doctype: ERPNext DocType to map to (e.g., "Sales Invoice").
 		company: Company context for defaults.
 		output_language: Language for extracted output values (default "English").
+		enforce_context_company: If True, overwrite `company` in the extracted
+			data with the session-context `company` for supported transaction
+			DocTypes. Use this on record-creation paths. Leave False on
+			comparison/audit paths where LLM-extracted values must remain
+			visible so discrepancies are not silently hidden.
 
 	Returns:
 		dict with keys:
@@ -92,14 +115,38 @@ def extract_and_map(
 	# Step 6: Normalize values
 	normalized = _normalize_extracted_data(extracted_json, schema)
 
+	# Step 7: Enforce context-only fields (record-creation paths only).
+	# For transaction DocTypes on the creation path, overwrite the LLM's
+	# `company` value with the session-context company. This prevents the
+	# LLM's occasional mis-identification of the document recipient as the
+	# ERPNext company from flowing into the extracted data or confirmation
+	# card. The comparison path leaves `enforce_context_company=False` so
+	# genuine discrepancies remain visible to the user.
+	normalized_data = normalized.get("data", {}) or {}
+	if (
+		enforce_context_company
+		and company
+		and target_doctype in _CONTEXT_COMPANY_DOCTYPES
+		and _schema_has_company_field(schema)
+	):
+		normalized_data["company"] = company
+
 	return {
 		"success": True,
-		"extracted_data": normalized.get("data", {}),
+		"extracted_data": normalized_data,
 		"unmapped_fields": extracted_json.get("unmapped_fields", []),
 		"warnings": normalized.get("warnings", []),
 		"source_file": file_url,
 		"target_doctype": target_doctype,
 	}
+
+
+def _schema_has_company_field(schema: dict) -> bool:
+	"""Return True if the target DocType schema declares a `company` field."""
+	for field in schema.get("fields", []) or []:
+		if field.get("fieldname") == "company":
+			return True
+	return False
 
 
 def extract_raw(
