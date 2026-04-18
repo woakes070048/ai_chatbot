@@ -39,6 +39,15 @@ frontend/             # Vue 3 SPA
 └── vite.config.js    # Build config with manual chunks
 ```
 
+## Commit Conventions
+
+- **Never** add `Co-Authored-By: Claude <noreply@anthropic.com>` or any similar
+  AI co-authorship trailer to commit messages.
+- Follow the existing commit style: `<type>: <short summary>` (types observed:
+  `feat`, `fix`, `refactor`, `docs`), lowercase, imperative mood, no trailing
+  period. Optional longer body after a blank line.
+- Read this file before every commit.
+
 ## Code Conventions
 
 - **Python:** Tabs for indentation, 110 char line length, double quotes, Python 3.10+, type hints
