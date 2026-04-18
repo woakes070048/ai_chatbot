@@ -117,9 +117,10 @@ def propose_create_document(doctype, values, company=None):
 	child_errors = [e for e in child_errors if not _is_prerequisite_error(e, prereq_values)]
 	errors.extend(child_errors)
 
-	# Build display preview
+	# Build display preview — suppress child tables covered by item_mapping
 	display_fields = _build_display_fields(doctype, values)
-	child_tables = _build_child_table_preview(doctype, values)
+	exclude_tables = {e["child_table_field"] for e in item_mapping} if item_mapping else None
+	child_tables = _build_child_table_preview(doctype, values, exclude_tables=exclude_tables)
 
 	# Check if the DocType is submittable (has workflow: Draft → Submit → Cancel)
 	is_submittable = bool(frappe.get_meta(doctype).is_submittable)
@@ -551,12 +552,14 @@ def _build_display_fields_from_doc(doc):
 	return priority_fields[:12]
 
 
-def _build_child_table_preview(doctype, values):
+def _build_child_table_preview(doctype, values, exclude_tables=None):
 	"""Build structured child table previews for the confirmation card.
 
 	Args:
 		doctype: Parent DocType name.
 		values: Dict of field→value including child table lists.
+		exclude_tables: Optional set of child table fieldnames to skip
+			(e.g. when the unified Item Mapping table covers them).
 
 	Returns:
 		List of child table dicts with label, fieldname, columns, rows.
@@ -566,6 +569,8 @@ def _build_child_table_preview(doctype, values):
 
 	for df in meta.fields:
 		if df.fieldtype != "Table" or df.fieldname not in values:
+			continue
+		if exclude_tables and df.fieldname in exclude_tables:
 			continue
 
 		rows = values[df.fieldname]

@@ -100,21 +100,30 @@
         </div>
       </div>
 
-      <!-- Item Mapping Table (read-only: extracted vs resolved items) -->
+      <!-- Unified Item Mapping Table (editable for new items) -->
       <div v-if="itemMapping.length > 0 && state === 'pending'" class="mt-3">
         <div class="text-xs font-semibold text-indigo-700 dark:text-indigo-400 uppercase tracking-wide mb-1.5">
           Item Mapping
+          <span class="font-normal normal-case text-gray-500 dark:text-gray-400">
+            ({{ itemMapping.length }} {{ itemMapping.length === 1 ? 'item' : 'items' }})
+          </span>
         </div>
-        <div class="overflow-x-auto rounded border border-indigo-200 dark:border-indigo-700">
+        <div class="overflow-x-auto overflow-y-visible rounded border border-indigo-200 dark:border-indigo-700">
           <table class="min-w-full text-xs">
             <thead>
               <tr class="bg-indigo-50 dark:bg-indigo-900/30">
                 <th class="px-2 py-1.5 text-left font-medium text-indigo-700 dark:text-indigo-300 w-8">#</th>
+                <!-- Extracted data (read-only) -->
                 <th class="px-2 py-1.5 text-left font-medium text-indigo-700 dark:text-indigo-300">Extracted Item</th>
-                <th class="px-2 py-1.5 text-left font-medium text-indigo-700 dark:text-indigo-300">ERPNext Item</th>
-                <th class="px-2 py-1.5 text-left font-medium text-indigo-700 dark:text-indigo-300">Extracted UOM</th>
+                <th class="px-2 py-1.5 text-right font-medium text-indigo-700 dark:text-indigo-300">Qty</th>
+                <th class="px-2 py-1.5 text-left font-medium text-indigo-700 dark:text-indigo-300">UOM</th>
+                <th class="px-2 py-1.5 text-right font-medium text-indigo-700 dark:text-indigo-300">Rate</th>
+                <!-- ERPNext data (conditionally editable) -->
+                <th class="px-2 py-1.5 text-left font-medium text-indigo-700 dark:text-indigo-300">Item Code</th>
                 <th class="px-2 py-1.5 text-left font-medium text-indigo-700 dark:text-indigo-300">ERPNext UOM</th>
                 <th class="px-2 py-1.5 text-left font-medium text-indigo-700 dark:text-indigo-300">Item Group</th>
+                <th class="px-2 py-1.5 text-center font-medium text-indigo-700 dark:text-indigo-300">Stock Item</th>
+                <!-- Status -->
                 <th class="px-2 py-1.5 text-left font-medium text-indigo-700 dark:text-indigo-300">Status</th>
               </tr>
             </thead>
@@ -125,11 +134,56 @@
                 class="border-t border-indigo-100 dark:border-indigo-800"
               >
                 <td class="px-2 py-1.5 text-gray-500 dark:text-gray-400">{{ item.idx }}</td>
+                <!-- Extracted data (always read-only) -->
                 <td class="px-2 py-1.5 text-gray-700 dark:text-gray-300">{{ item.extracted_item }}</td>
-                <td class="px-2 py-1.5 text-gray-700 dark:text-gray-300 font-medium">{{ item.resolved_item }}</td>
+                <td class="px-2 py-1.5 text-right text-gray-700 dark:text-gray-300">{{ formatValue(item.qty, 'Float') }}</td>
                 <td class="px-2 py-1.5 text-gray-600 dark:text-gray-400">{{ item.extracted_uom || '—' }}</td>
-                <td class="px-2 py-1.5 text-gray-600 dark:text-gray-400">{{ item.resolved_uom || '—' }}</td>
-                <td class="px-2 py-1.5 text-gray-600 dark:text-gray-400">{{ item.item_group || '—' }}</td>
+                <td class="px-2 py-1.5 text-right text-gray-700 dark:text-gray-300">{{ formatValue(item.rate, 'Currency') }}</td>
+                <!-- ERPNext Item Code -->
+                <td class="px-2 py-1.5 min-w-[140px]">
+                  <SearchableDropdown
+                    v-if="item.is_new"
+                    doctype="Item"
+                    :model-value="mappingForm[item.idx]?.item_code || item.resolved_item"
+                    @update:model-value="v => updateMappingField(item, 'item_code', v)"
+                    placeholder="Search item..."
+                  />
+                  <span v-else class="text-gray-700 dark:text-gray-300 font-medium">{{ item.resolved_item }}</span>
+                </td>
+                <!-- ERPNext UOM -->
+                <td class="px-2 py-1.5 min-w-[100px]">
+                  <SearchableDropdown
+                    v-if="item.is_new"
+                    doctype="UOM"
+                    :model-value="mappingForm[item.idx]?.uom || item.stock_uom || item.resolved_uom"
+                    @update:model-value="v => updateMappingField(item, 'uom', v)"
+                  />
+                  <span v-else class="text-gray-600 dark:text-gray-400">{{ item.stock_uom || item.resolved_uom || '—' }}</span>
+                </td>
+                <!-- ERPNext Item Group -->
+                <td class="px-2 py-1.5 min-w-[120px]">
+                  <SearchableDropdown
+                    v-if="item.is_new"
+                    doctype="Item Group"
+                    :model-value="mappingForm[item.idx]?.item_group || item.item_group"
+                    @update:model-value="v => updateMappingField(item, 'item_group', v)"
+                  />
+                  <span v-else class="text-gray-600 dark:text-gray-400">{{ item.item_group || '—' }}</span>
+                </td>
+                <!-- Is Stock Item -->
+                <td class="px-2 py-1.5 text-center">
+                  <input
+                    v-if="item.is_new"
+                    type="checkbox"
+                    :checked="mappingForm[item.idx]?.is_stock_item ?? item.is_stock_item ?? 1"
+                    @change="updateMappingField(item, 'is_stock_item', $event.target.checked ? 1 : 0)"
+                    class="rounded w-3.5 h-3.5 text-blue-600"
+                  />
+                  <span v-else class="text-gray-600 dark:text-gray-400">
+                    {{ item.is_stock_item ? 'Yes' : 'No' }}
+                  </span>
+                </td>
+                <!-- Status badge -->
                 <td class="px-2 py-1.5">
                   <span
                     class="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium"
@@ -146,8 +200,8 @@
         </div>
       </div>
 
-      <!-- Prerequisites Section (missing party/items to auto-create) -->
-      <div v-if="prerequisites?.has_prerequisites && state === 'pending'" class="mt-4 space-y-3">
+      <!-- Prerequisites Section (missing party/accounts to auto-create) -->
+      <div v-if="hasNonItemPrereqs && state === 'pending'" class="mt-4 space-y-3">
         <div class="text-xs font-semibold text-amber-700 dark:text-amber-400 uppercase tracking-wide">
           Records to Create
         </div>
@@ -176,57 +230,6 @@
                 :placeholder="field.label"
                 class="px-2 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:ring-1 focus:ring-blue-400 outline-none"
               />
-            </div>
-          </div>
-        </div>
-
-        <!-- Missing Items -->
-        <div
-          v-if="prerequisites.missing_items?.length > 0"
-          class="p-3 rounded-lg border border-amber-200 dark:border-amber-700 bg-amber-50/50 dark:bg-amber-900/10"
-        >
-          <div class="flex items-center gap-2 mb-2">
-            <Package :size="14" class="text-amber-600 dark:text-amber-400" />
-            <span class="text-sm font-medium text-amber-800 dark:text-amber-300">
-              New Items ({{ prerequisites.missing_items.length }})
-            </span>
-          </div>
-
-          <div class="space-y-2">
-            <div
-              v-for="item in prerequisites.missing_items"
-              :key="'item-' + item.value"
-              class="p-2 bg-white dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-600"
-            >
-              <div class="text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                {{ item.value }}
-              </div>
-              <div class="flex items-center gap-3 flex-wrap">
-                <template v-for="field in item.editable_fields" :key="field.fieldname">
-                  <!-- Checkbox fields -->
-                  <label
-                    v-if="field.fieldtype === 'Check' && !isFieldHidden(item.value, field)"
-                    class="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-400"
-                  >
-                    <input
-                      type="checkbox"
-                      :checked="prereqForm.items[item.value]?.[field.fieldname]"
-                      @change="prereqForm.items[item.value][field.fieldname] = $event.target.checked ? 1 : 0"
-                      class="rounded w-3.5 h-3.5 text-blue-600"
-                    />
-                    {{ field.label }}
-                  </label>
-                  <!-- Text/Link fields -->
-                  <div v-else-if="field.fieldtype !== 'Check'" class="flex flex-col gap-0.5">
-                    <label class="text-xs text-gray-500 dark:text-gray-400">{{ field.label }}</label>
-                    <input
-                      v-model="prereqForm.items[item.value][field.fieldname]"
-                      :placeholder="field.label"
-                      class="px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 w-28 focus:ring-1 focus:ring-blue-400 outline-none"
-                    />
-                  </div>
-                </template>
-              </div>
             </div>
           </div>
         </div>
@@ -419,9 +422,10 @@ import { ref, computed, reactive, onMounted, onUnmounted } from 'vue'
 import {
   FilePlus, FileEdit, FileCheck, FileX2,
   AlertTriangle, XCircle, CheckCircle2, ExternalLink,
-  Loader2, Undo2, UserPlus, Package, Clock
+  Loader2, Undo2, UserPlus, Clock
 } from 'lucide-vue-next'
 import { chatAPI } from '../utils/api'
+import SearchableDropdown from './SearchableDropdown.vue'
 
 const props = defineProps({
   confirmationId: { type: String, required: true },
@@ -456,7 +460,10 @@ const undoExecuted = ref(false)
 const submitMode = ref(false)
 
 // Prerequisite form data — initialized from editable_fields[].default
-const prereqForm = reactive({ parties: {}, items: {}, accounts: {} })
+const prereqForm = reactive({ parties: {}, accounts: {} })
+
+// Item mapping form — tracks user edits to new-item fields (keyed by item.idx)
+const mappingForm = reactive({})
 
 function initPrerequisiteForm() {
   const p = props.prerequisites
@@ -470,14 +477,6 @@ function initPrerequisiteForm() {
     prereqForm.parties[party.value] = fields
   }
 
-  for (const item of (p.missing_items || [])) {
-    const fields = {}
-    for (const f of item.editable_fields) {
-      fields[f.fieldname] = f.default ?? ''
-    }
-    prereqForm.items[item.value] = fields
-  }
-
   for (const account of (p.missing_accounts || [])) {
     const fields = {}
     for (const f of account.editable_fields) {
@@ -487,13 +486,40 @@ function initPrerequisiteForm() {
   }
 }
 
-// Check if a field should be hidden based on conditional logic
-// e.g., hide "Fixed Asset" when "Stock Item" is checked
-function isFieldHidden(itemValue, field) {
-  if (!field.hidden_when) return false
-  const depField = field.hidden_when
-  return !!prereqForm.items[itemValue]?.[depField]
+// Initialize mapping form from itemMapping prop (only for new items)
+function initMappingForm() {
+  for (const item of props.itemMapping) {
+    if (!item.is_new) continue
+    mappingForm[item.idx] = {
+      item_code: item.resolved_item || item.extracted_item,
+      uom: item.stock_uom || item.resolved_uom || item.extracted_uom || 'Nos',
+      item_group: item.item_group || '',
+      is_stock_item: item.is_stock_item ?? 1,
+    }
+  }
 }
+
+// Update a single field in the mapping form
+function updateMappingField(item, field, value) {
+  if (!mappingForm[item.idx]) {
+    mappingForm[item.idx] = {
+      item_code: item.resolved_item || item.extracted_item,
+      uom: item.stock_uom || item.resolved_uom || item.extracted_uom || 'Nos',
+      item_group: item.item_group || '',
+      is_stock_item: item.is_stock_item ?? 1,
+    }
+  }
+  mappingForm[item.idx][field] = value
+}
+
+// True when there are non-item prerequisites (parties or accounts) to create
+const hasNonItemPrereqs = computed(() => {
+  const p = props.prerequisites
+  if (!p?.has_prerequisites) return false
+  const hasParties = (p.missing_parties || []).length > 0
+  const hasAccounts = (p.missing_accounts || []).length > 0
+  return hasParties || hasAccounts
+})
 
 // Confirmation expiry countdown (visible while pending)
 const confirmSecondsLeft = ref(0)
@@ -562,6 +588,7 @@ function startUndoCountdown() {
 
 onMounted(() => {
   initPrerequisiteForm()
+  initMappingForm()
   if (state.value === 'pending' && props.expiresAt) {
     startConfirmExpiryCountdown()
   }
@@ -687,10 +714,66 @@ async function handleConfirm(submitAfterCreate = false) {
   submitMode.value = submitAfterCreate
 
   try {
-    // Build user_overrides from prerequisite form data
-    const userOverrides = props.prerequisites?.has_prerequisites
-      ? JSON.stringify(prereqForm)
-      : null
+    // Build user_overrides combining prerequisite form and mapping overrides
+    const hasPrereqs = hasNonItemPrereqs.value
+    const hasMapping = Object.keys(mappingForm).length > 0
+
+    let userOverrides = null
+    if (hasPrereqs || hasMapping) {
+      const overrides = {}
+
+      // Prerequisite overrides (parties, accounts)
+      if (hasPrereqs) {
+        overrides.parties = prereqForm.parties
+        overrides.accounts = prereqForm.accounts
+      }
+
+      // Item mapping overrides: new-item creation data + row-level field remaps
+      if (hasMapping) {
+        // items: keyed by item_code for new-item creation (prereq flow)
+        const items = {}
+        // mapping_overrides: keyed by child_table_field → row_idx → field overrides
+        const mappingOverrides = {}
+
+        for (const item of props.itemMapping) {
+          if (!item.is_new) continue
+          const form = mappingForm[item.idx]
+          if (!form) continue
+
+          const itemCode = form.item_code || item.resolved_item || item.extracted_item
+
+          // New item creation data — keyed by extracted_item to match
+          // missing_items[].value in the prerequisites payload
+          items[item.extracted_item] = {
+            item_code: itemCode,
+            item_group: form.item_group || item.item_group || '',
+            stock_uom: form.uom || item.stock_uom || 'Nos',
+            is_stock_item: form.is_stock_item ?? 1,
+          }
+
+          // Row-level overrides (apply item_code and uom to child table row)
+          const tableField = item.child_table_field
+          if (tableField != null && item.row_idx != null) {
+            if (!mappingOverrides[tableField]) {
+              mappingOverrides[tableField] = {}
+            }
+            mappingOverrides[tableField][String(item.row_idx)] = {
+              item_code: itemCode,
+              uom: form.uom || item.stock_uom || item.extracted_uom || 'Nos',
+            }
+          }
+        }
+
+        if (Object.keys(items).length > 0) {
+          overrides.items = items
+        }
+        if (Object.keys(mappingOverrides).length > 0) {
+          overrides.mapping_overrides = mappingOverrides
+        }
+      }
+
+      userOverrides = JSON.stringify(overrides)
+    }
 
     const result = await chatAPI.confirmAction(
       props.confirmationId,

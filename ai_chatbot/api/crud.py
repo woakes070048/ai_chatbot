@@ -96,14 +96,14 @@ def confirm_action(
 			if not check_permission(doctype, "create"):
 				return {"success": False, "error": f"You no longer have permission to create {doctype}"}
 
+			# Parse user overrides once (used for both prerequisites and mapping)
+			overrides = {}
+			if user_overrides:
+				overrides = json.loads(user_overrides) if isinstance(user_overrides, str) else user_overrides
+
 			# Execute prerequisites (missing parties, items, UOMs) if present
 			prerequisites = payload.get("prerequisites")
 			if prerequisites and prerequisites.get("has_prerequisites"):
-				overrides = {}
-				if user_overrides:
-					overrides = (
-						json.loads(user_overrides) if isinstance(user_overrides, str) else user_overrides
-					)
 				_merge_overrides_into_prerequisites(prerequisites, overrides)
 
 				prereq_result = execute_prerequisites(prerequisites, values.get("company"))
@@ -116,6 +116,11 @@ def confirm_action(
 				# Fix up document values with actual created record names
 				_apply_name_map(values, prereq_result["name_map"])
 				created_prerequisites = prereq_result["created"]
+
+			# Apply item mapping overrides (user changed item_code / uom / item_group)
+			mapping_overrides = overrides.get("mapping_overrides")
+			if mapping_overrides:
+				_apply_mapping_overrides(values, mapping_overrides)
 
 			# Create the main document
 			result = create_document(doctype, values)
@@ -415,6 +420,33 @@ def _apply_name_map(values, name_map):
 						old = row[field]
 						if old in mapping:
 							row[field] = mapping[old]
+
+
+def _apply_mapping_overrides(values, mapping_overrides):
+	"""Apply user-changed item mappings to child table row values.
+
+	Called when the user edits item_code, uom, or item_group in the
+	unified Item Mapping table on the ConfirmationCard.
+
+	Args:
+		values: The document values dict (mutated in-place).
+		mapping_overrides: Dict of ``{child_table_field: {row_idx_str: {field: value}}}``.
+
+	Example::
+
+	        {"items": {"0": {"item_code": "ITEM-001", "uom": "Nos"}, "2": {"item_code": "ITEM-003"}}}
+	"""
+	for table_field, row_overrides in mapping_overrides.items():
+		rows = values.get(table_field)
+		if not isinstance(rows, list):
+			continue
+		for row_idx_str, field_overrides in row_overrides.items():
+			try:
+				row_idx = int(row_idx_str)
+			except (ValueError, TypeError):
+				continue
+			if 0 <= row_idx < len(rows) and isinstance(rows[row_idx], dict):
+				rows[row_idx].update(field_overrides)
 
 
 def _update_confirmation_state(confirmation_id, state, result=None, undo_token=None, undo_expires=None):

@@ -370,9 +370,17 @@ const confirmationData = computed(() => {
 
   if (!Array.isArray(results)) results = [results]
 
+  // Deduplicate by confirmation_id (same tool can be called in multiple rounds)
+  const seen = new Set()
   return results
     .filter(r => r && r.data?.confirmation_required)
     .map(r => r.data)
+    .filter(conf => {
+      const key = conf.confirmation_id || `${conf.action}:${conf.doctype}:${conf.name || ''}`
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
 })
 
 // Parse persisted confirmation_state for page reloads (Phase 13B)

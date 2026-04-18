@@ -82,7 +82,7 @@ def validate_mandatory_fields(doctype, values):
 	return missing
 
 
-def validate_link_fields(doctype, values):
+def validate_link_fields(doctype, values, company=None):
 	"""Check that link field values reference existing documents.
 
 	When a value is not found by exact match, performs a fuzzy lookup
@@ -92,12 +92,14 @@ def validate_link_fields(doctype, values):
 	Args:
 		doctype: DocType name.
 		values: Dict of field→value to validate.
+		company: Company name for scoping Account lookups.
 
 	Returns:
 		List of error strings for invalid link references (empty if all valid).
 	"""
 	meta = frappe.get_meta(doctype)
 	errors = []
+	company = company or values.get("company")
 
 	for df in meta.fields:
 		if df.fieldtype == "Link" and df.fieldname in values:
@@ -110,16 +112,21 @@ def validate_link_fields(doctype, values):
 				continue
 
 			# Try fuzzy resolution
-			resolved = _resolve_link_value(df.options, df.fieldname, value)
+			resolved = _resolve_link_value(df.options, df.fieldname, value, company=company)
 			if resolved:
 				values[df.fieldname] = resolved
+			elif df.options == "Address":
+				# Address names are auto-generated (e.g. "Supplier-Billing-1")
+				# and rarely match extracted text. Remove silently — ERPNext
+				# auto-populates address from the party during doc.insert().
+				del values[df.fieldname]
 			else:
 				errors.append(f"{df.label or df.fieldname}: '{value}' not found in {df.options}")
 
 	return errors
 
 
-def validate_child_table_items(doctype, values):
+def validate_child_table_items(doctype, values, company=None):
 	"""Validate child table entries for a DocType.
 
 	Checks that link-type fields in child table rows reference existing
@@ -137,12 +144,14 @@ def validate_child_table_items(doctype, values):
 	Args:
 		doctype: Parent DocType name.
 		values: Dict of field→value including child table lists.
+		company: Company name for scoping Account lookups.
 
 	Returns:
 		List of error strings (empty if all valid).
 	"""
 	meta = frappe.get_meta(doctype)
 	errors = []
+	company = company or values.get("company")
 
 	for df in meta.fields:
 		if df.fieldtype != "Table" or df.fieldname not in values:
@@ -168,7 +177,7 @@ def validate_child_table_items(doctype, values):
 						continue
 
 					# Fuzzy resolution
-					resolved = _resolve_link_value(child_df.options, child_df.fieldname, val)
+					resolved = _resolve_link_value(child_df.options, child_df.fieldname, val, company=company)
 					if resolved:
 						# Auto-correct the row value in-place
 						row[child_df.fieldname] = resolved
@@ -182,7 +191,7 @@ def validate_child_table_items(doctype, values):
 	return errors
 
 
-def _resolve_link_value(target_doctype, fieldname, value):
+def _resolve_link_value(target_doctype, fieldname, value, company=None):
 	"""Try to fuzzy-resolve a Link field value to an existing document name.
 
 	Resolution strategies (tried in order):
@@ -244,14 +253,14 @@ def _resolve_link_value(target_doctype, fieldname, value):
 	# extract just "IGST" or the full "IGST - TT" where the real name is
 	# "Input Tax IGST - TT".  Try stripping the suffix and searching.
 	if target_doctype == "Account":
-		resolved = _resolve_account(value)
+		resolved = _resolve_account(value, company=company)
 		if resolved:
 			return resolved
 
 	return None
 
 
-def _resolve_account(value: str) -> str | None:
+def _resolve_account(value: str, company: str | None = None) -> str | None:
 	"""Try to resolve a tax/GL account name to an actual Account document.
 
 	ERPNext Account ``name`` follows the pattern ``Account Name - ABBR``
@@ -266,8 +275,13 @@ def _resolve_account(value: str) -> str | None:
 	Resolution uses ``account_name`` (not ``name``) to avoid abbreviation
 	mismatches, then returns the actual ``name`` for ERPNext.
 
+	When *company* is provided the search is scoped to that company's
+	accounts, preventing cross-company mismatches (e.g., resolving to
+	``IGST - TTD`` when the document belongs to company ``TT``).
+
 	Args:
 		value: The account name/value extracted by the LLM.
+		company: Optional company name to scope the lookup.
 
 	Returns:
 		Resolved Account ``name`` (with abbreviation) or None.
@@ -278,8 +292,12 @@ def _resolve_account(value: str) -> str | None:
 	if not core_name:
 		return None
 
+	base_filters = {"is_group": 0}
+	if company:
+		base_filters["company"] = company
+
 	# Try 1: exact match on account_name
-	match = frappe.db.get_value("Account", {"account_name": core_name, "is_group": 0}, "name")
+	match = frappe.db.get_value("Account", {**base_filters, "account_name": core_name}, "name")
 	if match:
 		return match
 
@@ -287,7 +305,7 @@ def _resolve_account(value: str) -> str | None:
 	# (e.g., "Input Tax IGST" contains "IGST")
 	matches = frappe.get_all(
 		"Account",
-		filters={"account_name": ["like", f"%{core_name}%"], "is_group": 0},
+		filters={**base_filters, "account_name": ["like", f"%{core_name}%"]},
 		fields=["name"],
 		limit=2,
 	)

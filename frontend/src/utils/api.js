@@ -326,6 +326,33 @@ class ChatAPI {
     })
   }
 
+  // ── Link field search (for SearchableDropdown) ──
+
+  /**
+   * Search link field values using Frappe's built-in search_link.
+   * Used by SearchableDropdown in the unified item mapping table.
+   * @param {string} doctype - DocType to search (e.g. "Item", "UOM", "Item Group")
+   * @param {string} txt - Search text
+   * @param {number} pageLength - Max results (default 10)
+   * @returns {Promise<Array<{value: string, description: string}>>}
+   */
+  async searchLinkValues(doctype, txt = '', pageLength = 10) {
+    const token = await this.getToken()
+    const response = await fetch('/api/method/frappe.desk.search.search_link', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-Frappe-CSRF-Token': token || '',
+      },
+      credentials: 'include',
+      body: JSON.stringify({ doctype, txt, page_length: pageLength }),
+    })
+    if (!response.ok) throw new Error(`Search failed: ${response.status}`)
+    const result = await response.json()
+    return result.message || result.results || []
+  }
+
 }
 
 export const chatAPI = new ChatAPI()

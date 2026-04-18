@@ -203,10 +203,10 @@ def _detect_missing_items(
 ) -> tuple[list[dict], list[dict], list[dict]]:
 	"""Find item_code / uom values in child tables that don't exist.
 
-	Also builds an ``item_mapping`` list that tracks every unique item's
-	original extracted name alongside its resolved ERPNext match (or lack
-	thereof).  This mapping is displayed read-only in the ConfirmationCard
-	so the user can see what was extracted vs what was matched.
+	Also builds an ``item_mapping`` list — one entry **per child-table row**
+	— that tracks the original extracted name, resolved ERPNext match,
+	and row-level data (qty, rate).  The unified editable Item Mapping
+	table in the ConfirmationCard renders this data.
 
 	Returns (missing_items, missing_uoms, item_mapping).
 	"""
@@ -216,9 +216,11 @@ def _detect_missing_items(
 	seen_items: set[str] = set()
 	seen_uoms: set[str] = set()
 
-	# Item mapping: tracks ALL items (matched, fuzzy-resolved, missing)
+	# Item mapping: one entry per child-table row (not per unique item).
+	# We cache resolved metadata per unique extracted value to avoid
+	# redundant DB queries when the same item appears in multiple rows.
 	item_mapping: list[dict] = []
-	seen_mapping: set[str] = set()
+	item_meta_cache: dict[str, dict] = {}
 
 	# Supplier context for Item Supplier resolution (purchase documents)
 	supplier = values.get("supplier", "")
@@ -251,107 +253,135 @@ def _detect_missing_items(
 				if not val:
 					continue
 
-				# Already processed as missing — skip
-				if val in seen_items:
-					continue
-
 				extracted_uom = _get_row_uom(row, uom_fields)
+
+				# Check cache first — avoids redundant DB lookups
+				if val in item_meta_cache:
+					cached = item_meta_cache[val]
+					# Apply mutation for fuzzy/supplier resolved items
+					if cached["resolved_item"] != val:
+						row[ifield] = cached["resolved_item"]
+					item_mapping.append(
+						_build_mapping_entry(
+							item_mapping, val, cached, extracted_uom, row, df.fieldname, row_idx
+						)
+					)
+					# Still need to track for missing_items dedup
+					if cached["is_new"] and val not in seen_items:
+						seen_items.add(val)
+						row_uom = _get_row_uom(row, uom_fields)
+						editable = _get_item_editable_fields(val, row_uom, company)
+						missing_items.append(
+							{
+								"doctype": "Item",
+								"value": val,
+								"row_indices": [row_idx],
+								"child_table_field": df.fieldname,
+								"editable_fields": editable,
+							}
+						)
+					continue
 
 				# Case A: Exact match exists in ERPNext
 				if frappe.db.exists("Item", val):
-					if val not in seen_mapping:
-						seen_mapping.add(val)
-						item_group = frappe.get_cached_value("Item", val, "item_group") or ""
-						item_mapping.append(
-							{
-								"idx": len(item_mapping) + 1,
-								"extracted_item": val,
-								"resolved_item": val,
-								"extracted_uom": extracted_uom,
-								"resolved_uom": extracted_uom,
-								"item_group": item_group,
-								"is_new": False,
-							}
+					item_data = (
+						frappe.get_cached_value(
+							"Item", val, ["item_group", "is_stock_item", "stock_uom"], as_dict=True
 						)
+						or {}
+					)
+					cached = {
+						"resolved_item": val,
+						"item_group": item_data.get("item_group", ""),
+						"is_stock_item": item_data.get("is_stock_item", 1),
+						"stock_uom": item_data.get("stock_uom", "Nos"),
+						"is_new": False,
+					}
+					item_meta_cache[val] = cached
+					item_mapping.append(
+						_build_mapping_entry(
+							item_mapping, val, cached, extracted_uom, row, df.fieldname, row_idx
+						)
+					)
 					continue
 
 				# Case B: Fuzzy resolution by item_name / LIKE match
 				resolved = _resolve_link_value("Item", ifield, val)
 				if resolved:
-					extracted_name = val
 					row[ifield] = resolved
-					if extracted_name not in seen_mapping:
-						seen_mapping.add(extracted_name)
-						item_group = frappe.get_cached_value("Item", resolved, "item_group") or ""
-						item_mapping.append(
-							{
-								"idx": len(item_mapping) + 1,
-								"extracted_item": extracted_name,
-								"resolved_item": resolved,
-								"extracted_uom": extracted_uom,
-								"resolved_uom": extracted_uom,
-								"item_group": item_group,
-								"is_new": False,
-							}
+					item_data = (
+						frappe.get_cached_value(
+							"Item", resolved, ["item_group", "is_stock_item", "stock_uom"], as_dict=True
 						)
+						or {}
+					)
+					cached = {
+						"resolved_item": resolved,
+						"item_group": item_data.get("item_group", ""),
+						"is_stock_item": item_data.get("is_stock_item", 1),
+						"stock_uom": item_data.get("stock_uom", "Nos"),
+						"is_new": False,
+					}
+					item_meta_cache[val] = cached
+					item_mapping.append(
+						_build_mapping_entry(
+							item_mapping, val, cached, extracted_uom, row, df.fieldname, row_idx
+						)
+					)
 					continue
 
 				# Case B2: Item Supplier resolution (supplier_part_no → item_code)
 				supplier_match = _resolve_via_item_supplier(val, supplier)
 				if supplier_match:
-					extracted_name = val
 					row[ifield] = supplier_match
-					if extracted_name not in seen_mapping:
-						seen_mapping.add(extracted_name)
-						item_group = frappe.get_cached_value("Item", supplier_match, "item_group") or ""
-						item_mapping.append(
-							{
-								"idx": len(item_mapping) + 1,
-								"extracted_item": extracted_name,
-								"resolved_item": supplier_match,
-								"extracted_uom": extracted_uom,
-								"resolved_uom": extracted_uom,
-								"item_group": item_group,
-								"is_new": False,
-							}
+					item_data = (
+						frappe.get_cached_value(
+							"Item", supplier_match, ["item_group", "is_stock_item", "stock_uom"], as_dict=True
 						)
+						or {}
+					)
+					cached = {
+						"resolved_item": supplier_match,
+						"item_group": item_data.get("item_group", ""),
+						"is_stock_item": item_data.get("is_stock_item", 1),
+						"stock_uom": item_data.get("stock_uom", "Nos"),
+						"is_new": False,
+					}
+					item_meta_cache[val] = cached
+					item_mapping.append(
+						_build_mapping_entry(
+							item_mapping, val, cached, extracted_uom, row, df.fieldname, row_idx
+						)
+					)
 					continue
 
 				# Case C: Item doesn't exist — add to missing list
-				seen_items.add(val)
+				default_group = frappe.db.get_single_value("Stock Settings", "item_group") or "Products"
+				cached = {
+					"resolved_item": val,
+					"item_group": default_group,
+					"is_stock_item": 1,
+					"stock_uom": extracted_uom or "Nos",
+					"is_new": True,
+				}
+				item_meta_cache[val] = cached
+				item_mapping.append(
+					_build_mapping_entry(item_mapping, val, cached, extracted_uom, row, df.fieldname, row_idx)
+				)
 
-				if val not in seen_mapping:
-					seen_mapping.add(val)
-					default_group = frappe.db.get_single_value("Stock Settings", "item_group") or "Products"
-					item_mapping.append(
+				if val not in seen_items:
+					seen_items.add(val)
+					row_uom = _get_row_uom(row, uom_fields)
+					editable = _get_item_editable_fields(val, row_uom, company)
+					missing_items.append(
 						{
-							"idx": len(item_mapping) + 1,
-							"extracted_item": val,
-							"resolved_item": val,
-							"extracted_uom": extracted_uom,
-							"resolved_uom": extracted_uom,
-							"item_group": default_group,
-							"is_new": True,
+							"doctype": "Item",
+							"value": val,
+							"row_indices": [row_idx],
+							"child_table_field": df.fieldname,
+							"editable_fields": editable,
 						}
 					)
-
-				# Infer UOM from the row if present
-				row_uom = None
-				for uf in uom_fields:
-					if row.get(uf):
-						row_uom = row[uf]
-						break
-
-				editable = _get_item_editable_fields(val, row_uom, company)
-				missing_items.append(
-					{
-						"doctype": "Item",
-						"value": val,
-						"row_indices": [row_idx],
-						"child_table_field": df.fieldname,
-						"editable_fields": editable,
-					}
-				)
 
 			# --- UOMs ---
 			for ufield in uom_fields:
@@ -383,6 +413,33 @@ def _detect_missing_items(
 	_deduplicate_items(missing_items)
 
 	return missing_items, missing_uoms, item_mapping
+
+
+def _build_mapping_entry(
+	item_mapping: list[dict],
+	extracted_item: str,
+	cached: dict,
+	extracted_uom: str,
+	row: dict,
+	child_table_field: str,
+	row_idx: int,
+) -> dict:
+	"""Build a single item_mapping entry from cached metadata and row data."""
+	return {
+		"idx": len(item_mapping) + 1,
+		"extracted_item": extracted_item,
+		"resolved_item": cached["resolved_item"],
+		"extracted_uom": extracted_uom,
+		"resolved_uom": extracted_uom,
+		"item_group": cached["item_group"],
+		"is_new": cached["is_new"],
+		"is_stock_item": cached.get("is_stock_item", 1),
+		"stock_uom": cached.get("stock_uom", "Nos"),
+		"qty": row.get("qty", 0),
+		"rate": row.get("rate", 0),
+		"child_table_field": child_table_field,
+		"row_idx": row_idx,
+	}
 
 
 def _detect_missing_accounts(doctype: str, values: dict, company: str) -> list[dict]:
@@ -711,11 +768,20 @@ def _create_party(party_doctype: str, value: str, overrides: dict, company: str)
 def _create_item(item_value: str, overrides: dict, company: str) -> str:
 	"""Create an Item master record.
 
-	Returns the created document's ``name``.
+	If the user overrode the item_code to an existing Item, skip creation
+	and return the existing Item's name directly.
+
+	Returns the created (or existing) document's ``name``.
 	"""
+	item_code = overrides.pop("item_code", None) or item_value
+
+	# User may have remapped to an existing item via the dropdown
+	if frappe.db.exists("Item", item_code):
+		return item_code
+
 	doc_values = {
-		"item_code": item_value,
-		"item_name": item_value,
+		"item_code": item_code,
+		"item_name": item_code,
 		"item_group": (
 			overrides.get("item_group")
 			or frappe.db.get_single_value("Stock Settings", "item_group")
