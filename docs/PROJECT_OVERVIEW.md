@@ -1403,33 +1403,58 @@ Step 3: LLM determines document type and calls extract_document_data(file_id="fi
         ↓
 Step 4: _resolve_file_id("file_1") → "/private/files/invoice.pdf"
         ↓
-Step 5: Content extraction (idp/extractors/base.py)
+Step 5: Company resolution (tools/idp.py: _resolve_idp_company)
+        - If the LLM passed an explicit `company` argument, it must match
+          an existing Company record EXACTLY (frappe.db.exists).
+        - Otherwise fall back to the user's session default via
+          get_default_company(None) — user default, then global default.
+        - Unlike the generic get_default_company(), IDP never fuzzy-LIKE-
+          matches an explicit argument. This prevents a document-derived
+          string (e.g., the invoice recipient's name) from silently
+          resolving to an unrelated Company record.
+        ↓
+Step 6: Content extraction (idp/extractors/base.py)
         - PDF with selectable text → pypdf text extraction
         - Scanned PDF / Image → base64 for Vision API
         - Excel/CSV → tabular text
         - Word → paragraph + table extraction
         ↓
-Step 6: Schema discovery (idp/schema.py)
+Step 7: Schema discovery (idp/schema.py)
         - get_doctype_schema("Purchase Invoice") → field definitions via frappe.get_meta()
         - build_schema_prompt() → human-readable field description for LLM
         ↓
-Step 7: LLM semantic mapping (idp/mapper.py)
+Step 8: LLM semantic mapping (idp/mapper.py)
         - Constructs extraction prompt: document content + schema + rules
         - Sends to AI provider (same provider as chat)
         - Parses structured JSON response
         - Normalizes dates, numbers, field names
         - Maps party names (issuer → supplier for Purchase Invoice, etc.)
         ↓
-Step 8: Optional validation (when enable_strict_idp_validation is on)
+Step 9: Context-company enforcement (idp/mapper.py)
+        - Called with enforce_context_company=True on the creation path.
+        - If target_doctype ∈ {Sales Invoice, Purchase Invoice, Sales Order,
+          Purchase Order, Quotation, Delivery Note, Purchase Receipt} AND
+          the schema declares a `company` field, the extracted `company`
+          is OVERWRITTEN with the session-context company.
+        - This defends against the LLM occasionally mis-identifying the
+          document recipient block as the ERPNext company.
+        - The comparison flow passes enforce_context_company=False so
+          genuine discrepancies remain visible to the user.
+        ↓
+Step 10: Optional validation (when enable_strict_idp_validation is on)
         - validate_extraction() checks link fields, mandatory fields
         - Resolves fuzzy matches (e.g., "Acme" → "Acme Corp")
+        - `_resolve_link_fields` skips fields in _CONTEXT_ONLY_LINK_FIELDS
+          (currently {"company"}). Context-only fields are authoritative
+          from the session and are never inferred from document content,
+          so no fuzzy matching is attempted on them.
         ↓
-Step 9: LLM presents extracted data to user for review
+Step 11: LLM presents extracted data to user for review
         Shows field-by-field table: supplier, dates, items, taxes, totals
         ↓
-Step 10: LLM calls propose_create_document(doctype, values_json)
+Step 12: LLM calls propose_create_document(doctype, values_json)
          ↓
-Step 11: Prerequisite detection (data/prerequisites.py)
+Step 13: Prerequisite detection (data/prerequisites.py)
          detect_prerequisites() scans values for:
          - Missing Suppliers / Customers (party fields)
          - Missing Items (item_code in child tables)
@@ -1437,10 +1462,10 @@ Step 11: Prerequisite detection (data/prerequisites.py)
          - Missing Accounts (account_head in taxes tables)
          Each missing record includes editable_fields for the frontend form
          ↓
-Step 12: Confirmation payload stored in Redis (15-min TTL)
+Step 14: Confirmation payload stored in Redis (15-min TTL)
          Payload includes: action, doctype, values, prerequisites, errors
          ↓
-Step 13: ConfirmationCard rendered in frontend
+Step 15: ConfirmationCard rendered in frontend
          Shows:
          - Document summary (key fields, items table)
          - Missing prerequisites with editable fields:
@@ -1450,27 +1475,51 @@ Step 13: ConfirmationCard rendered in frontend
            • UOMs: name only (auto-created)
          - Three buttons: Cancel / Save Draft / Submit
          ↓
-Step 14: User edits prerequisite fields if needed, clicks Save Draft or Submit
+Step 16: User edits prerequisite fields if needed, clicks Save Draft or Submit
          ↓
-Step 15: Frontend calls api/crud.py: confirm_action(confirmation_id, user_overrides, submit_after_create)
+Step 17: Frontend calls api/crud.py: confirm_action(confirmation_id, user_overrides, submit_after_create)
          ↓
-Step 16: Prerequisites created in dependency order:
+Step 18: Prerequisites created in dependency order:
          Phase 0: Accounts (tax/GL accounts)
          Phase 1: UOMs (Items reference stock_uom)
          Phase 2: Parties (Customer/Supplier)
          Phase 3: Items (depend on UOM existing)
          ↓
-Step 17: name_map applied to document values
+Step 19: name_map applied to document values
          (e.g., if naming series renamed "Acme Corp" → "CUST-00001")
          ↓
-Step 18: Main document created via create_document()
+Step 20: Main document created via create_document()
          ERPNext handles set_missing_values, set_item_defaults, validate
          ↓
-Step 19: (Optional) If user clicked Submit: submit_document()
+Step 21: (Optional) If user clicked Submit: submit_document()
          ↓
-Step 20: Result returned to frontend with doc_url, undo_token (5-min TTL)
+Step 22: Result returned to frontend with doc_url, undo_token (5-min TTL)
          ConfirmationCard updates to show success + link + Undo button
 ```
+
+**Company integrity — three-layer defense**
+
+The `company` field is authoritative from the user's session context and
+must never be derived from document content. The following three layers
+each independently prevent a document-derived string (e.g. an invoice
+recipient's name) from becoming the ERPNext `company` value:
+
+1. **Input guard** (`tools/idp.py: _resolve_idp_company`) — any explicit
+   `company` argument must match an existing Company record EXACTLY, else
+   fall back to the session default. Blocks fuzzy-LIKE leaks from
+   `get_default_company`.
+2. **Extraction guard** (`idp/mapper.py: enforce_context_company`) — on
+   record-creation paths the extracted `company` is overwritten with the
+   session value for the seven transaction DocTypes listed in Step 9.
+3. **Validation guard** (`idp/validators.py: _CONTEXT_ONLY_LINK_FIELDS`) —
+   fuzzy link resolution skips `company`, so even if an errant value
+   reached validation it would not be LIKE-matched against the Company
+   doctype.
+
+Together these layers prevent regressions where an LLM hallucinated
+`company` from a document header silently snapped to an unrelated
+Company record (e.g., "Tara General Trading LLC" on the invoice
+resolving to "Tara Technologies" in ERPNext).
 
 #### Workflow B — Raw Extraction (Non-Standard Documents)
 
@@ -1518,11 +1567,13 @@ flowchart TD
     D -->|Compare with record| G[compare_document_with_record<br/>file_id + doctype + docname]
 
     E --> H[_resolve_file_id<br/>file_1 → /private/files/...]
-    H --> I[Content extraction<br/>PDF text / Vision / Excel / Word]
+    H --> H2[_resolve_idp_company<br/>EXACT match only, else<br/>session default]
+    H2 --> I[Content extraction<br/>PDF text / Vision / Excel / Word]
     I --> J[Schema discovery<br/>get_doctype_schema]
     J --> K[LLM semantic mapping<br/>mapper.py → JSON]
-    K --> L{Strict validation?}
-    L -->|Yes| M[validate_extraction<br/>Link fields, mandatories]
+    K --> KC[enforce_context_company<br/>Overwrite `company` with<br/>session value for<br/>transaction DocTypes]
+    KC --> L{Strict validation?}
+    L -->|Yes| M[validate_extraction<br/>Link fields, mandatories<br/>skips _CONTEXT_ONLY_LINK_FIELDS]
     L -->|No| N[Return extracted data]
     M --> N
 
@@ -1566,10 +1617,11 @@ A focused view of the internal data flow through Python modules during `extract_
 flowchart LR
     subgraph tools/idp.py
         A[extract_document_data<br/>file_id + target_doctype] --> B[_resolve_file_id<br/>file_1 → real URL]
+        B --> BC[_resolve_idp_company<br/>EXACT Company match<br/>or session default]
     end
 
     subgraph idp/extractors
-        B --> C{MIME type?}
+        BC --> C{MIME type?}
         C -->|PDF text| D[pdf_extractor<br/>pypdf]
         C -->|Scanned/Image| E[base.py<br/>base64 → Vision API]
         C -->|XLSX/CSV| F[excel_extractor<br/>cell-by-cell]
@@ -1593,10 +1645,11 @@ flowchart LR
         M --> O[LLM call<br/>document content +<br/>schema + rules]
         N --> O
         O --> P[_normalize_extracted_data<br/>loop ALL child tables:<br/>date/number parsing,<br/>field mapping,<br/>item defaults]
+        P --> PC[enforce_context_company<br/>overwrite `company` with<br/>session value for<br/>transaction DocTypes]
     end
 
     subgraph Result
-        P --> Q[extracted_data dict<br/>header + items[] +<br/>taxes[] + other tables]
+        PC --> Q[extracted_data dict<br/>header + items[] +<br/>taxes[] + other tables]
     end
 ```
 
