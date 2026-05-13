@@ -523,11 +523,11 @@ def _stream_with_tools(
 			openai_tool_calls = []
 			for tc in round_tool_calls:
 				try:
-				    args_str = json.dumps(tc["arguments"])
+					args_str = json.dumps(tc["arguments"])
 				except TypeError:
-				    log_error(f"Non-serializable tool args for {tc['name']}: {tc['arguments']!r}",
-				              title="Streaming Tool Args")
-				    args_str = _safe_json(tc["arguments"])
+					log_error(f"Non-serializable tool args for {tc['name']}: {tc['arguments']!r}",
+						title="Streaming Tool Args")
+					args_str = _safe_json(tc["arguments"])
 
 				openai_tool_calls.append(
 					{
