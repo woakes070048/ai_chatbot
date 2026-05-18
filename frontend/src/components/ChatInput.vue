@@ -1,7 +1,7 @@
 <!-- Copyright (c) 2026, Sanjay Kumar and contributors -->
 <!-- For license information, please see license.txt -->
 <template>
-  <div class="max-w-3xl mx-auto mb-4 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-6 py-4">
+  <div class="max-w-3xl mx-auto mb-4 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-6 py-1">
     <div>
       <form @submit.prevent="handleSubmit" class="relative">
         <!-- Attachment Preview Strip -->
